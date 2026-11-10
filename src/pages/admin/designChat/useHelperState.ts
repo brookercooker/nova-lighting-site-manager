@@ -44,7 +44,7 @@ export function useHelperState(delayFor: (s: RelayState | null) => number) {
         const history = latest?.history ?? [];
         const last = history.at(-1);
         latest = { busy: false, job: null, previewVersion: 0, history: last?.role === "note" && last.text === SIGN_IN_REQUIRED
-          ? history : [...history, { role: "note", text: SIGN_IN_REQUIRED }] };
+          ? history : [...history, { role: "note", text: SIGN_IN_REQUIRED, ts: Date.now() }] };
         failures = 0;
         setState(latest); setOffline(false);
       };

@@ -41,7 +41,8 @@ describe("helper polling delays", () => {
 
 describe("mounted helper polling", () => {
   it.each([401, 403])("preserves visible earlier messages and appends only one sign-in note for %s", async (status) => {
-    const history = [{ role: "user" as const, text: "Change the heading" }, { role: "assistant" as const, text: "The heading is updated." }];
+    vi.setSystemTime(10_000);
+    const history = [{ role: "user" as const, text: "Change the heading", ts: 1000 }, { role: "assistant" as const, text: "The heading is updated.", ts: 2000 }];
     vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ ...idle, history }) } as Response)
       .mockResolvedValueOnce({ ok: false, status } as Response)
       .mockResolvedValueOnce({ ok: false, status } as Response);
@@ -50,6 +51,8 @@ describe("mounted helper polling", () => {
     await advance(4000);
     expect(result.current.offline).toBe(false);
     expect(result.current.state?.history.map(visibleText)).toEqual(["Change the heading", "The heading is updated.", "Sign in to load or save this"]);
+    const sorted = [...(result.current.state?.history ?? [])].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+    expect(sorted.at(-1)).toEqual({ role: "note", text: "Sign in to load or save this", ts: 14_000 });
     await advance(4000);
     expect(result.current.state?.history).toHaveLength(3);
     await advance(4000);
@@ -64,7 +67,7 @@ describe("mounted helper polling", () => {
     expect(result.current.offline).toBe(true);
     await advance(8000);
     expect(result.current.offline).toBe(false);
-    expect(result.current.state).toEqual({ ...idle, history: [{ role: "note", text: "Sign in to load or save this" }] });
+    expect(result.current.state).toEqual({ ...idle, history: [{ role: "note", text: "Sign in to load or save this", ts: Date.now() }] });
     await advance(3999);
     expect(fetch).toHaveBeenCalledTimes(2);
     await advance(1);
