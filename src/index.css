@@ -54,6 +54,8 @@
     --nova-stone: 30 8% 60%;
     --nova-tan: 38 31% 72%;
     --nova-brass: 38 31% 72%;
+    --tag-selected: 48 96% 53%;
+    --tag-selected-foreground: 0 0% 0%;
     --nova-glow: 38 50% 80%;
     --nova-garnet: 3 44% 36%;
     --nova-manual: 3 44% 36%;
@@ -67,6 +69,8 @@
   }
 
   .dark {
+    --tag-selected: 48 96% 53%;
+    --tag-selected-foreground: 0 0% 0%;
     --nova-stage-track: hsl(0 0% 19%);
     --nova-manual: 3 52% 72%;
     --background: 0 0% 7%;

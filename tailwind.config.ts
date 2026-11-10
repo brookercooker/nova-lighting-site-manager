@@ -58,6 +58,7 @@ export default {
         stone: "hsl(var(--nova-stone))",
         tan: "hsl(var(--nova-tan))",
         brass: "hsl(var(--nova-brass))",
+        "tag-selected": { DEFAULT: "hsl(var(--tag-selected))", foreground: "hsl(var(--tag-selected-foreground))" },
         glow: "hsl(var(--nova-glow))",
         garnet: "hsl(var(--nova-garnet))",
         manual: "hsl(var(--nova-manual))",

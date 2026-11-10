@@ -17,7 +17,8 @@ import ConfirmDialog from "./ConfirmDialog";
 import LibraryPicker from "./designChat/LibraryPicker";
 import { toast } from "sonner";
 import { ModeSwitchProvider } from "./designChat/ModeSwitchContext";
-import ModeToggle from "./designChat/ModeToggle";
+import ModeToggle, { ModeSwitchMenuItem, useModeSwitchActions } from "./designChat/ModeToggle";
+import ModePageChooser from "./designChat/ModePageChooser";
 import HeaderActions, { StatusMenuItem } from "./designChat/HeaderActions";
 import WorkingPageChip from "./designChat/WorkingPageChip";
 import ContentSyncNote from "./designChat/ContentSyncNote";
@@ -315,7 +316,7 @@ function AdminShell() {
         <div data-picker-area className={cn("flex min-h-0 min-w-0 flex-1 flex-col", phone && manual && phonePane === "side" && "flex-none")}>
           <header data-top-bar className={cn("z-30 w-full shrink-0 border-b bg-background", HEADER_HEIGHT_CLASS)}>
             <div ref={rowRef} className={cn("flex h-full w-full items-center px-2 sm:gap-3 sm:px-4", phone && !manual ? "gap-0" : "gap-1")}>
-              <nav ref={navRef} className="flex-1 min-w-0 flex flex-nowrap items-center gap-1 overflow-hidden" aria-label="Site Manager Sections">
+              <nav ref={navRef} className={cn("min-w-0 flex flex-nowrap items-center gap-1 overflow-hidden", phone ? "flex-none" : "flex-1")} aria-label="Site Manager Sections">
                 {TABS.filter(({ key }) => !phone || !manual || key === "preview").map(({ key, label, Icon }) => {
                   const active = tab === key;
                   const className = `inline-flex shrink-0 items-center gap-2 whitespace-nowrap ${phone ? "h-11 w-11 px-0" : compact ? (active && squeeze < 3 ? "px-2.5" : "w-8 px-0") : "px-3"} py-2 rounded-md text-sm font-medium transition-colors border ${
@@ -351,11 +352,10 @@ function AdminShell() {
               </nav>
 
               {phone && (
-                <Button type="button" size="sm" data-capture-primary className="h-11 w-11 shrink-0 px-0" aria-label="Capture" title="Capture" onClick={() => navigate("/manage/capture")}>
-                  <Camera className="h-4 w-4" aria-hidden />
+                <Button type="button" size="sm" data-capture-primary className="ml-1 h-11 min-w-0 flex-1 gap-1.5 px-2" aria-label="Capture" title="Capture" onClick={() => navigate("/manage/capture")}>
+                  <Camera className="h-4 w-4 shrink-0" aria-hidden /><span className="truncate">Capture</span>
                 </Button>
               )}
-              {phone && <ModeToggle compact onChat={() => { setPhonePane("main"); }} />}
               {!phone && <PreviewTools showViewControls={tab === "preview"} tight={squeeze >= 2} />}
 
               <div aria-hidden className={cn("h-9 w-px bg-border shrink-0", compact && "hidden")} />
@@ -365,7 +365,7 @@ function AdminShell() {
                   <Save className="h-4 w-4" aria-hidden />{finishing ? "Saving…" : layout.labels && !compact ? "Save Changes" : "Save"}
                 </Button>
               )}
-              {phone && <PhoneMoreMenu showView={tab === "preview"} isAdmin={isAdmin} onPassword={() => setPwOpen(true)} onReview={openPhoneChat} />}
+              {phone && <PhoneMoreMenu showView={tab === "preview"} isAdmin={isAdmin} onPassword={() => setPwOpen(true)} onReview={openPhoneChat} onChat={() => { setPhonePane("main"); }} />}
             </div>
           </header>
           <WaitProgress progress={saveProgress} className="shrink-0 border-b bg-background px-3 py-2" />
@@ -556,7 +556,8 @@ function AdminShell() {
 }
 
 /** Phone top-bar overflow: account, tools, review and preview size. */
-function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview }: { showView: boolean; isAdmin: boolean; onPassword: () => void; onReview: () => void }) {
+function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { showView: boolean; isAdmin: boolean; onPassword: () => void; onReview: () => void; onChat: () => void }) {
+  const modeSwitch = useModeSwitchActions(onChat);
   const { device, setDevice, state, editing, mode, objectOpen } = useDesignChat();
   const { requestAdd } = useEditorSlot();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -567,11 +568,14 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview }: { showView: 
   return (
     <>
     <SubmitConfirmDialog open={submitConfirm} onOpenChange={setSubmitConfirm} />
+    <ModePageChooser {...modeSwitch.chooserProps} />
     <MoreMenu>
       <MoreMenuTrigger asChild>
         <Button ref={triggerRef} type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label={`More Options${count ? `: ${count} Waiting` : ""}`} title="More Options"><MoreHorizontal className="h-4 w-4" /></Button>
       </MoreMenuTrigger>
       <MoreMenuContent align="end">
+        <ModeSwitchMenuItem actions={modeSwitch} />
+        <MoreMenuSeparator />
         {mode === "manual" && <>
           <MoreMenuLabel>Libraries</MoreMenuLabel>
           {TABS.filter(({ key }) => key !== "preview").map(({ key, label, Icon }) => (

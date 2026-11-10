@@ -2,7 +2,10 @@ import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import ModeToggle from "../ModeToggle";
+import ModeToggle, { ModeSwitchMenuItem, useModeSwitchActions } from "../ModeToggle";
+import ModePageChooser from "../ModePageChooser";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { readFileSync } from "node:fs";
 import { ModeSwitchProvider } from "../ModeSwitchContext";
 import { registerPreviewPage } from "../usePreviewPage";
 
@@ -130,5 +133,43 @@ describe("segmented mode switch", () => {
     m.busy = kind === "busy"; m.open = kind === "review" ? 1 : 0; m.status = kind === "review" ? "reviewing" : ""; open(); fireEvent.click(manual());
     expect(screen.getByRole("alertdialog")).toBeVisible(); expect(chat()).toHaveAttribute("aria-checked", "true");
     fireEvent.click(screen.getByText(kind === "busy" ? "Continue Editing" : "Keep Editing")); await waitFor(() => expect(manual()).toHaveAttribute("aria-checked", "true"));
+  });
+});
+function PhoneMenuHarness(props: { onChat: () => void }) {
+  const [mode, setMode] = useState(m.initial);
+  const [page, setPage] = useState(m.page);
+  m.chat = { ...m.preview, mode, editing: mode === "manual", workingPage: page, state: { busy: m.busy, publish: { open: m.open, status: m.status } },
+    selectPage: (next: any) => { m.select(next); setPage(next); }, startEditing: () => { m.start(); setMode("manual"); }, stopEditing: () => { m.stop(); setMode("chat"); } };
+  return <ModeSwitchProvider><PhoneMenuInner {...props} /></ModeSwitchProvider>;
+}
+function PhoneMenuInner({ onChat }: { onChat: () => void }) {
+  const actions = useModeSwitchActions(onChat);
+  return <><ModePageChooser {...actions.chooserProps} /><DropdownMenu><DropdownMenuTrigger>More Options</DropdownMenuTrigger><DropdownMenuContent><ModeSwitchMenuItem actions={actions} /></DropdownMenuContent></DropdownMenu></>;
+}
+const openMenu = () => { const t = screen.getByText("More Options"); fireEvent.pointerDown(t, { button: 0, ctrlKey: false }); fireEvent.keyDown(t, { key: "Enter" }); };
+describe("phone More Options mode item", () => {
+  it("phone top bar no longer renders the compact mode button", () => {
+    const src = readFileSync("src/pages/admin/AdminIndex.tsx", "utf8");
+    expect(src).not.toMatch(/<ModeToggle compact/);
+    expect(src).toMatch(/<ModeSwitchMenuItem actions=\{modeSwitch\} \/>/);
+  });
+  it("Edit opens the viewed page through the shared switch", async () => {
+    m.page = { id: "about", name: "About", path: "/about" };
+    render(<MemoryRouter><PhoneMenuHarness onChat={() => {}} /></MemoryRouter>);
+    openMenu(); fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    await waitFor(() => expect(m.start).toHaveBeenCalledTimes(1)); expect(m.select).toHaveBeenCalledWith(m.page);
+  });
+  it("Done Editing uses the same unsaved guard and onChat", async () => {
+    m.initial = "manual"; m.dirty = true; const onChat = vi.fn();
+    render(<MemoryRouter><PhoneMenuHarness onChat={onChat} /></MemoryRouter>);
+    openMenu(); fireEvent.click(await screen.findByRole("menuitem", { name: "Done Editing" }));
+    expect(await screen.findByRole("alertdialog")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Discard Changes" }));
+    await waitFor(() => expect(onChat).toHaveBeenCalledTimes(1)); expect(m.discard).toHaveBeenCalledTimes(1);
+  });
+  it("opens the page chooser outside the menu when no page is known", async () => {
+    m.page = null; render(<MemoryRouter><PhoneMenuHarness onChat={() => {}} /></MemoryRouter>);
+    openMenu(); fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    expect(await screen.findByRole("dialog", { name: "Choose a Page" })).toBeVisible(); expect(m.start).not.toHaveBeenCalled();
   });
 });

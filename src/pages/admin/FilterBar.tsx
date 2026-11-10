@@ -89,7 +89,7 @@ export default function FilterBar({
                     }}
                     className={`text-xs px-2 py-1 rounded-full border transition-colors ${
                       active
-                        ? "bg-foreground text-background border-foreground"
+                        ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
                         : "bg-background hover:bg-muted border-border text-muted-foreground"
                     }`}
                   >
@@ -144,7 +144,7 @@ export default function FilterBar({
               }}
               className={`text-xs px-2 py-1 rounded-full border transition-colors ${
                 active
-                  ? "bg-foreground text-background border-foreground"
+                  ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
                   : "bg-background hover:bg-muted border-border text-muted-foreground"
               }`}
             >

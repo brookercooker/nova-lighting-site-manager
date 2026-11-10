@@ -10,8 +10,15 @@ import { registerPreviewPage } from "./usePreviewPage";
 import { workingPageFrom } from "./pageSelection";
 import ModePageChooser from "./ModePageChooser";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
-export default function ModeToggle({ collapsed = false, onChat, compact = false }: { collapsed?: boolean; onChat: () => void; compact?: boolean }) {
+/** Phone overflow entry for the mode switch; render ModePageChooser with the same actions outside the menu. */
+export function ModeSwitchMenuItem({ actions }: { actions: Pick<ReturnType<typeof useModeSwitchActions>, "mode" | "change"> }) {
+  return <DropdownMenuItem className="min-h-[44px]" data-mode-switch onSelect={() => void actions.change(actions.mode === "manual" ? "chat" : "manual")}><Pencil className="mr-2 h-4 w-4" aria-hidden />{actions.mode === "manual" ? "Done Editing" : "Edit"}</DropdownMenuItem>;
+}
+
+/** Shared Chat/Manual switching (guards, viewed-page lookup and chooser state) for every mode control. */
+export function useModeSwitchActions(onChat: () => void) {
   const chat = useDesignChat();
   const { mode, selectPage, startEditing } = chat;
   const latest = useRef(chat);
@@ -56,6 +63,12 @@ export default function ModeToggle({ collapsed = false, onChat, compact = false 
     if (next === "chat") { if (await guard?.requestChat()) { onChat(); navigate("/manage/preview"); } }
     else await enter();
   };
+  const chooserProps = { open: chooser, onOpenChange: setChooser, onChoose: (page: WorkingPage) => { setChooser(false); void enter(page); } };
+  return { mode, change, chooserProps };
+}
+
+export default function ModeToggle({ collapsed = false, onChat, compact = false }: { collapsed?: boolean; onChat: () => void; compact?: boolean }) {
+  const { mode, change, chooserProps } = useModeSwitchActions(onChat);
   return <>
     {compact ? <Button type="button" variant={mode === "manual" ? "secondary" : "outline"} size="sm" className="h-11 shrink-0 gap-1 px-2 text-xs" data-mode-switch aria-pressed={mode === "manual"} onClick={() => void change(mode === "manual" ? "chat" : "manual")}><Pencil className="h-4 w-4" aria-hidden />{mode === "manual" ? "Done Editing" : "Edit"}</Button> : <ToggleGroup type="single" value={mode} onValueChange={(next) => void change(next)} aria-label="Editing Mode" data-mode-switch
       className={cn("shrink-0 gap-1 border-b bg-background p-2", collapsed ? "flex-col" : "grid w-full grid-cols-2")}>
@@ -73,6 +86,6 @@ export default function ModeToggle({ collapsed = false, onChat, compact = false 
         <Icon className="h-4 w-4 shrink-0" aria-hidden />{!collapsed && <span>{label}</span>}
       </ToggleGroupItem>)}
     </ToggleGroup>}
-    <ModePageChooser open={chooser} onOpenChange={setChooser} onChoose={(page) => { setChooser(false); void enter(page); }} />
+    <ModePageChooser {...chooserProps} />
   </>;
 }
