@@ -1,4 +1,5 @@
 import "./pageTables.css";
+import ArchivedBadge from "./ArchivedBadge";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { matchesLabelFilter } from "./labelPath";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -580,6 +581,7 @@ export default function PagesTab() {
                     >
                       {p.build_status === "ready" ? "Ready" : "Draft"}
                     </span>
+                    <ArchivedBadge archived={!!p.archived_at} />
                     <WorkStatusPopover
                       value={p.build_status === "ready" ? "ready" : "draft"}
                       onSave={(next) => setBuildStatus(p.id, next)}

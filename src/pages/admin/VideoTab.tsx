@@ -715,7 +715,7 @@ export default function VideoTab() {
               <LinkIcon className="w-4 h-4" />
             </div>
             <Input
-              placeholder="Paste a YouTube or Vimeo URL and press Add…"
+              placeholder="Paste a YouTube or Vimeo link"
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") addExternalLink(); }}
@@ -797,7 +797,7 @@ export default function VideoTab() {
               <button
                 key={c.v}
                 onClick={() => setTimeRange(c.v)}
-                className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                className={`inline-flex min-h-9 items-center text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
                   timeRange === c.v
                     ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
                     : "bg-background hover:bg-muted border-border text-muted-foreground"
@@ -830,7 +830,7 @@ export default function VideoTab() {
             id="videos-used-on-page"
             value={usedOnPage}
             onChange={(e) => setUsedOnPage(e.target.value)}
-            className="border rounded px-2 py-1 h-8 text-xs bg-background max-w-[260px]"
+            className="border rounded px-2 py-1 h-9 sm:h-8 text-xs bg-background max-w-full sm:max-w-[260px]"
           >
             <option value="all">Any Page</option>
             <option value="none">Not used on any page</option>

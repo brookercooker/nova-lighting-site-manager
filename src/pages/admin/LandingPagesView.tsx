@@ -1,4 +1,5 @@
 import { SlidersHorizontal } from "lucide-react";
+import ArchivedBadge from "./ArchivedBadge";
 import "./pageTables.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/prototype/client";
@@ -560,6 +561,7 @@ export default function LandingPagesView() {
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${workBadgeClass(work)}`}>
                           {workLabel(work)}
                         </span>
+                        <ArchivedBadge archived={!!r.archived_at} />
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${scheduleBadgeClass(sched)}`}>
                           {scheduleLabel(sched)}
                         </span>

@@ -810,7 +810,7 @@ export default function ImagesTab() {
           id="images-used-on-page"
           value={usedOnPage}
           onChange={(e) => setUsedOnPage(e.target.value)}
-          className="border rounded px-2 py-1 h-8 text-xs bg-background max-w-[260px]"
+          className="border rounded px-2 py-1 h-9 sm:h-8 text-xs bg-background max-w-full sm:max-w-[260px]"
         >
           <option value="all">Any Page</option>
           <option value="none">Not used on any page</option>

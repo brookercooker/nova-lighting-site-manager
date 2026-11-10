@@ -904,7 +904,7 @@ function UsedOnChip({ usages, hasKey }: { usages: ObjectUsage[]; hasKey: boolean
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border transition-colors ${tone} cursor-pointer`}
+          className={`inline-flex min-h-9 sm:min-h-0 items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border transition-colors ${tone} cursor-pointer`}
           title="Show pages that render this object"
         >
           {label}

@@ -69,7 +69,7 @@ export function CopyRefButton({
   reference: string; id?: string; size?: "sm" | "default"; label?: string; compact?: boolean;
   disabled?: boolean; disabledMessage?: string;
 }) {
-  const base = compact ? "h-8 w-8 p-0" : "inline-flex items-center justify-center gap-1.5 whitespace-nowrap w-fit max-w-full px-3 h-8 text-xs";
+  const base = compact ? "h-9 w-9 sm:h-8 sm:w-8 p-0" : "inline-flex items-center justify-center gap-1.5 whitespace-nowrap w-fit max-w-full px-3 h-9 sm:h-8 text-xs";
   const interactive = disabled
     ? "opacity-50 cursor-not-allowed"
     : "transition-all duration-200 cursor-pointer hover:bg-nova-ink hover:text-nova-cream hover:border-nova-ink hover:shadow-md hover:-translate-y-[1px] focus-visible:bg-nova-ink focus-visible:text-nova-cream active:translate-y-0 active:shadow-sm";

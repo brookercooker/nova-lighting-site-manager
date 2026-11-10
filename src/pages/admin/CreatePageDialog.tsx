@@ -81,7 +81,7 @@ export default function CreatePageDialog({
             <div className={`font-mono px-2 py-1.5 rounded border ${(dupe || reserved) ? "border-destructive text-destructive" : "bg-muted/40"}`}>
               {route ? `yoursite.com${route}` : <span className="opacity-60">—</span>}
             </div>
-            {dupe && <p className="text-xs text-destructive mt-1">A page with this address already exists.</p>}
+            {dupe && !dupeName && <p className="text-xs text-destructive mt-1">A page with this address already exists.</p>}
             {dupeName && (
               <p className="text-xs text-destructive mt-1">
                 A page named "{name.trim()}" already exists. Please choose a different name.

@@ -71,7 +71,7 @@ export default function FilterBar({
 
       <div className="h-6 w-px bg-border mx-1" aria-hidden="true" />
 
-      <div className="nova-library-filter-group flex items-center gap-1.5" role="group" aria-label={`${dateFieldLabel} range`}>
+      <div className="nova-library-filter-group flex flex-wrap items-center gap-1.5" role="group" aria-label={`${dateFieldLabel} range`}>
         <span className="text-xs font-medium text-muted-foreground">Show</span>
 
         {RANGE_CHIPS.map((c) => {
@@ -87,7 +87,7 @@ export default function FilterBar({
                       onTimeRangeChange("custom");
                       setCustomOpen(true);
                     }}
-                    className={`inline-flex min-h-9 items-center text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
+                    className={`inline-flex min-h-9 items-center whitespace-nowrap text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
                       active
                         ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
                         : "bg-background hover:bg-muted border-border text-muted-foreground"
@@ -142,7 +142,7 @@ export default function FilterBar({
                 onDateToChange("");
                 onTimeRangeChange(c.v);
               }}
-              className={`inline-flex min-h-9 items-center text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
+              className={`inline-flex min-h-9 items-center whitespace-nowrap text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
                 active
                   ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
                   : "bg-background hover:bg-muted border-border text-muted-foreground"

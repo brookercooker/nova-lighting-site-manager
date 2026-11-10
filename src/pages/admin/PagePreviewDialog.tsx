@@ -5,6 +5,15 @@ import { useState } from "react";
 import { regenerateThumbnail, type ThumbCandidate } from "./useThumbnailCapture";
 import { usePageThumbSrc } from "./signedThumb";
 import { toast } from "sonner";
+import { draftEmbedUrl } from "./siteManifest";
+import { publicPreviewBase, publicPreviewPage } from "./designChat/publicPreviewUrl";
+
+/** The page on the public (draft) site — never the Site Manager's own address, which has no visitor pages. */
+/** Signed embed addresses are only for the inline frame; new tabs get the plain public address. */
+function publicPageUrl(path: string, signed = false): string | null {
+  try { return publicPreviewPage((signed ? draftEmbedUrl() : null) ?? publicPreviewBase(null), path.startsWith("/") ? path : `/${path}`); }
+  catch { return null; }
+}
 
 /**
  * On-demand large preview shown when the user clicks a page/object thumbnail.
@@ -31,7 +40,8 @@ export default function PagePreviewDialog({
 
   const openLive = () => {
     if (!page) return;
-    const url = page.path.startsWith("/") ? page.path : `/${page.path}`;
+    const url = publicPageUrl(page.path);
+    if (!url) { toast.error("Couldn't find the public site's address. Open the Preview once, then try again."); return; }
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -92,7 +102,7 @@ export default function PagePreviewDialog({
                 Preview generating… showing live page in the meantime.
               </div>
               <iframe
-                src={page?.path ?? "about:blank"}
+                src={(page && publicPageUrl(page.path, true)) ?? "about:blank"}
                 title={page?.name ?? "Preview"}
                 className="w-full"
                 style={{ height: "70vh", border: 0 }}
