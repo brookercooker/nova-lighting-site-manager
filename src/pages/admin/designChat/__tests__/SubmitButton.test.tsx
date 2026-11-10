@@ -7,7 +7,7 @@ const m = vi.hoisted(() => ({ state: null as any, post: vi.fn(), refresh: vi.fn(
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, refreshSoon: m.refresh, showPreviewPath: m.show, selectPage: vi.fn() }) }));
 vi.mock("../helper", () => ({ postToHelper: m.post }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
-const page = (key: string, name: string) => ({ key: "page:" + key, page: { name, path: key }, what: "Change " + name });
+const page = (key: string, name: string) => ({ key: "page:" + key, page: { name, path: key }, how: "Changed by the builder" });
 beforeEach(() => {
   vi.clearAllMocks();
   walk.reset();
@@ -19,8 +19,8 @@ afterEach(cleanup);
 
 const dialog = () => screen.getByRole("dialog");
 const viewAndTick = (name = "About") => {
-  fireEvent.click(within(dialog()).getAllByRole("button", { name: "View Page" })[0]);
-  // View Page closes the walkthrough; the preview bar's Back to Review reopens it.
+  fireEvent.click(within(dialog()).getAllByRole("button", { name: "Open Page" })[0]);
+  // Open Page closes the walkthrough; the preview bar's Back to Review reopens it.
   act(() => walk.reopen("pages"));
   fireEvent.click(within(screen.getByText(name).closest("li")!).getByRole("checkbox", { name: "Yup, looks good" }));
 };
@@ -42,20 +42,37 @@ describe("Submit for Review walkthrough", () => {
     render(<SubmitConfirmDialog open onOpenChange={vi.fn()} />);
     const box = within(dialog()).getByRole("checkbox", { name: "Yup, looks good" });
     expect(box).toBeDisabled();
-    expect(dialog()).toHaveTextContent("View the page first");
+    expect(dialog()).toHaveTextContent("Open the page first");
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
-    fireEvent.click(within(dialog()).getByRole("button", { name: "View Page" }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Open Page" }));
     expect(m.show).toHaveBeenCalledWith("/a");
     expect(screen.queryByRole("dialog")).toBeNull();
     act(() => walk.reopen("pages"));
     expect(within(dialog()).getByRole("checkbox", { name: "Yup, looks good" })).toBeEnabled();
   });
-  it("rows without a page tick without the gate", () => {
-    m.data.rows = [{ key: "req:1", page: null, what: "Change the shop hours" }];
+  it("shows one gated Other site changes row that opens the home page", () => {
+    m.data.rows = [{ key: "other", page: null, how: "2 changes that aren't tied to one page", count: 2 }];
     render(<SubmitConfirmDialog open onOpenChange={vi.fn()} />);
-    expect(within(dialog()).getByText("Other Changes")).toBeInTheDocument();
-    expect(within(dialog()).queryByRole("button", { name: "View Page" })).toBeNull();
+    expect(dialog()).toHaveTextContent("Other site changes");
+    expect(dialog()).toHaveTextContent("0 of 1 pages checked");
+    expect(within(dialog()).getByRole("checkbox", { name: "Yup, looks good" })).toBeDisabled();
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Open Site" }));
+    expect(m.show).toHaveBeenCalledWith("/");
+  });
+  it("Open in New Tab also unlocks the tick, with a safe new-tab link", () => {
+    render(<SubmitConfirmDialog open onOpenChange={vi.fn()} />);
+    const link = within(dialog()).getByRole("link", { name: "Open in New Tab" });
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link.getAttribute("href")).toMatch(/\/a$/);
+    fireEvent.click(link);
     expect(within(dialog()).getByRole("checkbox", { name: "Yup, looks good" })).toBeEnabled();
+  });
+  it("never shows 0 of 0 and lets Next through when no pages changed", () => {
+    m.data.rows = [];
+    render(<SubmitConfirmDialog open onOpenChange={vi.fn()} />);
+    expect(dialog()).not.toHaveTextContent("0 of 0");
+    expect(dialog()).toHaveTextContent("No pages were changed in this draft.");
+    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeEnabled();
   });
   it("keeps Submit disabled until pages, links and the checklist are done, then submits once", async () => {
     m.data.links = { status: "ok", unread: 0, partial: false, truncated: false, groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [{ key: "/a|mailto:x@y.z", href: "mailto:x@y.z", kind: "mail", label: null, requestIds: [], status: null }] }] };

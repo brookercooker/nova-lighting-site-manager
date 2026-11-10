@@ -2,7 +2,8 @@ import type { DraftRequest } from "./helper";
 
 /** Pure rules for the Submit for Review walkthrough (pages, links, checklist). */
 export type PageRef = { name: string; path: string };
-export type ChangedRow = { key: string; page: PageRef | null; what: string; via?: string };
+export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number };
+export const OTHER_KEY = "other";
 export type ManagerPage = { name: string; path: string; build_status: string };
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
 export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirmed"; detail?: string } | null;
@@ -17,40 +18,42 @@ export const normPath = (path: string) => {
   const bare = path.split(/[?#]/)[0].replace(/\/+$/, "") || "/";
   return bare === "/home" ? "/" : bare;
 };
-const truncate = (t: string, n = 90) => { const one = t.replace(/\s+/g, " ").trim(); return one.length > n ? one.slice(0, n - 1).trimEnd() + "…" : one; };
 export const isRejected = (r: DraftRequest) => r.decision != null && typeof r.decision === "object";
 
-export function whatChanged(r: DraftRequest): string {
-  if (r.source === "content") return "Edited by hand";
-  return truncate(r.request ?? "") || "Edited by hand";
+const SOURCE_LABEL: Record<string, string> = { content: "Edited by hand", chat: "Changed by the builder", developer: "Changed by a developer" };
+function sourceLabel(r: DraftRequest): string | null {
+  const src = r.source ?? "chat";
+  return SOURCE_LABEL[src] ?? (src === "platform" || src === "setup" ? null : "Changed by the builder");
 }
+const noSiteFiles = (r: DraftRequest) => {
+  const f = (r as { siteFiles?: unknown }).siteFiles;
+  return f === 0 || (Array.isArray(f) && f.length === 0);
+};
 
-/** Every changed page, de-duplicated by path; shared objects add the pages that use them. Rejected and undo requests are skipped. */
+/** One row per changed page (never per change), de-duplicated by path; shared objects add the pages that use them.
+ * Rejected and undo requests are skipped; page-less site changes collapse into one "Other site changes" row. */
 export function changedPages(requests: DraftRequest[] | undefined, objectPages: Record<string, PageRef[]>): ChangedRow[] {
-  const rows = new Map<string, ChangedRow>();
-  const other: ChangedRow[] = [];
+  const rows = new Map<string, { page: PageRef; how: string[] }>();
+  let other = 0;
+  const note = (p: PageRef, label: string | null) => {
+    const key = "page:" + normPath(p.path);
+    const row = rows.get(key) ?? { page: { name: p.name, path: normPath(p.path) }, how: [] };
+    if (label && !row.how.includes(label)) row.how.push(label);
+    rows.set(key, row);
+  };
   for (const r of requests ?? []) {
     if (!r || r.isUndo === true || isRejected(r)) continue;
-    const what = whatChanged(r);
     const direct = (Array.isArray(r.pages) ? r.pages : r.page ? [r.page] : []).filter(validPage);
     let any = false;
-    for (const p of direct) {
-      any = true;
-      const key = "page:" + normPath(p.path);
-      const cur = rows.get(key);
-      if (!cur) rows.set(key, { key, page: { name: p.name, path: normPath(p.path) }, what });
-      else if (cur.via) rows.set(key, { ...cur, via: undefined, what });
-    }
+    for (const p of direct) { any = true; note(p, sourceLabel(r)); }
     for (const name of (Array.isArray(r.objects) ? r.objects : []).filter((o) => typeof o === "string" && o.trim())) {
-      for (const p of (objectPages[name] ?? []).filter(validPage)) {
-        any = true;
-        const key = "page:" + normPath(p.path);
-        if (!rows.has(key)) rows.set(key, { key, page: { name: p.name, path: normPath(p.path) }, what, via: name });
-      }
+      for (const p of (objectPages[name] ?? []).filter(validPage)) { any = true; note(p, `Changed through the shared object ${name}`); }
     }
-    if (!any) other.push({ key: "req:" + r.id, page: null, what: truncate(r.request ?? "", 120) || "Edited by hand" });
+    if (!any && r.source !== "platform" && !noSiteFiles(r)) other++;
   }
-  return [...rows.values(), ...other];
+  const list: ChangedRow[] = [...rows].map(([key, r]) => ({ key, page: r.page, how: r.how.join(" · ") }));
+  if (other) list.push({ key: OTHER_KEY, page: null, how: `${other} ${other === 1 ? "change that isn't" : "changes that aren't"} tied to one page`, count: other });
+  return list;
 }
 
 const KINDS: LinkKind[] = ["internal", "external", "mail", "phone", "anchor"];
@@ -110,9 +113,8 @@ export type ChecklistItem = { id: string; todo: string; done: string; locked: bo
 export function checklistItems(rows: ChangedRow[], hasLinks: boolean, pagesDone: boolean, linksDone: boolean): ChecklistItem[] {
   const names = pageNames(rows);
   const list = names ? ` (${names})` : "";
-  const items: ChecklistItem[] = [
-    { id: "pages", todo: `I will check the changed pages${list}.`, done: `I checked the changed pages${list}.`, locked: pagesDone },
-  ];
+  const items: ChecklistItem[] = rows.some((r) => r.page)
+    ? [{ id: "pages", todo: `I will check the changed pages${list}.`, done: `I checked the changed pages${list}.`, locked: pagesDone }] : [];
   if (hasLinks) items.push({ id: "links", todo: "I will check the links I changed.", done: "I checked the links I changed.", locked: linksDone });
   items.push(
     { id: "phone", todo: "I will look at the page on a phone as well.", done: "I looked at the page on a phone as well.", locked: false },

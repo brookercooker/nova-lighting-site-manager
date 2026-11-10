@@ -11,7 +11,8 @@ import { useDesignChat } from "./DesignChatContext";
 import { undoPendingGate } from "./logic";
 import { useManagerLayout } from "./useManagerLayout";
 import { useWalkthroughData, type WalkthroughData } from "./useWalkthroughData";
-import { checklistItems, itemTicked, linkChip, remaining, type Chip, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
+import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
+import { OTHER_KEY, checklistItems, itemTicked, linkChip, remaining, type Chip, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 import { add, toggle, useWalk, walk, type WalkStep } from "./submitWalkthroughStore";
 
 /** Navigation that also works when the dialog is rendered outside a router (tests). */
@@ -41,10 +42,14 @@ export function walkProgress(data: WalkthroughData, s = walk.get()) {
 }
 
 function pageCount(rows: ChangedRow[], ticked: string[]): string {
-  const withPage = rows.filter((r) => r.page); const other = rows.filter((r) => !r.page);
-  const done = (list: ChangedRow[]) => list.filter((r) => ticked.includes(r.key)).length;
-  const pages = `${done(withPage)} of ${withPage.length} pages checked`;
-  return other.length ? `${pages} · ${done(other)} of ${other.length} other ${other.length === 1 ? "change" : "changes"} checked` : pages;
+  if (!rows.length) return "No pages were changed in this draft.";
+  return `${rows.filter((r) => ticked.includes(r.key)).length} of ${rows.length} pages checked`;
+}
+const rowName = (r: ChangedRow) => r.page?.name ?? "Other site changes";
+const rowPath = (r: ChangedRow) => r.page?.path ?? "/";
+/** The draft site address for a page (new tab), or null when no draft address is configured. */
+function draftPageUrl(path: string): string | null {
+  try { const base = publicPreviewBase(null); return base ? publicPreviewPage(base, path) : null; } catch { return null; }
 }
 
 function linkPath(link: ReviewLink, group: LinkGroup): { path: string; part: string | null } {
@@ -122,12 +127,12 @@ function Walkthrough({ onClose, phone }: { onClose: () => void; phone: boolean }
         <Desc className="text-sm text-muted-foreground">
           {p.step === "pages" ? "Open each changed page and say whether it looks right."
             : p.step === "links" ? "Open each link that was added or changed and make sure it goes to the right place."
-            : reviewOn ? `Your ${changes} will be reviewed automatically, and anything it can't approve may go to a developer. Approved changes are put on the public site.`
+            : reviewOn ? "Your changes will be reviewed automatically, and anything it can't approve may go to a developer. Approved changes are put on the public site."
             : `This puts all ${changes} waiting in your draft on the public site right away. Visitors will see these changes as soon as publishing finishes.`}
         </Desc>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-3">
-        {p.step === "pages" && <PagesStep rows={p.pageRows} onView={(r) => openPage(r.page!.path, { key: r.key, kind: "page", name: r.page!.name })} />}
+        {p.step === "pages" && <PagesStep rows={p.pageRows} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} />}
         {p.step === "links" && <LinksStep data={data} onOpenInternal={(l, g) => openPage(linkPath(l, g).path, { key: l.key, kind: "link", name: l.label ?? l.href })} />}
         {p.step === "checklist" && (
           <ul className="space-y-3" aria-label="Submission Checklist">
@@ -178,36 +183,28 @@ function Tick({ id, label, checked, disabled, hint, onChange }: { id: string; la
 
 function PagesStep({ rows, onView }: { rows: ChangedRow[]; onView: (r: ChangedRow) => void }) {
   const s = useWalk();
-  const pageRows = rows.filter((r) => r.page);
-  const other = rows.filter((r) => !r.page);
   const tick = (key: string, v: boolean) => walk.update((w) => ({ ...w, ticked: toggle(w.ticked, key, v) }));
-  if (!rows.length) return <p className="text-sm text-muted-foreground">No changed pages are listed for this draft.</p>;
+  const opened = (key: string) => walk.update((w) => ({ ...w, viewed: add(w.viewed, key) }));
+  if (!rows.length) return <p className="text-sm text-muted-foreground">No pages were changed in this draft.</p>;
   return (
-    <div className="space-y-4">
-      {pageRows.length > 0 && <ul className="space-y-2" aria-label="Changed Pages">
-        {pageRows.map((r) => {
-          const viewed = s.viewed.includes(r.key);
-          return (
-            <li key={r.key} data-walk-row={r.key} className="space-y-1 rounded-md border p-3">
-              <p className="break-words font-medium">{r.page!.name} <span className="break-all font-mono text-xs font-normal text-muted-foreground">{r.page!.path}</span></p>
-              {r.via && <p className="text-xs text-muted-foreground">Changed through the shared object {r.via}</p>}
-              <p className="break-words text-xs text-muted-foreground">{r.what}</p>
-              <div className="flex flex-wrap items-start gap-x-4 gap-y-1 pt-1">
-                <Button type="button" variant="outline" className="h-11" onClick={() => onView(r)}><Eye className="h-4 w-4" aria-hidden />View Page</Button>
-                <Tick id={`tick-${r.key}`} label="Yup, looks good" checked={s.ticked.includes(r.key)} disabled={!viewed} hint={viewed ? undefined : "View the page first"} onChange={(v) => tick(r.key, v)} />
-              </div>
-            </li>
-          );
-        })}
-      </ul>}
-      {other.length > 0 && <section aria-labelledby="walk-other"><h3 id="walk-other" className="mb-2 text-sm font-semibold">Other Changes</h3>
-        <ul className="space-y-2">
-          {other.map((r) => <li key={r.key} data-walk-row={r.key} className="space-y-1 rounded-md border p-3">
-            <p className="break-words text-sm">{r.what}</p>
-            <Tick id={`tick-${r.key}`} label="Yup, looks good" checked={s.ticked.includes(r.key)} disabled={false} onChange={(v) => tick(r.key, v)} />
-          </li>)}
-        </ul></section>}
-    </div>
+    <ul className="space-y-2" aria-label="Changed Pages">
+      {rows.map((r) => {
+        const viewed = s.viewed.includes(r.key);
+        const other = r.key === OTHER_KEY;
+        const tab = r.page ? draftPageUrl(r.page.path) : null;
+        return (
+          <li key={r.key} data-walk-row={r.key} className="space-y-1 rounded-md border p-3">
+            <p className="break-words font-medium">{rowName(r)} {r.page && <span className="break-all font-mono text-xs font-normal text-muted-foreground">{r.page.path}</span>}</p>
+            {r.how && <p className="break-words text-xs text-muted-foreground">{r.how}</p>}
+            <div className="flex flex-wrap items-start gap-x-4 gap-y-1 pt-1">
+              <Button type="button" className="h-11" onClick={() => onView(r)}><Eye className="h-4 w-4" aria-hidden />{other ? "Open Site" : "Open Page"}</Button>
+              {tab && <Button asChild variant="outline" className="h-11"><a href={tab} target="_blank" rel="noopener noreferrer" onClick={() => opened(r.key)}><ExternalLink className="h-4 w-4" aria-hidden />Open in New Tab</a></Button>}
+              <Tick id={`tick-${r.key}`} label="Yup, looks good" checked={s.ticked.includes(r.key)} disabled={!viewed} hint={viewed ? undefined : "Open the page first"} onChange={(v) => tick(r.key, v)} />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -274,7 +271,7 @@ export function WalkthroughCheckBar(): ReactNode {
 function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"]> }) {
   const { state } = useDesignChat();
   const data = useWalkthroughData(state, true);
-  const pageRows = data.rows.filter((r) => r.page);
+  const pageRows = data.rows;
   const at = pageRows.findIndex((r) => r.key === c.key);
   const back: WalkStep = c.kind === "page" ? "pages" : "links";
   const yup = () => {

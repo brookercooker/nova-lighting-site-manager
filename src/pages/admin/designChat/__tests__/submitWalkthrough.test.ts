@@ -3,22 +3,26 @@ import { changedPages, checklistItems, internalLinkChip, parseReviewLinks, remai
 
 const req = (o: any) => ({ id: o.id ?? "r", request: o.request ?? "Make it nicer", ...o });
 describe("changed pages", () => {
-  it("de-duplicates by path, adds shared-object pages and skips rejected and undo requests", () => {
+  it("lists pages, not changes: de-duplicated, shared-object pages added, rejected and undo skipped", () => {
     const rows = changedPages([
-      req({ id: "1", pages: [{ name: "About", path: "/about" }, { name: "Home", path: "/home" }] }),
-      req({ id: "2", page: { name: "About", path: "/about" } }),
-      req({ id: "3", objects: ["Footer"] }),
+      req({ id: "1", source: "chat", pages: [{ name: "About", path: "/about" }, { name: "Home", path: "/home" }] }),
+      req({ id: "2", source: "content", page: { name: "About", path: "/about" } }),
+      req({ id: "3", source: "developer", objects: ["Footer"] }),
       req({ id: "4", page: { name: "Gone", path: "/gone" }, decision: { reason: "No" } }),
       req({ id: "5", page: { name: "Undo", path: "/undo" }, isUndo: true }),
-      req({ id: "6", request: "Change the hours" }),
     ], { Footer: [{ name: "Home", path: "/" }, { name: "Brands", path: "/brands" }] });
-    expect(rows.map((r) => r.key)).toEqual(["page:/about", "page:/", "page:/brands", "req:6"]);
-    expect(rows[2].via).toBe("Footer");
-    expect(rows[1].via).toBeUndefined();
-    expect(rows[3].page).toBeNull();
+    expect(rows.map((r) => r.key)).toEqual(["page:/about", "page:/", "page:/brands"]);
+    expect(rows[0].how).toBe("Changed by the builder · Edited by hand");
+    expect(rows[1].how).toBe("Changed by the builder · Changed through the shared object Footer");
+    expect(JSON.stringify(rows)).not.toContain("Make it nicer");
   });
-  it("labels hand edits", () => {
-    expect(changedPages([req({ source: "content", page: { name: "A", path: "/a" } })], {})[0].what).toBe("Edited by hand");
+  it("collapses page-less changes into one row, skipping platform and zero-site-file requests", () => {
+    const rows = changedPages([
+      req({ id: "a", request: "Hours" }), req({ id: "b", request: "Fonts", siteFiles: 3 }),
+      req({ id: "c", source: "platform" }), req({ id: "d", siteFiles: 0 }),
+    ] as any, {});
+    expect(rows).toEqual([{ key: "other", page: null, how: "2 changes that aren't tied to one page", count: 2 }]);
+    expect(changedPages([req({ source: "platform" })], {})).toEqual([]);
   });
 });
 describe("internal link status", () => {
@@ -31,12 +35,14 @@ describe("internal link status", () => {
 });
 describe("checklist", () => {
   it("names at most three pages and hides the links item without links", () => {
-    const rows = ["A", "B", "C", "D", "E"].map((n) => ({ key: n, page: { name: n, path: "/" + n }, what: "" }));
+    const rows = ["A", "B", "C", "D", "E"].map((n) => ({ key: n, page: { name: n, path: "/" + n }, how: "" }));
     const items = checklistItems(rows, false, true, true);
     expect(items[0].todo).toBe("I will check the changed pages (A, B, C and 2 more).");
     expect(items[0].done).toBe("I checked the changed pages (A, B, C and 2 more).");
     expect(items.some((i) => i.id === "links")).toBe(false);
     expect(items.length).toBeLessThanOrEqual(5);
+    expect(checklistItems([...rows, { key: "other", page: null, how: "" }], false, true, true)[0].todo).not.toContain("Other");
+    expect(checklistItems([{ key: "other", page: null, how: "" }], false, true, true).some((i) => i.id === "pages")).toBe(false);
   });
   it("says what is left", () => {
     expect(remaining(2, 0, 0)).toBe("2 pages left to check");
