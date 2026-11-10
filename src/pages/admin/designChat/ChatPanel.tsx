@@ -344,7 +344,7 @@ export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgre
         {refs.references.length > 0 && (
           <div className="rounded-md border border-primary/40 bg-primary/5 p-2" aria-label="Library items for this request">
             <p className="mb-1.5 text-xs font-semibold" data-references-heading>
-              Selected ({refs.references.length}) · Sent with your next message
+              Selected ({refs.references.length})
             </p>
             <div className="flex flex-wrap gap-1.5">
             {refs.references.map((r) => {
