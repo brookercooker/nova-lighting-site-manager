@@ -322,6 +322,19 @@ describe("library items in the chat", () => {
     fireEvent.click(screen.getByRole("button", { name: 'Remove Hero "lamp"' }));
     expect(mocks.refs.removeReference).toHaveBeenCalledWith("image:img1");
   });
+  it("uses yellow reference chips with inherited black labels and working remove controls", () => {
+    mocks.refs.references = [image, { kind: "object", id: "o", name: "Object Name" }, { kind: "video", id: "v", name: "Video Name", url: "/clip.mp4" }];
+    render(<MemoryRouter><ChatPanel /></MemoryRouter>);
+    for (const ref of mocks.refs.references) {
+      const remove = screen.getByRole("button", { name: `Remove ${ref.name}` });
+      const chip = remove.parentElement;
+      expect(chip).toHaveClass("bg-tag-selected", "text-tag-selected-foreground", "border-tag-selected");
+      expect(chip?.querySelector(".text-muted-foreground")).toBeNull();
+      expect(remove).toHaveClass("text-tag-selected-foreground", "hover:bg-tag-selected-foreground/10");
+      fireEvent.click(remove);
+    }
+    expect(mocks.refs.removeReference.mock.calls).toEqual([["image:img1"], ["object:o"], ["video:v"]]);
+  });
   it("sends the reference block after the words, without putting it in the box, and clears chips on success", async () => {
     mocks.refs.references = [image];
     render(<MemoryRouter><ChatPanel /></MemoryRouter>);

@@ -350,12 +350,12 @@ export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgre
             {refs.references.map((r) => {
               const Icon = r.kind === "image" ? ImageIcon : r.kind === "video" ? Film : Box;
               return (
-                <span key={referenceKey(r)} className="inline-flex max-w-full items-center gap-1.5 rounded-full border bg-muted py-0.5 pl-1 pr-1 text-xs">
-                  {r.thumb ? <img src={r.thumb} alt="" className="h-5 w-5 rounded-full object-cover" /> : <Icon className="ml-1 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
-                  <span className="text-muted-foreground">{kindLabel(r.kind)}</span>
-                  <span className="max-w-[180px] truncate">{r.name}</span>
+                <span key={referenceKey(r)} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-tag-selected bg-tag-selected py-0.5 pl-1 pr-1 text-xs text-tag-selected-foreground">
+                  {r.thumb ? <img src={r.thumb} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" /> : <Icon className="ml-1 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+                  <span>{kindLabel(r.kind)}</span>
+                  <span className="min-w-0 max-w-[180px] truncate">{r.name}</span>
                   <button type="button" aria-label={`Remove ${r.name}`} onClick={() => refs.removeReference(referenceKey(r))}
-                    className="grid h-5 w-5 place-items-center rounded-full text-muted-foreground hover:bg-border hover:text-foreground">
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-tag-selected-foreground hover:bg-tag-selected-foreground/10">
                     <X className="h-3 w-3" />
                   </button>
                 </span>

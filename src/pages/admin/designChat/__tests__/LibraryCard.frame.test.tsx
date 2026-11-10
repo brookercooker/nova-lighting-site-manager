@@ -6,6 +6,18 @@ import LibraryCard from "../LibraryCard";
 const base = { labels: ["Room/Kitchen"], selected: true, FallbackIcon: Box, onPick: () => {} };
 
 describe("LibraryCard thumbnail frame", () => {
+  it("uses yellow selected tokens for the outline and pill while preserving pressed state and check icon", () => {
+    const { getByRole, getByText, rerender } = render(<LibraryCard {...base} item={{ kind: "object", id: "selected", name: "Selected Object", type: "coded" }} />);
+    const card = getByRole("button", { name: "Selected Object" });
+    expect(card).toHaveAttribute("aria-pressed", "true");
+    expect(card).toHaveClass("border-tag-selected", "ring-tag-selected");
+    expect(getByText("Selected")).toHaveClass("bg-tag-selected", "text-tag-selected-foreground");
+    expect(getByText("Selected").querySelector("svg")).not.toBeNull();
+    rerender(<LibraryCard {...base} selected={false} added item={{ kind: "object", id: "selected", name: "Selected Object", type: "coded" }} />);
+    expect(card).toHaveAttribute("aria-pressed", "false");
+    expect(card).toHaveClass("border-primary", "ring-primary");
+    expect(getByText("Added")).toHaveClass("bg-primary", "text-primary-foreground");
+  });
   it("keeps a fixed 4:3 frame that a tall image cannot resize", () => {
     const { container } = render(<LibraryCard {...base} item={{ kind: "image", id: "1", name: "Tall", url: "/t.jpg", thumb: "/t.jpg" } as any} />);
     const frame = container.querySelector("[data-thumb-frame]")!;
