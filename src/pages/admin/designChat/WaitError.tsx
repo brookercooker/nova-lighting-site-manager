@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import ErrorText from "./errorText";
 import type { WaitView } from "./waitEstimates";
 
 /** All failed-wait surfaces share the provider's deadline and interaction ownership. */
@@ -15,7 +16,7 @@ export default function WaitError({ progress, className }: { progress: WaitView;
     onMouseEnter={() => { hover.current = true; update(); }} onMouseLeave={() => { hover.current = false; update(); }}
     onFocusCapture={() => { focus.current = true; update(); }} onBlurCapture={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) { focus.current = false; update(); } }}>
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="min-w-0 flex-1 text-xs">{progress.label}</span>
+      <span className="min-w-0 flex-1 text-xs">{typeof progress.label === "string" ? <ErrorText text={progress.label} /> : progress.label}</span>
       {progress.errorControls?.retry && <Button type="button" variant="link" size="sm" className="h-8 p-0 text-xs" disabled={progress.errorControls.disabled} onClick={progress.errorControls.retry}>Try Again</Button>}
       {progress.errorControls && <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Dismiss" onClick={progress.errorControls.dismiss}><X className="h-3.5 w-3.5" /></Button>}
     </div>

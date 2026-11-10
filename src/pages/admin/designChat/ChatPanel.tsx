@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ErrorText from "./errorText";
 import { Box, CheckCircle2, Film, Image as ImageIcon, Loader2, Mic, Paperclip, Pencil, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -264,7 +265,7 @@ export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgre
             e.role === "error" && "self-stretch max-w-none bg-destructive/10 text-destructive",
           )} data-live-note={e.role === "note" && shown === LIVE_NOTE ? "" : undefined}>
             {e.role === "note" && shown === LIVE_NOTE && <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />}
-            {shown}
+            {e.role === "error" && typeof shown === "string" ? <ErrorText text={shown} /> : shown}
             {e.role === "error" && requestRetry && e.ts !== undefined && !requestRetry.isReviewFailure(e.ts) && <div className="mt-1 text-xs">
               {requestRetry.canRetry(e.ts) ? <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" disabled={requestRetry.disabled || editing} onClick={() => { void requestRetry.retry(e.ts ?? 0, () => waitProgress?.request?.errorControls?.dismiss()).then(result => { if (result && !result.ok) setHint(result.error, true); }); }}>Try Again</Button>
                 : <p>{requestRetry.retryNote(e.ts)}</p>}
