@@ -319,6 +319,9 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
     historyRef.current = r.history;
     setHistory(r.history);
     const address = r.address;
+    // Back/Forward away from the picked page releases it (like the chip X) so requests follow what is shown.
+    const picked = workRef.current.workingPage;
+    if (picked && !previewAddressMatches(picked.path, address.split(/[?#]/)[0])) dispatch({ type: "clear" });
     debugNav("history step", { by, address });
     // Go straight to the address this history holds: a freshly reloaded frame has no browser history of its own to step through.
     navigatePreview({ action: "to", path: address }, address, () => { setPreviewPath(address); setNavNonce((n) => n + 1); }, false);

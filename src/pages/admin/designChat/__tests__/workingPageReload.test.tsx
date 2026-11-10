@@ -293,6 +293,55 @@ describe("picked page follows the preview", () => {
   });
 });
 
+describe("picked page and Back/Forward", () => {
+  const team = { id: "team-id", name: "Team", path: "/team" };
+  const setup = () => {
+    mocks.navigate.mockReturnValue(true);
+    const frame = document.createElement("iframe"); frame.src = "https://site.example/"; frame.dataset.sitePreview = "true"; document.body.appendChild(frame);
+    return (path: string) => act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "https://site.example", data: { source: "nova-site", type: "location", path } })));
+  };
+  afterEach(() => { document.querySelectorAll("iframe").forEach((f) => f.remove()); mocks.navigate.mockReturnValue(false); vi.useRealTimers(); });
+  const pickTeamThenLocations = (report: (p: string) => void) => {
+    const hook = renderHook(useDesignChat, { wrapper });
+    act(() => hook.result.current.selectPage(team)); report("/team");
+    act(() => vi.advanceTimersByTime(NAV_SETTLE_MS));
+    act(() => hook.result.current.selectPage({ name: "Locations", path: "/showrooms" })); report("/showrooms");
+    act(() => vi.advanceTimersByTime(NAV_SETTLE_MS));
+    return hook;
+  };
+  it("Back to a different page clears the pick", () => {
+    vi.useFakeTimers(); const report = setup();
+    const hook = pickTeamThenLocations(report);
+    act(() => hook.result.current.previewNav?.back());
+    expect(hook.result.current.workingPage).toBeNull();
+    expect(hook.result.current.previewDestination).toBe("/team");
+  });
+  it("Forward to the picked page's own path keeps it", () => {
+    vi.useFakeTimers(); const report = setup();
+    const hook = pickTeamThenLocations(report);
+    act(() => hook.result.current.previewNav?.back()); report("/team");
+    act(() => vi.advanceTimersByTime(NAV_SETTLE_MS));
+    act(() => hook.result.current.selectPage({ name: "Locations", path: "/showrooms" }));
+    report("/showrooms"); act(() => vi.advanceTimersByTime(NAV_SETTLE_MS));
+    act(() => hook.result.current.previewNav?.back()); report("/team");
+    act(() => vi.advanceTimersByTime(NAV_SETTLE_MS));
+    act(() => hook.result.current.selectPage({ name: "Locations", path: "/showrooms" }));
+    act(() => hook.result.current.previewNav?.forward());
+    expect(hook.result.current.previewDestination).toBe("/showrooms");
+    expect(hook.result.current.workingPage).toEqual({ name: "Locations", path: "/showrooms" });
+  });
+  it("Back while editing is a no-op", () => {
+    vi.useFakeTimers(); const report = setup();
+    const hook = renderHook(useDesignChat, { wrapper });
+    report("/showrooms");
+    act(() => hook.result.current.selectPage(team)); report("/team");
+    act(() => hook.result.current.startEditing());
+    act(() => hook.result.current.previewNav?.back());
+    expect(hook.result.current.workingPage).toEqual(team);
+    expect(hook.result.current.editing).toBe(true);
+  });
+});
+
 describe("picked page reload", () => {
   it("does not restore a stored working page or its preview path on load", () => {
     sessionStorage.setItem(key, JSON.stringify(draft));
