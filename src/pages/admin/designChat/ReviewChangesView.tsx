@@ -14,7 +14,7 @@ import { atMs, CHANGE_LABEL, changeKind, changeTitle, newestFirst, relativeTime,
 import { requestAuthor } from "./submitWalkthrough";
 
 /** Changes waiting for review, from the relay's draft.requests only (never the chat history). Replaces the chat in the left column. */
-export default function ReviewChangesView(_props: { onShowPreview: () => void }) {
+export default function ReviewChangesView({ embedded = false }: { onShowPreview: () => void; embedded?: boolean }) {
   const { state, setReviewOpen, refreshSoon } = useDesignChat();
   // Staff only: the review's findings and "Fix this for me" are never shown to other people.
   const [isAdmin, setIsAdmin] = useState(false);
@@ -51,16 +51,16 @@ export default function ReviewChangesView(_props: { onShowPreview: () => void })
   const count = state?.publish?.open ?? requests?.length ?? 0;
   return (
     <section aria-label="Changes Waiting for Review" className="flex min-h-0 flex-1 flex-col bg-background">
-      <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
+      {!embedded && <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
         <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs" onClick={() => setReviewOpen(false)}>
           <ArrowLeft className="h-3 w-3" aria-hidden />Back to Chat
         </Button>
-      </div>
+      </div>}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 text-sm">
         <h2 className="font-sans text-base font-semibold">Changes Waiting for Review</h2>
         <p className="text-muted-foreground">{waitingLine(count)}</p>
         {!requests && count > 0 && <p className="text-xs text-muted-foreground">Individual change details aren't available from the design service yet.</p>}
-        <SubmitButton />
+        {!embedded && <SubmitButton />}
         <ReviewProblems />
         {isAdmin && reviewBlocked(state) && <div role="region" aria-label="Review Findings"><FindingsList items={findings} onFix={fixIds} onReject={rejectAll} /></div>}
         {isAdmin && rejectStatus && <p role="status" className="text-xs text-muted-foreground">{rejectStatus}</p>}

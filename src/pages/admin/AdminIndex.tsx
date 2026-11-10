@@ -23,6 +23,8 @@ import HeaderActions, { StatusMenuItem } from "./designChat/HeaderActions";
 import WorkingPageChip from "./designChat/WorkingPageChip";
 import ContentSyncNote from "./designChat/ContentSyncNote";
 import ReviewChangesView from "./designChat/ReviewChangesView";
+import { SubmitWalkthroughPanel } from "./designChat/SubmitWalkthrough";
+import { useWalk, walk } from "./designChat/submitWalkthroughStore";
 import { HEADER_HEIGHT_CLASS } from "./designChat/layout";
 import { rememberTopDropAnchor } from "./designChat/TopDropPanel";
 import ManualPageSwitcher, { useManualPageNavigation } from "./designChat/ManualPageSwitcher";
@@ -237,6 +239,13 @@ function AdminShell() {
   const resizing = useRef<{ x: number; w: number } | null>(null);
   const sidePanelWidth = layout.tier === "wide" ? undefined : clampPanelWidth(panelWidth, layout.tier);
   const reviewShown = designChat.reviewOpen && !manual && (phone || !chatCollapsed);
+  const walkthrough = useWalk();
+  useEffect(() => {
+    if (!walkthrough.open) return;
+    designChat.setReviewOpen(true);
+    setChatCollapsed(false);
+    if (phone) phoneChat.show();
+  }, [walkthrough.open, phone]);
   useEffect(() => {
     try { localStorage.setItem("siteManager:chatCollapsed", String(chatCollapsed)); } catch { /* no storage: ignore */ }
   }, [chatCollapsed]);
@@ -429,7 +438,7 @@ function AdminShell() {
           aria-label={manual ? "Manual Mode" : "Chat"}
           data-open={phoneChat.open}
         >
-          {phone && !manual && <PhoneChatHeader onClose={phoneChat.close} review={reviewShown} onChat={() => designChat.setReviewOpen(false)} />}
+          {phone && !manual && <PhoneChatHeader onClose={phoneChat.close} review={reviewShown && !walkthrough.open} onChat={() => designChat.setReviewOpen(false)} />}
           {phone && phonePane === "main" && manual && tab === "preview" && (
             <button type="button" aria-label={sheet === "peek" ? "Show Editing Menu" : sheet === "half" ? "Expand Editing Menu" : "Shrink Editing Menu"}
               className="flex h-6 w-full shrink-0 touch-none items-center justify-center"
@@ -517,9 +526,11 @@ function AdminShell() {
           {phone && phonePane === "main" && manual && tab === "preview" && sheet === "peek" && <p className="px-3 pb-2 text-xs text-muted-foreground">Tap something on the page to edit it.</p>}
           {!phone && !reviewShown && <ModeToggle collapsed={chatCollapsed && !manual} onChat={() => setChatCollapsed(false)} />}
           {/* Which page you're on, just below the Chat / Manual Edit switch. */}
-          {!phone && (manual || !chatCollapsed) && <WorkingPageChip className="mx-2 my-2 shrink-0" />}
+          {!phone && !reviewShown && (manual || !chatCollapsed) && <WorkingPageChip className="mx-2 my-2 shrink-0" />}
           <ContentSyncNote />
-          {reviewShown && <ReviewChangesView onShowPreview={() => { if (tab !== "preview") navigate("/manage/preview"); }} />}
+          {reviewShown && (walkthrough.open ? <SubmitWalkthroughPanel onKeepEditing={() => designChat.setReviewOpen(false)} onCheckPhone={() => { designChat.setReviewOpen(false); phoneChat.close(); }}>
+            <ReviewChangesView embedded onShowPreview={() => { if (tab !== "preview") navigate("/manage/preview"); }} />
+          </SubmitWalkthroughPanel> : <ReviewChangesView onShowPreview={() => { if (tab !== "preview") navigate("/manage/preview"); }} />)}
           {manual && workingPage && (
             <div className="flex min-h-0 flex-1 flex-col">
               <div ref={editingHeaderRef} tabIndex={-1} className={cn("flex shrink-0 flex-col gap-2", (objectOpen || designChat.state?.busy) && "border-b px-3 py-3", phone && phonePane === "main" && "hidden")}>

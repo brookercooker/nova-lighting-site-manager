@@ -19,6 +19,23 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("changes the page fingerprint after saved hand-edit values change even with the same relay request", async () => {
+    let inline = { heading: "First hand edit" };
+    m.from.mockImplementation((table: string) => {
+      const result = { data: table === "pages" ? [{ name: "Experiment", path: "/draft/experiment", build_status: "ready", inline_edits: inline }] : [], error: null };
+      const q: any = { select: () => q, is: () => Promise.resolve(result), in: () => Promise.resolve(result) }; return q;
+    });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));
+    const client = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const state: any = { draft: { requests: [{ id: "1", at: 123, request: "Hand edit" }] } };
+    const hook = renderHook(() => useWalkthroughData(state, true), { wrapper });
+    await waitFor(() => expect(hook.result.current.pagesStatus).toBe("ok"));
+    const before = hook.result.current.rows[0].fingerprint;
+    inline = { heading: "Later hand edit" };
+    await client.invalidateQueries({ queryKey: ["walkthrough", "pages"] });
+    await waitFor(() => expect(hook.result.current.rows[0].fingerprint).not.toBe(before));
+  });
   it.each([404, "network"])("falls back only for %s", async (failure) => {
     vi.stubGlobal("fetch", failure === "network" ? vi.fn().mockRejectedValue(new TypeError("offline")) : vi.fn().mockResolvedValue(new Response("", { status: 404 })));
     expect(await fetchReviewPages()).toBeNull();

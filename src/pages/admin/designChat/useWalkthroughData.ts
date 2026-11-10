@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/prototype/client";
 import { codePagePaths, loadSiteManifest } from "../siteManifest";
 import { RELAY, relayHeaders, type RelayState } from "./helper";
-import { changedPages, countHandEdits, dropRevertedHandEdits, parseReviewLinks, parseReviewPages, relayChangedPages, type ChangedRow, type ManagerPage, type PageRef, type ReviewLinks, type ReviewPages } from "./submitWalkthrough";
+import { changeFingerprint, normPath, changedPages, countHandEdits, dropRevertedHandEdits, parseReviewLinks, parseReviewPages, relayChangedPages, type ChangedRow, type ManagerPage, type PageRef, type ReviewLinks, type ReviewPages } from "./submitWalkthrough";
 
 export type LinksResult = { status: "loading" } | { status: "failed" } | ({ status: "ok" } & ReviewLinks);
 export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; pagesStatus?: "loading" | "failed" | "ok" };
@@ -11,7 +11,7 @@ export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links:
 /** Pages using each shared object, from the same object_page_usages table the Objects tab's Used On reads. */
 async function fetchObjectPages(names: string[]): Promise<Record<string, PageRef[]>> {
   if (!names.length) return {};
-  const { data: registry, error: registryError } = await (supabase as any).from("object_registry").select("id,name,component_key").is("archived_at", null);
+  const { data: registry, error: registryError } = await (supabase as any).from("object_registry").select("id,name,component_key,inline_edits,content").is("archived_at", null);
   if (registryError) throw registryError;
   const matches = (registry ?? []).filter((r: any) => names.includes(r.name) || names.includes(r.component_key));
   if (!matches.length) return {};
@@ -24,14 +24,14 @@ async function fetchObjectPages(names: string[]): Promise<Record<string, PageRef
     const object = matches.find((r: any) => r.id === row.object_registry_id); const p = row.pages;
     if (!object || !p || p.archived_at || typeof p.path !== "string") continue;
     for (const name of names.filter((n) => n === object.name || n === object.component_key))
-      (out[name] ??= []).push({ name: p.name || p.path, path: p.path });
+      (out[name] ??= []).push({ name: p.name || p.path, path: p.path, sharedChange: { inlineEdits: object.inline_edits, content: object.content } });
   }
   return out;
 }
 async function fetchManagerPages(): Promise<ManagerPage[]> {
-  const { data, error } = await (supabase as any).from("pages").select("name,path,build_status,archived_at,inline_edits").is("archived_at", null);
+  const { data, error } = await (supabase as any).from("pages").select("name,path,build_status,archived_at,inline_edits,content").is("archived_at", null);
   if (error) throw error;
-  const list: ManagerPage[] = (data ?? []).map((p: any) => ({ name: p.name || p.path, path: p.path, build_status: p.build_status, handEdits: countHandEdits(p.inline_edits) }));
+  const list: ManagerPage[] = (data ?? []).map((p: any) => ({ name: p.name || p.path, path: p.path, build_status: p.build_status, handEdits: countHandEdits(p.inline_edits), inlineEdits: p.inline_edits, content: p.content }));
   // Coded pages from the public manifest are live even when they were never registered as Manager rows.
   try {
     const known = new Set(list.map((p) => p.path));
@@ -63,17 +63,27 @@ export async function fetchReviewPages(): Promise<ReviewPages | null> {
 /** Everything the walkthrough lists; re-reads when the draft's requests change. */
 export function useWalkthroughData(state: RelayState | null, enabled: boolean): WalkthroughData {
   const requests = state?.draft?.requests;
-  const sig = (requests ?? []).map((r) => `${r.id}:${r.sha ?? ""}:${r.builtAt ?? ""}`).join(",") + ":" + (state?.previewVersion ?? 0);
+  const sig = changeFingerprint(requests ?? []) + ":" + (state?.previewVersion ?? 0);
   const reviewPages = useQuery({ queryKey: ["walkthrough", "review-pages", sig], queryFn: fetchReviewPages, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
   const names = useMemo(() => [...new Set(reviewPages.data
     ? [...reviewPages.data.components, ...reviewPages.data.objects].map((p) => p.name)
     : reviewPages.data === null ? (requests ?? []).flatMap((r) => r.objects ?? []) : [])].sort(), [requests, reviewPages.data]);
-  const objects = useQuery({ queryKey: ["walkthrough", "object-pages", names], queryFn: () => fetchObjectPages(names), enabled: enabled && names.length > 0, staleTime: 15_000 });
-  const pages = useQuery({ queryKey: ["walkthrough", "pages"], queryFn: fetchManagerPages, enabled, staleTime: 15_000 });
-  const links = useQuery({ queryKey: ["walkthrough", "links", sig], queryFn: fetchReviewLinks, enabled, retry: false, staleTime: 30_000 });
+  const objects = useQuery({ queryKey: ["walkthrough", "object-pages", names, sig], queryFn: () => fetchObjectPages(names), enabled: enabled && names.length > 0, staleTime: 0, refetchOnMount: "always" });
+  const pages = useQuery({ queryKey: ["walkthrough", "pages", sig], queryFn: fetchManagerPages, enabled, staleTime: 0, refetchOnMount: "always" });
+  const links = useQuery({ queryKey: ["walkthrough", "links", sig], queryFn: fetchReviewLinks, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
   const rows = useMemo(() => dropRevertedHandEdits(reviewPages.data ? relayChangedPages(reviewPages.data, pages.data ?? [], objects.data ?? {}, requests)
     : reviewPages.data === null ? changedPages(requests, objects.data ?? {}) : [], pages.data ?? []), [reviewPages.data, requests, objects.data, pages.data]);
-  const linkResult: LinksResult = links.isError ? { status: "failed" } : links.data ? { status: "ok", ...links.data } : { status: "loading" };
-  const pagesStatus = reviewPages.isError || objects.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
-  return { rows, pages: pages.data ?? [], links: linkResult, pagesStatus };
+  const linkResult: LinksResult = links.isError ? { status: "failed" } : links.data && !links.isFetching ? { status: "ok", ...links.data } : { status: "loading" };
+  const pagesStatus = reviewPages.isError || objects.isError || pages.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
+  const fingerprintedRows = rows.map((row) => {
+    const path = row.page?.path;
+    const authoritative = reviewPages.data;
+    const ids = authoritative ? [...authoritative.rows.filter(p => path && normPath(p.path) === normPath(path)).flatMap(p => p.requestIds),
+      ...[...authoritative.components, ...authoritative.objects].filter(piece => (objects.data?.[piece.name] ?? []).some(p => path && normPath(p.path) === normPath(path))).flatMap(piece => piece.requestIds),
+      ...(!path ? authoritative.sitewide.requestIds : [])] : (requests ?? []).filter(r => !path || (r.pages ?? (r.page ? [r.page] : [])).some(p => normPath(p.path) === normPath(path)) || (r.objects ?? []).some(n => (objects.data?.[n] ?? []).some(p => normPath(p.path) === normPath(path)))).map(r => r.id);
+    const page = pages.data?.find(p => path && normPath(p.path) === normPath(path));
+    const shared = names.map(name => ({ name, changes: (objects.data?.[name] ?? []).filter(p => path && normPath(p.path) === normPath(path)).map(p => p.sharedChange) })).filter(p => p.changes.length);
+    return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, at: r.at, sha: r.sha, builtAt: r.builtAt, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: page?.inlineEdits, content: page?.content, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
+  });
+  return { rows: fingerprintedRows, pages: pages.data ?? [], links: linkResult, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
 }

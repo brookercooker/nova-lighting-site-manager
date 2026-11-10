@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Copy, ExternalLink, Eye, Send } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, ExternalLink, Eye, Send, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 import { cn } from "@/lib/utils";
 import { postToHelper } from "./helper";
 import { useDesignChat } from "./DesignChatContext";
@@ -12,7 +13,7 @@ import { undoPendingGate } from "./logic";
 import { useManagerLayout } from "./useManagerLayout";
 import { useWalkthroughData, type WalkthroughData } from "./useWalkthroughData";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
-import { OTHER_KEY, checklistItems, itemTicked, linkChip, remaining, type Chip, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
+import { changeFingerprint, OTHER_KEY, checklistItems, itemTicked, linkChip, remaining, type Chip, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 import { add, toggle, useWalk, walk, type WalkStep } from "./submitWalkthroughStore";
 
 /** Navigation that also works when the dialog is rendered outside a router (tests). */
@@ -43,7 +44,7 @@ export function walkProgress(data: WalkthroughData, s = walk.get()) {
 
 function pageCount(rows: ChangedRow[], ticked: string[]): string {
   if (!rows.length) return "No pages were changed in this draft.";
-  return `${rows.filter((r) => ticked.includes(r.key)).length} of ${rows.length} pages checked`;
+  return `${rows.filter((r) => ticked.includes(r.key)).length} of ${rows.length} pages approved`;
 }
 const rowName = (r: ChangedRow) => r.page?.name ?? "Other site changes";
 const rowPath = (r: ChangedRow) => r.page?.path ?? "/";
@@ -59,30 +60,28 @@ function linkPath(link: ReviewLink, group: LinkGroup): { path: string; part: str
 
 /**
  * Submit for Review (or Publish): pages, links (when any changed) and a first-person checklist, then submit.
- * Controlled by the host; progress lives in submitWalkthroughStore so View Page can close and reopen it.
+ * Compatibility opener; the walkthrough itself is hosted in the Manager's review column.
  */
-export function SubmitConfirmDialog({ open, onOpenChange, fallback = false }: { open: boolean; onOpenChange: (open: boolean) => void; fallback?: boolean }) {
-  const id = useId();
-  const s = useWalk();
-  useEffect(() => walk.mount(id, fallback), [id, fallback]);
-  useEffect(() => { if (open) walk.open(id); }, [open, id]);
-  const shown = s.open && s.host === id;
-  const close = () => { walk.close(); onOpenChange(false); };
-  const { phone } = useManagerLayout();
-  if (!shown) return null;
-  const body = <Walkthrough onClose={close} phone={phone} />;
-  return phone ? (
-    <Sheet open onOpenChange={(o) => { if (!o) close(); }}>
-      <SheetContent side="bottom" data-submit-confirm className="flex h-[100dvh] max-h-[100dvh] flex-col gap-0 overflow-hidden p-0">{body}</SheetContent>
-    </Sheet>
-  ) : (
-    <Dialog open onOpenChange={(o) => { if (!o) close(); }}>
-      <DialogContent data-submit-confirm className="flex max-h-[90vh] max-w-xl flex-col gap-0 overflow-hidden p-0">{body}</DialogContent>
-    </Dialog>
-  );
+export function SubmitConfirmDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void; fallback?: boolean }) {
+  const { setReviewOpen } = useDesignChat();
+  const requested = useRef(false);
+  useEffect(() => {
+    if (!open) { requested.current = false; return; }
+    if (requested.current) return;
+    requested.current = true;
+    walk.open("panel"); setReviewOpen?.(true); onOpenChange(false);
+  }, [open, setReviewOpen, onOpenChange]);
+  return null;
 }
 
-function Walkthrough({ onClose, phone }: { onClose: () => void; phone: boolean }) {
+export function SubmitWalkthroughPanel({ onKeepEditing, onCheckPhone, children }: { onKeepEditing: () => void; onCheckPhone?: () => void; children?: ReactNode }) {
+  const { phone } = useManagerLayout();
+  return <section aria-label="Submit for Review Walkthrough" data-submit-confirm className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+    <Walkthrough onClose={onKeepEditing} phone={phone} onCheckPhone={onCheckPhone} allChanges={children} />
+  </section>;
+}
+
+function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: () => void; phone: boolean; onCheckPhone?: () => void; allChanges?: ReactNode }) {
   const { state, refreshSoon, selectPage, showPreviewPath } = useDesignChat() as ReturnType<typeof useDesignChat>;
   const s = useWalk();
   const data = useWalkthroughData(state, true);
@@ -93,46 +92,52 @@ function Walkthrough({ onClose, phone }: { onClose: () => void; phone: boolean }
   const first = useRef(true);
   useEffect(() => { if (first.current) { first.current = false; return; } headingRef.current?.focus(); }, [p.step]);
   const count = state?.publish?.open ?? 0;
-  useEffect(() => { if (state && count === 0 && data.rows.length === 0) walk.update((w) => ({ ...w, viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], step: "pages" })); }, [state, count, data.rows.length]);
+  const pagePrints = Object.fromEntries(data.rows.map(r => [r.key, r.fingerprint ?? changeFingerprint(r)]));
+  const linkPrints = linkFingerprints(data);
+  useEffect(() => {
+    if (data.pagesStatus && data.pagesStatus !== "ok") return;
+    if (state && count === 0 && data.rows.length === 0) { walk.reset(); return; }
+    walk.reconcile(pagePrints, data.links.status === "ok" ? linkPrints : undefined);
+  }, [count, changeFingerprint(pagePrints), changeFingerprint(linkPrints), data.pagesStatus, data.links.status]);
   const reviewOn = state?.review?.enabled !== false;
   const label = reviewOn ? "Submit for Review" : "Publish";
-  const Title = phone ? SheetTitle : DialogTitle;
-  const Desc = phone ? SheetDescription : DialogDescription;
+
   const idx = p.steps.indexOf(p.step);
   const setStep = (step: WalkStep) => walk.update((w) => ({ ...w, step }));
 
   const openPage = (path: string, checking: { key: string; kind: "page" | "link"; name: string }) => {
-    walk.update((w) => ({ ...w, open: false, checking, ...(checking.kind === "page" ? { viewed: add(w.viewed, checking.key) } : { linkOpened: add(w.linkOpened, checking.key) }) }));
-    onClose();
+    walk.update((w) => ({ ...w, open: !phone, checking, ...(checking.kind === "page" ? { viewed: add(w.viewed, checking.key) } : { linkOpened: add(w.linkOpened, checking.key) }) }));
+    if (phone) onCheckPhone?.();
     if (showPreviewPath) showPreviewPath(path); else selectPage?.({ name: checking.name, path });
     goToPreview();
   };
   const left = remaining(p.pagesLeft, p.steps.includes("links") ? p.linksLeft : 0, p.checksLeft);
   const undoGate = undoPendingGate(state);
   const pagesReady = !data.pagesStatus || data.pagesStatus === "ok";
-  const canSubmit = !left && !sending && !undoGate && pagesReady;
+  const canSubmit = !left && !sending && !undoGate && pagesReady && data.links.status !== "loading" && !!state && !state.busy && count > 0 && (state.publish?.ok !== false || state.publish?.willReview === true);
   const submit = async () => {
     if (!canSubmit) return;
     setSending(true);
     try { const res = await postToHelper("/publish"); if (res?.ok) walk.reset(); refreshSoon(); onClose(); }
     finally { setSending(false); }
   };
-  const nextDisabled = p.step === "pages" ? p.pagesLeft > 0 || !pagesReady : p.step === "links" ? p.linksLeft > 0 : true;
+  const nextDisabled = p.step === "pages" ? p.pagesLeft > 0 || !pagesReady || data.links.status === "loading" : p.step === "links" ? p.linksLeft > 0 : true;
   const changes = `${count} ${count === 1 ? "change" : "changes"}`;
 
   return (
     <>
-      <div className="shrink-0 space-y-1 border-b px-4 py-3 pr-12">
+      <div className="shrink-0 space-y-2 border-b px-3 py-3">
+        <Button type="button" variant="outline" className="h-11 w-full justify-start" onClick={() => { walk.keepEditing(); onClose(); }}><ArrowLeft className="h-4 w-4" aria-hidden />Keep Editing</Button>
         <p className="text-xs text-muted-foreground" aria-live="polite">Step {idx + 1} of {p.steps.length}</p>
-        <Title asChild><h2 ref={headingRef} tabIndex={-1} className="font-sans text-lg font-semibold outline-none">{STEP_TITLE[p.step]}</h2></Title>
-        <Desc className="text-sm text-muted-foreground">
-          {p.step === "pages" ? "Open each changed page and say whether it looks right."
-            : p.step === "links" ? "Open each link that was added or changed and make sure it goes to the right place."
+        <h2 ref={headingRef} tabIndex={-1} className="font-sans text-lg font-semibold outline-none">{STEP_TITLE[p.step]}</h2>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {p.step === "pages" ? "Open each changed page and approve it once it looks right."
+            : p.step === "links" ? "Open each link that was added or changed and approve it once it goes to the right place."
             : reviewOn ? "Your changes will be reviewed automatically, and anything it can't approve may go to a developer. Approved changes are put on the public site."
             : `This puts all ${changes} waiting in your draft on the public site right away. Visitors will see these changes as soon as publishing finishes.`}
-        </Desc>
+        </p>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3">
         {p.step === "pages" && (pagesReady ? <PagesStep rows={p.pageRows} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} /> : <p role="status" className="text-sm text-muted-foreground">{data.pagesStatus === "failed" ? "Changed pages couldn't be listed right now. Close and reopen to try again." : "Listing the changed pages…"}</p>)}
         {p.step === "links" && <LinksStep data={data} onOpenInternal={(l, g) => openPage(linkPath(l, g).path, { key: l.key, kind: "link", name: l.label ?? l.href })} />}
         {p.step === "checklist" && (
@@ -146,20 +151,20 @@ function Walkthrough({ onClose, phone }: { onClose: () => void; phone: boolean }
                     onCheckedChange={(v) => walk.update((w) => ({ ...w, checks: toggle(w.checks, item.id, v === true) }))} />
                   <label htmlFor={`check-${item.id}`} aria-live="polite" className={cn("text-sm", !lockedItem && "cursor-pointer")}>
                     {ticked ? item.done : item.todo}
-                    {lockedItem && !ticked && <span className="block text-xs text-muted-foreground">{item.id === "pages" ? "This ticks itself once every page is checked." : "This ticks itself once every link is checked."}</span>}
+                    {lockedItem && !ticked && <span className="block text-xs text-muted-foreground">{item.id === "pages" ? "This ticks itself once every page is approved." : "This ticks itself once every link is approved."}</span>}
                   </label>
                 </li>
               );
             })}
           </ul>
         )}
+        {allChanges && <details className="mt-4 border-t pt-3"><summary className="cursor-pointer min-h-9 text-sm font-medium">All Changes</summary>{allChanges}</details>}
       </div>
-      <div className="shrink-0 space-y-2 border-t px-4 py-3">
+      <div className="shrink-0 space-y-2 border-t px-3 py-3">
         {p.step === "pages" && pagesReady && <p className="text-sm" aria-live="polite">{pageCount(p.pageRows, s.ticked)}</p>}
-        {p.step === "links" && data.links.status === "ok" && <p className="text-sm" aria-live="polite">{p.allLinks.length - p.linksLeft} of {p.allLinks.length} links checked</p>}
+        {p.step === "links" && data.links.status === "ok" && <p className="text-sm" aria-live="polite">{p.allLinks.length - p.linksLeft} of {p.allLinks.length} links approved</p>}
         {p.step === "checklist" && left && <p className="text-sm text-muted-foreground" aria-live="polite">{left.charAt(0).toUpperCase() + left.slice(1)}.</p>}
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button type="button" variant="ghost" className="h-11 mr-auto" disabled={sending} onClick={onClose}>Cancel</Button>
           {idx > 0 && <Button type="button" variant="outline" className="h-11" disabled={sending} onClick={() => setStep(p.steps[idx - 1])}><ArrowLeft className="h-4 w-4" aria-hidden />Back</Button>}
           {p.step !== "checklist"
             ? <Button type="button" className="h-11" disabled={nextDisabled} onClick={() => setStep(p.steps[idx + 1])}>Next<ArrowRight className="h-4 w-4" aria-hidden /></Button>
@@ -170,45 +175,45 @@ function Walkthrough({ onClose, phone }: { onClose: () => void; phone: boolean }
   );
 }
 
-function Tick({ id, label, checked, disabled, hint, onChange }: { id: string; label: string; checked: boolean; disabled: boolean; hint?: string; onChange: (v: boolean) => void }) {
-  return (
-    <div>
-      <div className="flex min-h-11 items-center gap-2">
-        <Checkbox id={id} className="h-5 w-5" checked={checked} disabled={disabled} aria-describedby={hint ? `${id}-hint` : undefined} onCheckedChange={(v) => onChange(v === true)} />
-        <label htmlFor={id} className={cn("text-sm", disabled ? "text-muted-foreground" : "cursor-pointer")}>{label}</label>
-      </div>
-      {hint && <p id={`${id}-hint`} className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  );
+function Approval({ approved, enabled, onClick, hint }: { approved: boolean; enabled: boolean; onClick: () => void; hint: string }) {
+  return <div className="space-y-1">
+    <Button type="button" variant={approved ? "secondary" : "outline"} className="h-9 w-full sm:w-auto" disabled={!enabled} aria-pressed={approved} title={approved ? "Undo Approval" : undefined} onClick={onClick}>
+      {approved ? <Check className="h-4 w-4" aria-hidden /> : null}{approved ? "Approved" : "Approve"}{approved && <Undo2 className="h-3 w-3" aria-hidden />}
+    </Button>
+    {!enabled && <p className="text-xs text-muted-foreground">{hint}</p>}
+  </div>;
+}
+
+function NewTab({ href, onOpen }: { href: string; onOpen: () => void }) {
+  return <TooltipProvider><Tooltip><TooltipTrigger asChild>
+    <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open in New Tab" onClick={onOpen}><ExternalLink className="h-4 w-4" aria-hidden /></a></Button>
+  </TooltipTrigger><TooltipContent>Open in New Tab</TooltipContent></Tooltip></TooltipProvider>;
 }
 
 function PagesStep({ rows, onView }: { rows: ChangedRow[]; onView: (r: ChangedRow) => void }) {
   const s = useWalk();
-  const tick = (key: string, v: boolean) => walk.update((w) => ({ ...w, ticked: toggle(w.ticked, key, v) }));
-  const opened = (key: string) => walk.update((w) => ({ ...w, viewed: add(w.viewed, key) }));
   if (!rows.length) return <p className="text-sm text-muted-foreground">No pages were changed in this draft.</p>;
-  return (
-    <ul className="space-y-2" aria-label="Changed Pages">
-      {rows.map((r) => {
-        const viewed = s.viewed.includes(r.key);
-        const other = r.key === OTHER_KEY;
-        const tab = r.page ? draftPageUrl(r.page.path) : null;
-        return (
-          <li key={r.key} data-walk-row={r.key} className="space-y-1 rounded-md border p-3">
-            <p className="break-words font-medium">{rowName(r)} {r.page && <span className="break-all font-mono text-xs font-normal text-muted-foreground">{r.page.path}</span>}</p>
-            {r.guess && <p className="text-xs text-muted-foreground">(best guess)</p>}
-            {r.how && <p className="break-words text-xs text-muted-foreground">{r.how}</p>}
-            {r.by && <p className="break-words text-xs text-muted-foreground">by {r.by}</p>}
-            <div className="flex flex-wrap items-start gap-x-4 gap-y-1 pt-1">
-              <Button type="button" className="h-11" onClick={() => onView(r)}><Eye className="h-4 w-4" aria-hidden />{other ? "Open Site" : "Open Page"}</Button>
-              {tab && <Button asChild variant="outline" className="h-11"><a href={tab} target="_blank" rel="noopener noreferrer" onClick={() => opened(r.key)}><ExternalLink className="h-4 w-4" aria-hidden />Open in New Tab</a></Button>}
-              <Tick id={`tick-${r.key}`} label="Yup, looks good" checked={s.ticked.includes(r.key)} disabled={!viewed} hint={viewed ? undefined : "Open the page first"} onChange={(v) => tick(r.key, v)} />
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
+  return <ul className="space-y-3" aria-label="Changed Pages">{rows.map(r => {
+    const approved = s.ticked.includes(r.key), viewed = s.viewed.includes(r.key);
+    const tab = r.page ? draftPageUrl(r.page.path) : null;
+    return <li key={r.key} data-walk-row={r.key} className={cn("min-w-0 rounded-md border p-3 space-y-2", s.checking?.key === r.key && "border-primary bg-primary/5")}>
+      <div className="flex items-start gap-1">
+        <Button type="button" variant="link" className="h-auto min-h-9 min-w-0 flex-1 justify-start whitespace-normal p-0 text-left text-sm font-semibold text-foreground" onClick={() => onView(r)}>{rowName(r)}</Button>
+        <Badge variant="secondary" className="mt-2 shrink-0 text-[10px]" aria-live="polite">{approved ? "Approved" : "Not Reviewed"}</Badge>
+        {tab && <NewTab href={tab} onOpen={() => walk.update(w => ({ ...w, viewed: add(w.viewed, r.key), checking: { key: r.key, kind: "page", name: rowName(r) } }))} />}
+      </div>
+      <p className="break-all font-mono text-xs text-muted-foreground">{rowPath(r)}</p>
+      {r.guess && <p className="text-xs text-muted-foreground">(best guess)</p>}
+      {(r.how || r.by) && <p className="break-words text-xs text-muted-foreground">{[r.how, r.by ? `by ${r.by}` : ""].filter(Boolean).join(" · ")}</p>}
+      {s.changed.includes(r.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
+      {r.key === OTHER_KEY && <Button type="button" variant="link" className="h-9 p-0" onClick={() => onView(r)}>Open Site</Button>}
+      <Approval approved={approved} enabled={viewed} hint="Open the page first" onClick={() => walk.approve(r.key, r.fingerprint ?? changeFingerprint(r))} />
+    </li>;
+  })}</ul>;
+}
+
+export function linkFingerprints(data: WalkthroughData): Record<string, string> {
+  return Object.fromEntries(data.links.status === "ok" ? data.links.groups.flatMap(g => g.links.map(l => [l.key, changeFingerprint({ page: g.page?.path, links: g.links.map(x => ({ key: x.key, href: x.href, requestIds: x.requestIds })).sort((a,b) => a.key.localeCompare(b.key)), pageChange: data.rows.find(r => r.page?.path === g.page?.path)?.fingerprint })])) : []);
 }
 
 const CHIP_TONE: Record<Chip["tone"], string> = { ok: "border-border bg-secondary text-secondary-foreground", warn: "border-border bg-muted text-foreground", bad: "border-destructive bg-destructive text-destructive-foreground" };
@@ -235,11 +240,12 @@ function LinksStep({ data, onOpenInternal }: { data: WalkthroughData; onOpenInte
               const part = l.kind === "anchor" ? linkPath(l, g).part : null;
               const enabled = manual || s.linkOpened.includes(l.key);
               return (
-                <li key={l.key} data-walk-link={l.key} className="space-y-1 rounded-md border p-3">
-                  <p className="break-words text-sm font-medium">{l.label ?? address}</p>
+                <li key={l.key} data-walk-link={l.key} className={cn("space-y-2 min-w-0 rounded-md border p-3", s.checking?.key === l.key && "border-primary bg-primary/5")}>
+                  <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{l.label ?? address}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{s.linkTicked.includes(l.key) ? "Approved" : "Not Reviewed"}</Badge>{!manual && <NewTab href={l.kind === "external" ? l.href : draftPageUrl(l.href.startsWith("#") ? (g.page?.path ?? "/") + l.href : l.href) ?? l.href} onOpen={() => opened(l.key)} />}</div>
+                  {s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <p className="break-all font-mono text-xs text-muted-foreground">{address}</p>
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
-                  {chip?.tone === "bad" && <p className="text-xs text-destructive">Fix this before submitting, or tick it if it is meant.</p>}
+                  {chip?.tone === "bad" && <p className="text-xs text-destructive">Fix this before submitting, or approve it if it is intended.</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}
                   <div className="flex flex-wrap items-start gap-x-4 gap-y-1 pt-1">
                     {l.kind === "external" ? (
@@ -251,8 +257,7 @@ function LinksStep({ data, onOpenInternal }: { data: WalkthroughData; onOpenInte
                     ) : (
                       <Button type="button" variant="outline" className="h-11" onClick={() => onOpenInternal(l, g)}><Eye className="h-4 w-4" aria-hidden />Open Link</Button>
                     )}
-                    <Tick id={`link-${l.key}`} label="Yup, this link works" checked={s.linkTicked.includes(l.key)} disabled={!enabled} hint={enabled ? undefined : "Open the link first"}
-                      onChange={(v) => walk.update((w) => ({ ...w, linkTicked: toggle(w.linkTicked, l.key, v) }))} />
+                    <Approval approved={s.linkTicked.includes(l.key)} enabled={enabled} hint="Open the link first" onClick={() => walk.approve(l.key, linkFingerprints(data)[l.key], true)} />
                   </div>
                 </li>
               );
@@ -272,22 +277,30 @@ export function WalkthroughCheckBar(): ReactNode {
 }
 
 function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"]> }) {
-  const { state } = useDesignChat();
+  const { state, setReviewOpen } = useDesignChat();
+  const s = useWalk();
   const data = useWalkthroughData(state, true);
   const pageRows = data.rows;
   const at = pageRows.findIndex((r) => r.key === c.key);
   const back: WalkStep = c.kind === "page" ? "pages" : "links";
+  const ready = (!data.pagesStatus || data.pagesStatus === "ok") && data.links.status !== "loading";
+  const fingerprints = Object.fromEntries(data.rows.map(r => [r.key, r.fingerprint ?? changeFingerprint(r)]));
+  const links = linkFingerprints(data);
+  useEffect(() => { if (ready) walk.reconcile(fingerprints, data.links.status === "ok" ? links : undefined); }, [ready, changeFingerprint(fingerprints), changeFingerprint(links)]);
+  const enabled = ready && (c.kind === "page" ? s.viewed : s.linkOpened).includes(c.key);
   const yup = () => {
-    walk.update((w) => c.kind === "page" ? { ...w, ticked: add(w.ticked, c.key) } : { ...w, linkTicked: add(w.linkTicked, c.key) });
-    walk.reopen(back);
+    const fingerprint = c.kind === "page" ? data.rows.find(r => r.key === c.key)?.fingerprint ?? changeFingerprint(data.rows.find(r => r.key === c.key)) : linkFingerprints(data)[c.key];
+    if (!(c.kind === "page" ? walk.get().ticked : walk.get().linkTicked).includes(c.key)) walk.approve(c.key, fingerprint, c.kind === "link");
+    walk.reopen(back); setReviewOpen?.(true);
   };
   return (
     <div role="region" aria-label="Checking Changes" className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-secondary px-3 py-1.5 text-sm text-secondary-foreground">
+      <Button type="button" variant="outline" className="h-11" onClick={() => { walk.keepEditing(); setReviewOpen?.(false); }}>Keep Editing</Button>
       <p className="w-full min-w-0 break-words sm:w-auto sm:flex-1">
         Checking {c.name}{c.kind === "page" && at >= 0 ? ` · ${at + 1} of ${pageRows.length} pages` : ""}
       </p>
-      <Button type="button" variant="outline" className="h-11 flex-1 sm:flex-none" onClick={() => walk.reopen(back)}><ArrowLeft className="h-4 w-4" aria-hidden />Back to Review</Button>
-      <Button type="button" className="h-11 flex-1 sm:flex-none" onClick={yup}><Check className="h-4 w-4" aria-hidden />{c.kind === "page" ? "Yup, looks good" : "Yup, this link works"}</Button>
+      <Button type="button" variant="outline" className="h-11 flex-1 sm:flex-none" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft className="h-4 w-4" aria-hidden />Back to Review</Button>
+      <Button type="button" className="h-11 flex-1 sm:flex-none" disabled={!enabled} onClick={yup}><Check className="h-4 w-4" aria-hidden />Approve</Button>
     </div>
   );
 }

@@ -1,10 +1,10 @@
 import type { DraftRequest } from "./helper";
 
 /** Pure rules for the Submit for Review walkthrough (pages, links, checklist). */
-export type PageRef = { name: string; path: string };
-export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number; guess?: boolean; by?: string };
+export type PageRef = { name: string; path: string; sharedChange?: unknown };
+export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number; guess?: boolean; by?: string; fingerprint?: string };
 export const OTHER_KEY = "other";
-export type ManagerPage = { name: string; path: string; build_status: string; handEdits?: number };
+export type ManagerPage = { name: string; path: string; build_status: string; handEdits?: number; inlineEdits?: unknown; content?: unknown };
 /** Count of stored hand edits, ignoring orig: baseline metadata; undefined when unknown. */
 export function countHandEdits(inline: unknown): number | undefined {
   if (!inline || typeof inline !== "object" || Array.isArray(inline)) return inline == null ? 0 : undefined;
@@ -23,6 +23,12 @@ export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirm
 export type ReviewLink = { key: string; href: string; kind: LinkKind; label: string | null; requestIds: string[]; status: RelayLinkStatus };
 export type LinkGroup = { page: PageRef | null; label: string; links: ReviewLink[] };
 export type ReviewLinks = { groups: LinkGroup[]; unread: number; partial: boolean; truncated: boolean };
+/** Stable value fingerprint; object key order is not a change. */
+export function changeFingerprint(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(changeFingerprint).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${changeFingerprint(v)}`).join(",")}}`;
+  return JSON.stringify(value) ?? "null";
+}
 export type Chip = { text: string; tone: "ok" | "warn" | "bad"; detail?: string };
 
 const validPage = (p: unknown): p is PageRef => !!p && typeof p === "object" && typeof (p as PageRef).name === "string"

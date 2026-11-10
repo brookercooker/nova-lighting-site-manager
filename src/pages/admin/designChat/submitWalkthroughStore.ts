@@ -7,8 +7,9 @@ export type WalkState = {
   open: boolean; host: string | null; step: WalkStep;
   viewed: string[]; ticked: string[]; linkOpened: string[]; linkTicked: string[]; checks: string[];
   checking: Checking;
+  approvals: Record<string, string>; linkApprovals: Record<string, string>; changed: string[];
 };
-const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null });
+const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [] });
 let state = initial();
 const listeners = new Set<() => void>();
 const hosts = new Map<string, boolean>();
@@ -21,6 +22,25 @@ export const walk = {
   mount(id: string, fallback: boolean) { hosts.set(id, fallback); return () => { hosts.delete(id); }; },
   open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null })); },
   close() { walk.update((s) => ({ ...s, open: false })); },
+  keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages" })); },
+  approve(key: string, fingerprint: string, link = false) {
+    walk.update(s => {
+      const field = link ? "linkApprovals" : "approvals";
+      const ticks = link ? "linkTicked" : "ticked";
+      const approved = s[ticks].includes(key);
+      const map = { ...s[field] }; if (approved) delete map[key]; else map[key] = fingerprint;
+      return { ...s, [field]: map, [ticks]: toggle(s[ticks], key, !approved), changed: s.changed.filter(k => k !== key) };
+    });
+  },
+  reconcile(pages: Record<string, string>, links?: Record<string, string>) {
+    const invalid = Object.entries(state.approvals).filter(([k,v]) => pages[k] !== v).map(([k]) => k);
+    const badLinks = links ? Object.entries(state.linkApprovals).filter(([k,v]) => links[k] !== v).map(([k]) => k) : [];
+    if (!invalid.length && !badLinks.length) return;
+    walk.update(s => ({ ...s, ticked: s.ticked.filter(k => !invalid.includes(k)), viewed: s.viewed.filter(k => !invalid.includes(k)),
+      linkTicked: s.linkTicked.filter(k => !badLinks.includes(k)), linkOpened: s.linkOpened.filter(k => !badLinks.includes(k)),
+      approvals: Object.fromEntries(Object.entries(s.approvals).filter(([k]) => !invalid.includes(k))), linkApprovals: Object.fromEntries(Object.entries(s.linkApprovals).filter(([k]) => !badLinks.includes(k))),
+      changed: [...new Set([...s.changed, ...invalid, ...badLinks])] }));
+  },
   /** Reopen from the preview bar in the dialog that opened it, or a host that is still mounted. */
   reopen(step?: WalkStep) {
     const host = state.host && hosts.has(state.host) ? state.host

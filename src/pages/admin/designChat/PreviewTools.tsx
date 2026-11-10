@@ -34,7 +34,7 @@ import { SubmitConfirmDialog } from "./SubmitWalkthrough";
 
 /**
  * Submit for review (or Publish, when review is off): changes can be waiting whichever tab is open.
- * It opens the SubmitConfirmDialog walkthrough first; pass onRequestSubmit when the dialog is hosted elsewhere.
+ * The compatibility opener enters the left-column walkthrough; phone overflow can still host that opener outside its menu.
  */
 export function SubmitButton({ compact = false, showProgress = true, onRequestSubmit }: { compact?: boolean; showProgress?: boolean; onRequestSubmit?: () => void }) {
   const { state, waitProgress } = useDesignChat();
