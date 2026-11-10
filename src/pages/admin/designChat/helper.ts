@@ -66,6 +66,7 @@ export type UploadRules = { maxFiles: number; maxBytes: number; accept: string }
 
 export type DraftRequest = {
   id: string; request: string; source?: string; at?: number | string; sha?: string; builtAt?: number;
+  by?: string | null;
   files?: string[]; siteFiles?: string[]; platformFiles?: string[]; setupFiles?: string[];
   notes?: string;
   /** Rejected requests carry { reason, at, by }; older relays omit it. Validate unknown relay data before displaying it. */

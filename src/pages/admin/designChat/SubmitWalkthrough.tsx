@@ -109,14 +109,15 @@ function Walkthrough({ onClose, phone }: { onClose: () => void; phone: boolean }
   };
   const left = remaining(p.pagesLeft, p.steps.includes("links") ? p.linksLeft : 0, p.checksLeft);
   const undoGate = undoPendingGate(state);
-  const canSubmit = !left && !sending && !undoGate;
+  const pagesReady = !data.pagesStatus || data.pagesStatus === "ok";
+  const canSubmit = !left && !sending && !undoGate && pagesReady;
   const submit = async () => {
     if (!canSubmit) return;
     setSending(true);
     try { const res = await postToHelper("/publish"); if (res?.ok) walk.reset(); refreshSoon(); onClose(); }
     finally { setSending(false); }
   };
-  const nextDisabled = p.step === "pages" ? p.pagesLeft > 0 : p.step === "links" ? p.linksLeft > 0 : true;
+  const nextDisabled = p.step === "pages" ? p.pagesLeft > 0 || !pagesReady : p.step === "links" ? p.linksLeft > 0 : true;
   const changes = `${count} ${count === 1 ? "change" : "changes"}`;
 
   return (
@@ -132,7 +133,7 @@ function Walkthrough({ onClose, phone }: { onClose: () => void; phone: boolean }
         </Desc>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-3">
-        {p.step === "pages" && <PagesStep rows={p.pageRows} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} />}
+        {p.step === "pages" && (pagesReady ? <PagesStep rows={p.pageRows} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} /> : <p role="status" className="text-sm text-muted-foreground">{data.pagesStatus === "failed" ? "Changed pages couldn't be listed right now. Close and reopen to try again." : "Listing the changed pages…"}</p>)}
         {p.step === "links" && <LinksStep data={data} onOpenInternal={(l, g) => openPage(linkPath(l, g).path, { key: l.key, kind: "link", name: l.label ?? l.href })} />}
         {p.step === "checklist" && (
           <ul className="space-y-3" aria-label="Submission Checklist">
@@ -154,7 +155,7 @@ function Walkthrough({ onClose, phone }: { onClose: () => void; phone: boolean }
         )}
       </div>
       <div className="shrink-0 space-y-2 border-t px-4 py-3">
-        {p.step === "pages" && <p className="text-sm" aria-live="polite">{pageCount(p.pageRows, s.ticked)}</p>}
+        {p.step === "pages" && pagesReady && <p className="text-sm" aria-live="polite">{pageCount(p.pageRows, s.ticked)}</p>}
         {p.step === "links" && data.links.status === "ok" && <p className="text-sm" aria-live="polite">{p.allLinks.length - p.linksLeft} of {p.allLinks.length} links checked</p>}
         {p.step === "checklist" && left && <p className="text-sm text-muted-foreground" aria-live="polite">{left.charAt(0).toUpperCase() + left.slice(1)}.</p>}
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -195,7 +196,9 @@ function PagesStep({ rows, onView }: { rows: ChangedRow[]; onView: (r: ChangedRo
         return (
           <li key={r.key} data-walk-row={r.key} className="space-y-1 rounded-md border p-3">
             <p className="break-words font-medium">{rowName(r)} {r.page && <span className="break-all font-mono text-xs font-normal text-muted-foreground">{r.page.path}</span>}</p>
+            {r.guess && <p className="text-xs text-muted-foreground">(best guess)</p>}
             {r.how && <p className="break-words text-xs text-muted-foreground">{r.how}</p>}
+            {r.by && <p className="break-words text-xs text-muted-foreground">by {r.by}</p>}
             <div className="flex flex-wrap items-start gap-x-4 gap-y-1 pt-1">
               <Button type="button" className="h-11" onClick={() => onView(r)}><Eye className="h-4 w-4" aria-hidden />{other ? "Open Site" : "Open Page"}</Button>
               {tab && <Button asChild variant="outline" className="h-11"><a href={tab} target="_blank" rel="noopener noreferrer" onClick={() => opened(r.key)}><ExternalLink className="h-4 w-4" aria-hidden />Open in New Tab</a></Button>}

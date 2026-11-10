@@ -30,6 +30,13 @@ const tickManual = () => {
 };
 
 describe("Submit for Review walkthrough", () => {
+  it.each(["loading", "failed"])("does not allow advancing or submitting while the authoritative page list is %s", (status) => {
+    m.data.rows = [];
+    m.data.pagesStatus = status;
+    render(<SubmitConfirmDialog open onOpenChange={vi.fn()} />);
+    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(m.post).not.toHaveBeenCalled();
+  });
   it.each(["draft", "publish"])("blocks %s undo-pending even when review is otherwise allowed", (location) => {
     m.state.publish.willReview = true;
     if (location === "draft") m.state.draft = { gate: { status: "undo-pending", reason: "Wait for the rejected change to be undone." } };

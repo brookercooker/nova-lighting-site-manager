@@ -11,6 +11,7 @@ import { FindingsList } from "../DeveloperFindings";
 import { postToHelper, type DraftRequest } from "./helper";
 import { developerFindings, reviewBlocked } from "./logic";
 import { atMs, CHANGE_LABEL, changeKind, changeTitle, newestFirst, relativeTime, waitingLine } from "./reviewChanges";
+import { requestAuthor } from "./submitWalkthrough";
 
 /** Changes waiting for review, from the relay's draft.requests only (never the chat history). Replaces the chat in the left column. */
 export default function ReviewChangesView(_props: { onShowPreview: () => void }) {
@@ -98,6 +99,7 @@ function ChangeCard({ r, now }: { r: DraftRequest; now: number }) {
         )}
       </div>
       {title && <h3 className="font-sans text-sm font-semibold">{title}</h3>}
+      {!decision && requestAuthor(r.by) && <p className="break-words text-xs text-muted-foreground">by {requestAuthor(r.by)}</p>}
       {showBody && <p className={`whitespace-pre-wrap break-words ${more ? "" : "line-clamp-3"}`}>{body}</p>}
       {showBody && long && <button type="button" className="text-xs underline underline-offset-2" aria-expanded={more} onClick={() => setMore(!more)}>{more ? "Show Less" : "Show More"}</button>}
       {details.length > 0 && <ChangeDetails details={details} />}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedPages, checklistItems, internalLinkChip, parseReviewLinks, remaining } from "../submitWalkthrough";
+import { changedPages, checklistItems, internalLinkChip, parseReviewLinks, parseReviewPages, relayChangedPages, remaining } from "../submitWalkthrough";
 
 const req = (o: any) => ({ id: o.id ?? "r", request: o.request ?? "Make it nicer", ...o });
 describe("changed pages", () => {
@@ -16,13 +16,37 @@ describe("changed pages", () => {
     expect(rows[1].how).toBe("Changed by the builder · Changed through the shared object Footer");
     expect(JSON.stringify(rows)).not.toContain("Make it nicer");
   });
-  it("collapses page-less changes into one row, skipping platform and zero-site-file requests", () => {
+  it("collapses page-less changes into one row, skipping platform but retaining zero-site-file requests", () => {
     const rows = changedPages([
       req({ id: "a", request: "Hours" }), req({ id: "b", request: "Fonts", siteFiles: 3 }),
       req({ id: "c", source: "platform" }), req({ id: "d", siteFiles: 0 }),
     ] as any, {});
-    expect(rows).toEqual([{ key: "other", page: null, how: "2 changes that aren't tied to one page", count: 2 }]);
+    expect(rows).toEqual([{ key: "other", page: null, how: "3 changes that aren't tied to one page", count: 3 }]);
     expect(changedPages([req({ source: "platform" })], {})).toEqual([]);
+  });
+});
+describe("authoritative review pages", () => {
+  const data = { ok: true, rows: [{ name: "Experiment", path: "/draft/experiment", paths: ["/draft/experiment"], how: ["chat", "content", "developer"], requestIds: ["1"], guess: true }], components: [{ name: "MailchimpForm", requestIds: ["1"] }], objects: [{ name: "Footer", requestIds: ["1"] }], sitewide: { files: ["src/index.css"], requestIds: ["1"] } };
+  it("uses actual files instead of viewed Contact even with zero siteFiles, resolves Manager names and source labels", () => {
+    const parsed = parseReviewPages(data);
+    expect(parsed).not.toBeNull();
+    if (!parsed) throw new Error("invalid fixture");
+    const rows = relayChangedPages(parsed, [{ name: "Experiment Page", path: "/draft/experiment", build_status: "draft" }], {}, [req({ id: "1", page: { name: "Contact", path: "/contact" }, siteFiles: 0, by: "brooklyn@example.com" })]);
+    expect(rows.map((r) => r.key)).toEqual(["page:/draft/experiment", "other"]);
+    expect(rows[0]).toMatchObject({ page: { name: "Experiment Page", path: "/draft/experiment" }, how: "Changed by the builder · Edited by hand · Changed by a developer", guess: true, by: "brooklyn" });
+  });
+  it("maps components and objects to extra unique pages, without adding a shared label to direct rows", () => {
+    const parsed = parseReviewPages(data);
+    if (!parsed) throw new Error("invalid fixture");
+    const rows = relayChangedPages(parsed, [], { MailchimpForm: [{ name: "Contact", path: "/contact" }, { name: "Experiment", path: "/draft/experiment" }], Footer: [{ name: "Contact", path: "/contact" }, { name: "Home", path: "/home" }] }, []);
+    expect(rows.map((r) => r.key)).toEqual(["page:/draft/experiment", "page:/contact", "page:/", "other"]);
+    expect(rows[1].how).toBe("Shared piece: MailchimpForm · Shared piece: Footer");
+    expect(rows[0].how).not.toContain("Shared piece");
+  });
+  it("an empty answered endpoint never adds platform, rejected or viewed-page requests", () => {
+    const parsed = parseReviewPages({ ...data, rows: [], components: [], objects: [], sitewide: { files: [] } });
+    if (!parsed) throw new Error("invalid fixture");
+    expect(relayChangedPages(parsed, [], {}, [req({ source: "platform", page: { name: "Contact", path: "/contact" } }), req({ decision: { reason: "No" }, page: { name: "Gone", path: "/gone" } })])).toEqual([]);
   });
 });
 describe("internal link status", () => {

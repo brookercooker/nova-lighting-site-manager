@@ -2,7 +2,7 @@ import type { DraftRequest } from "./helper";
 
 /** Pure rules for the Submit for Review walkthrough (pages, links, checklist). */
 export type PageRef = { name: string; path: string };
-export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number };
+export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number; guess?: boolean; by?: string };
 export const OTHER_KEY = "other";
 export type ManagerPage = { name: string; path: string; build_status: string };
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
@@ -25,10 +25,45 @@ function sourceLabel(r: DraftRequest): string | null {
   const src = r.source ?? "chat";
   return SOURCE_LABEL[src] ?? (src === "platform" || src === "setup" ? null : "Changed by the builder");
 }
-const noSiteFiles = (r: DraftRequest) => {
-  const f = (r as { siteFiles?: unknown }).siteFiles;
-  return f === 0 || (Array.isArray(f) && f.length === 0);
+export type ReviewPages = {
+  rows: (PageRef & { how: string[]; requestIds: string[]; guess?: boolean })[];
+  components: { name: string; requestIds: string[] }[];
+  objects: { name: string; requestIds: string[] }[];
+  sitewide: { files: string[]; requestIds: string[] };
 };
+const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
+export const requestAuthor = (by: unknown): string | null => typeof by === "string" && by.includes("@") && by.split("@")[0].trim() ? by.split("@")[0].trim() : null;
+
+export function parseReviewPages(d: any): ReviewPages | null {
+  if (!d || d.ok !== true || !Array.isArray(d.rows) || !Array.isArray(d.components) || !Array.isArray(d.objects) || !d.sitewide || !Array.isArray(d.sitewide.files)) return null;
+  const pieces = (v: any[]) => v.filter((p) => p && typeof p.name === "string").map((p) => ({ name: p.name, requestIds: strings(p.requestIds) }));
+  return {
+    rows: d.rows.filter(validPage).map((p: any) => ({ name: p.name, path: p.path, how: strings(p.how), requestIds: strings(p.requestIds), guess: p.guess === true })),
+    components: pieces(d.components), objects: pieces(d.objects), sitewide: { files: strings(d.sitewide.files), requestIds: strings(d.sitewide.requestIds) },
+  };
+}
+
+/** An answered endpoint is authoritative: never add the viewed page or infer rows from requests. */
+export function relayChangedPages(data: ReviewPages, pages: ManagerPage[], usages: Record<string, PageRef[]>, requests: DraftRequest[] | undefined): ChangedRow[] {
+  const rows = new Map<string, ChangedRow>();
+  const by = (ids: string[]) => [...new Set((requests ?? []).filter((r) => ids.includes(r.id) && !isRejected(r)).map((r) => requestAuthor(r.by)).filter(Boolean))].join(", ");
+  const pageName = (p: PageRef): PageRef => ({ path: normPath(p.path), name: pages.find((m) => normPath(m.path) === normPath(p.path))?.name ?? p.name });
+  for (const p of data.rows) {
+    const key = "page:" + normPath(p.path);
+    const prior = rows.get(key);
+    const labels = p.how.map((h) => SOURCE_LABEL[h]).filter(Boolean);
+    rows.set(key, { key, page: pageName(p), how: [...new Set([...(prior?.how ? prior.how.split(" · ") : []), ...labels])].join(" · "), guess: prior?.guess || p.guess, by: [...new Set([prior?.by, by(p.requestIds)].filter(Boolean))].join(", ") });
+  }
+  const direct = new Set(rows.keys());
+  for (const piece of [...data.components, ...data.objects]) for (const p of usages[piece.name] ?? []) {
+    const key = "page:" + normPath(p.path);
+    if (direct.has(key)) continue;
+    const prior = rows.get(key);
+    rows.set(key, { key, page: pageName(p), how: [...new Set([...(prior?.how ? prior.how.split(" · ") : []), `Shared piece: ${piece.name}`])].join(" · "), by: by(piece.requestIds) || prior?.by });
+  }
+  if (data.sitewide.files.length) rows.set(OTHER_KEY, { key: OTHER_KEY, page: null, how: "", by: by(data.sitewide.requestIds) });
+  return [...rows.values()];
+}
 
 /** One row per changed page (never per change), de-duplicated by path; shared objects add the pages that use them.
  * Rejected and undo requests are skipped; page-less site changes collapse into one "Other site changes" row. */
@@ -42,14 +77,14 @@ export function changedPages(requests: DraftRequest[] | undefined, objectPages: 
     rows.set(key, row);
   };
   for (const r of requests ?? []) {
-    if (!r || r.isUndo === true || isRejected(r)) continue;
+    if (!r || r.isUndo === true || isRejected(r) || r.source === "platform" || r.source === "setup") continue;
     const direct = (Array.isArray(r.pages) ? r.pages : r.page ? [r.page] : []).filter(validPage);
     let any = false;
     for (const p of direct) { any = true; note(p, sourceLabel(r)); }
     for (const name of (Array.isArray(r.objects) ? r.objects : []).filter((o) => typeof o === "string" && o.trim())) {
       for (const p of (objectPages[name] ?? []).filter(validPage)) { any = true; note(p, `Changed through the shared object ${name}`); }
     }
-    if (!any && r.source !== "platform" && !noSiteFiles(r)) other++;
+    if (!any) other++;
   }
   const list: ChangedRow[] = [...rows].map(([key, r]) => ({ key, page: r.page, how: r.how.join(" · ") }));
   if (other) list.push({ key: OTHER_KEY, page: null, how: `${other} ${other === 1 ? "change that isn't" : "changes that aren't"} tied to one page`, count: other });
