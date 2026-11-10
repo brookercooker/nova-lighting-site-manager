@@ -3,7 +3,7 @@ import { matchesLabelFilter } from "./labelPath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Play, Loader2, Trash2, Plus, AlertTriangle } from "lucide-react";
+import { Search, Play, Loader2, Trash2, Plus, AlertTriangle, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 import { supabase } from "@/prototype/client";
@@ -16,6 +16,7 @@ import CreatePageDialog from "./CreatePageDialog";
 import TagsPanel from "./TagsPanel";
 import LabelPicker from "./LabelPicker";
 import SelectionBar from "./SelectionBar";
+import { groupLinkRows, isScannablePath, linkMatches, type LinkItem } from "./linkAuditGroups";
 
 interface DbPage { id: string; slug_id: string; name: string; path: string; archived_at?: string | null; }
 
@@ -84,7 +85,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
     if (metaData?.last_ran_at) setLastRun(new Date(metaData.last_ran_at));
     if (metaData?.scanned_pages) setScannedPages(metaData.scanned_pages);
     const saved = (metaData?.summary as { problems?: unknown } | null)?.problems;
-    setProblems(Array.isArray(saved) ? saved.filter((p): p is PageProblem => !!p && typeof p.path === "string" && typeof p.problem === "string") : []);
+    setProblems(Array.isArray(saved) ? saved.filter((p): p is PageProblem => !!p && typeof p.path === "string" && typeof p.problem === "string" && isScannablePath(p.path)) : []);
   };
   useEffect(() => { loadPersisted(); }, []);
 
@@ -103,7 +104,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
       try { manifestPaths = (await loadSiteManifest()).pages.map((p) => p.path); }
       catch { toast.warning("Couldn't read the public site's page list. Scanning the pages saved here only."); }
       const routes = [...new Set([...manifestPaths, ...livePages.map((p) => p.path)].filter(Boolean).map(pageKey))]
-        .filter((path) => !isInternalPath(path)).sort();
+        .filter((path) => !isInternalPath(path) && isScannablePath(path)).sort();
 
       // Pass 1: every page. Pass 2: destinations those pages link to that weren't in the list (to tell missing from Coming Soon).
       const pages = await scanPublicPages(base, routes, (done) => setProgress(Math.round((done / routes.length) * 80)));
@@ -117,7 +118,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
         return;
       }
       const classified = buildAuditRows(pages, results, siteOrigin).map((r) => ({ ...r, key: r.identity_key }));
-      const foundProblems = pageProblems(pages);
+      const foundProblems = pageProblems(pages).filter((p) => isScannablePath(p.path));
 
       // ---- DIFF against persisted rows ----
       const { data: existing } = await (supabase as any)
@@ -263,10 +264,28 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
       if (typeFilter !== "all" && r.type !== typeFilter) return false;
       if (locationFilter !== "all" && r.location !== locationFilter) return false;
       if (tagFilters.length && !tagFilters.every((t) => matchesLabelFilter(r.tags, t))) return false;
-      if (term && ![r.destination, r.link_text, r.location, ...(r.source_pages || [])].some((v) => (v || "").toLowerCase().includes(term))) return false;
+      if (term && !linkMatches(r, term)) return false;
       return true;
     });
   }, [rows, q, statusFilter, typeFilter, locationFilter, tagFilters]);
+
+  const items = useMemo(() => groupLinkRows(filtered), [filtered]);
+  type GroupItem = Extract<LinkItem<Row>, { kind: "group" }>;
+  const groupChecked = (g: GroupItem) => g.rows.every((r) => selectedIds.includes(r.id));
+  const toggleGroup = (g: GroupItem, v: boolean) => {
+    const ids = new Set(g.rows.map((r) => r.id));
+    setSelectedIds((cur) => v ? [...new Set([...cur, ...ids])] : cur.filter((id) => !ids.has(id)));
+  };
+  const groupTags = (g: GroupItem) => g.rows[0].tags.filter((t) => g.rows.every((r) => r.tags.includes(t)));
+  const setGroupTags = (g: GroupItem, next: string[]) => {
+    const common = groupTags(g);
+    const added = next.filter((t) => !common.includes(t)), removed = common.filter((t) => !next.includes(t));
+    g.rows.forEach((r) => {
+      const tags = [...r.tags.filter((t) => !removed.includes(t)), ...added.filter((t) => !r.tags.includes(t))];
+      if (tags.length !== r.tags.length || tags.some((t, i) => t !== r.tags[i])) void updateTags(r, tags);
+    });
+  };
+  const dismissGroup = (g: GroupItem) => g.rows.forEach((r) => void dismissRow(r));
 
   const tagUsageCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -364,6 +383,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
             <SummaryCard label="Same Page" value={counts.SelfRef} />
             {counts.Unchecked > 0 && <SummaryCard label="Couldn't Check" value={counts.Unchecked} tone="warn" />}
           </div>
+          <p className="-mt-2 text-xs text-muted-foreground">Counts are individual links; repeated links are grouped below.</p>
 
           <div className="flex items-center gap-2 flex-wrap">
             <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[240px] max-w-md">
@@ -397,7 +417,31 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
 
 
           <ul className="space-y-2 sm:hidden" aria-label="Link Results">
-            {filtered.map((r) => {
+            {items.map((item) => {
+              if (item.kind === "group") {
+                const g = item, checked = groupChecked(g), deleted = !!g.rows[0].is_deleted;
+                return (
+                  <li key={g.key} data-testid="link-group-card" className={`min-w-0 rounded-lg border p-3 text-xs ${deleted ? "bg-destructive/5" : checked ? "bg-primary/5" : ""}`}>
+                    <div className="flex items-start gap-2">
+                      <label className="-m-2 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center">
+                        <Checkbox checked={checked} aria-label="Select Links in Group" onCheckedChange={(v) => toggleGroup(g, !!v)} />
+                      </label>
+                      <div className="min-w-0 flex-1 font-medium break-words">{g.rows.length} links to <span className="font-mono text-[11px]">{g.destination}</span></div>
+                      <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-medium ${STATUS_COLORS[g.status] ?? STATUS_COLORS.Unchecked}`}>{statusLabel(g.status as LinkStatus)}</span>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
+                      <dt className="text-muted-foreground">Found On</dt>
+                      <dd className="min-w-0 break-all font-mono text-[11px]">{g.location || "—"}</dd>
+                    </dl>
+                    <GroupLinkTexts rows={g.rows} />
+                    <div className="mt-2 flex items-center justify-between gap-2 [&_button]:min-h-9">
+                      <LabelPicker scope="links" value={groupTags(g)} onChange={(next) => setGroupTags(g, next)} triggerLabel="Add" compact />
+                      {deleted && <Button type="button" variant="outline" size="sm" className="h-9 gap-1" onClick={() => dismissGroup(g)}><Trash2 className="w-3.5 h-3.5" />Dismiss All</Button>}
+                    </div>
+                  </li>
+                );
+              }
+              const r = item.row;
               const checked = selectedIds.includes(r.id);
               return (
                 <li key={r.id} data-testid="link-card" className={`min-w-0 rounded-lg border p-3 text-xs ${r.is_deleted ? "bg-destructive/5" : checked ? "bg-primary/5" : ""}`}>
@@ -468,7 +512,30 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => {
+                {items.map((item) => {
+                  if (item.kind === "group") {
+                    const g = item, checked = groupChecked(g), deleted = !!g.rows[0].is_deleted;
+                    return (
+                      <tr key={g.key} data-testid="link-group-row" className={`border-t align-top ${deleted ? "bg-destructive/5" : checked ? "bg-primary/5" : ""}`}>
+                        <td className="px-2 py-2"><Checkbox checked={checked} onCheckedChange={(v) => toggleGroup(g, !!v)} aria-label="Select Links in Group" /></td>
+                        <td className="px-3 py-2 text-xs">
+                          <div className="font-medium">{g.rows.length} links</div>
+                          <GroupLinkTexts rows={g.rows} />
+                        </td>
+                        <td className="px-3 py-2 text-xs"><span className="block truncate font-mono text-[11px]" title={g.location}>{g.location || "—"}</span></td>
+                        <td className="px-3 py-2 font-mono text-xs break-all">{g.destination}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-block px-2 py-0.5 rounded border text-[10px] font-medium ${STATUS_COLORS[g.status] ?? STATUS_COLORS.Unchecked}`}>{statusLabel(g.status as LinkStatus)}</span>
+                        </td>
+                        <td className="px-3 py-2 text-xs">{[...new Set(g.rows.map((r) => r.type))].join(", ")}</td>
+                        <td className="px-3 py-2"><LabelPicker scope="links" value={groupTags(g)} onChange={(next) => setGroupTags(g, next)} triggerLabel="Add" compact /></td>
+                        <td className="px-2 py-2">
+                          {deleted && <button onClick={() => dismissGroup(g)} className="p-1 rounded hover:bg-destructive hover:text-destructive-foreground" title="Dismiss Deleted Rows"><Trash2 className="w-3.5 h-3.5" /></button>}
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const r = item.row;
                   const checked = selectedIds.includes(r.id);
                   return (
                   <tr key={r.id} className={`border-t align-top ${r.is_deleted ? "bg-destructive/5" : checked ? "bg-primary/5" : ""}`}>
@@ -591,5 +658,21 @@ function SummaryCard({ label, value, tone }: { label: string; value: number; ton
       <div className="text-2xl font-medium">{value}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>
+  );
+}
+
+/** The individual link texts inside a grouped row, closed by default. */
+function GroupLinkTexts({ rows }: { rows: { id: string; link_text: string }[] }) {
+  const shown = rows.slice(0, 20);
+  return (
+    <details className="group mt-1 min-w-0">
+      <summary className="inline-flex min-h-9 sm:min-h-0 cursor-pointer list-none items-center gap-1 rounded-sm text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRight aria-hidden className="h-3.5 w-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" />Show Links
+      </summary>
+      <ul className="mt-1 space-y-0.5 break-words text-xs">
+        {shown.map((r) => <li key={r.id}>{r.link_text || <span className="italic opacity-60">No wording</span>}</li>)}
+        {rows.length > shown.length && <li className="text-muted-foreground">and {rows.length - shown.length} more</li>}
+      </ul>
+    </details>
   );
 }
