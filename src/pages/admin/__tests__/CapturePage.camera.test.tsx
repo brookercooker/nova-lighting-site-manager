@@ -59,6 +59,16 @@ async function readyCamera() {
 }
 
 describe("Capture live camera", () => {
+  it("owns the Capture title while mounted and releases title ownership on leaving", () => {
+    const view = render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><CapturePage /></MemoryRouter></QueryClientProvider>);
+    expect(document.title).toBe("Capture · Site Manager");
+    document.title = "Nova Lighting — Designer Lighting for the Home";
+    expect(document.title).toBe("Capture · Site Manager");
+    view.unmount();
+    document.title = "Images · Site Manager";
+    expect(document.title).toBe("Images · Site Manager");
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
   it("opens Take Photo directly and stages repeated native-resolution JPEG shots without uploading", async () => {
     const picker = vi.spyOn(HTMLInputElement.prototype, "click");
     openPage();

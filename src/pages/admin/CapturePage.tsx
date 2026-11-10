@@ -18,6 +18,7 @@ import { leafOf } from "./labelPath";
 import { usePages } from "./useAdminData";
 import { uploadImageFile, uploadVideoFile, attachPageUsages, uniqueName } from "./captureUpload";
 import { formatBytes } from "@/lib/imageOptimize";
+import { useManagerTitle } from "./useManagerTitle";
 
 type Kind = "image" | "video";
 type Status = "staged" | "uploading" | "done" | "error";
@@ -151,6 +152,7 @@ function PageAssign({
 }
 
 export default function CapturePage() {
+  useManagerTitle("Capture");
   const qc = useQueryClient();
   const [items, setItems] = useState<Staged[]>([]);
   const [imageTags, setImageTags] = useState<string[]>([]);

@@ -8,6 +8,7 @@ export function useVoice(getText: () => string, setText: (t: string) => void, sa
   const rec = useRef<any>(null);
   const base = useRef("");
   const on = useRef(false);
+  const errorShown = useRef(false);
 
   useEffect(() => () => { try { rec.current?.abort?.(); } catch { /* already stopped */ } }, []);
 
@@ -24,9 +25,10 @@ export function useVoice(getText: () => string, setText: (t: string) => void, sa
         for (let i = 0; i < ev.results.length; i++) said += ev.results[i][0].transcript;
         setText(base.current + said);
       };
-      r.onend = () => { on.current = false; setListening(false); say(""); };
+      r.onend = () => { on.current = false; setListening(false); if (!errorShown.current) say(""); };
       r.onerror = (ev: any) => {
         const why = ev.error;
+        if (why !== "no-speech" && why !== "aborted") errorShown.current = true;
         if (why === "not-allowed" || why === "service-not-allowed") say("The microphone is blocked. Allow it in your browser's address bar, then try again.", true);
         else if (why === "audio-capture") say("No microphone was found.", true);
         else if (why === "network") say("Voice input needs an internet connection.", true);
@@ -36,6 +38,7 @@ export function useVoice(getText: () => string, setText: (t: string) => void, sa
     }
     const current = getText();
     base.current = current && !/\s$/.test(current) ? `${current} ` : current;
+    errorShown.current = false;
     try { rec.current.start(); } catch { return; }
     on.current = true;
     setListening(true);
