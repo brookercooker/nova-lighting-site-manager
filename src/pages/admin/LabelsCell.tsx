@@ -36,7 +36,7 @@ export default function LabelsCell({ scope, value, onChange, itemName }: Props) 
         onClick={() => setOpen(true)}
         title={hasAny ? `${count} label${count === 1 ? "" : "s"} — click to edit` : "No labels — click to add"}
         aria-label={hasAny ? `${count} labels, edit` : "Add Labels"}
-        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-medium transition-colors ${
+        className={`inline-flex min-h-9 sm:min-h-0 items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-medium transition-colors ${
           hasAny ? "" : "border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted"
         }`}
         style={hasAny && tint ? { background: tint.bg, borderColor: tint.border, color: tint.text } : undefined}

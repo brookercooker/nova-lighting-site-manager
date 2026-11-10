@@ -469,7 +469,7 @@ export default function ObjectsTab() {
                         <button
                           type="button"
                           onClick={() => gotoObject(obj)}
-                          className="text-sm truncate block text-left hover:underline"
+                          className="text-sm truncate block min-h-9 sm:min-h-0 text-left hover:underline"
                         >
                           {obj.name}
                         </button>

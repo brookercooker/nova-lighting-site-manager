@@ -182,12 +182,12 @@ export default function FilterBar({
           <label htmlFor={archivedId} className="text-xs flex min-h-11 items-center gap-1.5 font-medium text-muted-foreground">
             <input
               id={archivedId}
-              aria-label="Show Archived"
+              aria-label="Archived Only"
               type="checkbox"
               checked={!!showArchived}
               onChange={(e) => onShowArchivedChange(e.target.checked)}
             />
-            Show Archived
+            Archived Only
             {archivedCount && archivedCount > 0 ? (
               <span className="text-muted-foreground">({archivedCount})</span>
             ) : null}

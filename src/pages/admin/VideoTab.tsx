@@ -812,7 +812,7 @@ export default function VideoTab() {
 
           <label className="text-xs flex items-center gap-1.5 font-medium text-muted-foreground">
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-            Show Archived {archivedCount > 0 && <span className="text-muted-foreground">({archivedCount})</span>}
+            Archived Only {archivedCount > 0 && <span className="text-muted-foreground">({archivedCount})</span>}
           </label>
           <Button
             size="sm" variant="outline" className="gap-1.5 ml-auto"

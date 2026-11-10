@@ -79,3 +79,15 @@ describe("link listing", () => {
     expect(parseReviewLinks({ ok: true, groups: [{ label: "A", page: null, links: [{ href: "https://x", kind: "external", status: { state: "broken" } }] }], unread: 2 })?.unread).toBe(2);
   });
 });
+
+import { dropRevertedHandEdits as dropRH, countHandEdits as countHE } from "../submitWalkthrough";
+describe("reverted hand edits", () => {
+  const row = (path: string, how: string) => ({ key: "page:" + path, page: { name: path, path }, how });
+  it("hides a hand-edit-only page with no remaining edits", () => {
+    const pages = [{ name: "Contact", path: "/contact", build_status: "ready", handEdits: countHE({}) }, { name: "Team", path: "/team", build_status: "ready", handEdits: countHE({ "orig:a": "x", a: "y" }) }];
+    const out = dropRH([row("/contact", "Edited by hand"), row("/team", "Edited by hand"), row("/contact2", "Edited by hand")], pages);
+    expect(out.map((r) => r.page!.path)).toEqual(["/team", "/contact2"]);
+    expect(dropRH([row("/contact", "Edited by hand · Changed by the builder")], pages)).toHaveLength(1);
+    expect(countHE({ "orig:a": "x" })).toBe(0);
+  });
+});

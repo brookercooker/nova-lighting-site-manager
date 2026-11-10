@@ -4,7 +4,20 @@ import type { DraftRequest } from "./helper";
 export type PageRef = { name: string; path: string };
 export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number; guess?: boolean; by?: string };
 export const OTHER_KEY = "other";
-export type ManagerPage = { name: string; path: string; build_status: string };
+export type ManagerPage = { name: string; path: string; build_status: string; handEdits?: number };
+/** Count of stored hand edits, ignoring orig: baseline metadata; undefined when unknown. */
+export function countHandEdits(inline: unknown): number | undefined {
+  if (!inline || typeof inline !== "object" || Array.isArray(inline)) return inline == null ? 0 : undefined;
+  return Object.keys(inline).filter((k) => !k.startsWith("orig:")).length;
+}
+/** Drop pages whose only change is a hand edit that has since been fully undone (stored hand edits now empty). */
+export function dropRevertedHandEdits(rows: ChangedRow[], pages: ManagerPage[]): ChangedRow[] {
+  return rows.filter((r) => {
+    if (!r.page || r.how !== "Edited by hand") return true;
+    const m = pages.find((p) => normPath(p.path) === normPath(r.page!.path));
+    return !(m && m.handEdits === 0);
+  });
+}
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
 export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirmed"; detail?: string } | null;
 export type ReviewLink = { key: string; href: string; kind: LinkKind; label: string | null; requestIds: string[]; status: RelayLinkStatus };
