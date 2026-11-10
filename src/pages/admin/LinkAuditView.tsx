@@ -309,7 +309,9 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
     setTagFilters((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]);
 
   return (
-    <div className="flex gap-4 items-start">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+      {/* Phones: labels stack above the results in a bounded, scrollable panel; desktop keeps the sidebar unchanged. */}
+      <div className="w-full sm:contents max-sm:[&>aside]:static max-sm:[&>aside]:w-full max-sm:[&>aside]:max-h-56 max-sm:[&>aside]:overflow-y-auto max-sm:[&_button]:min-h-9 max-sm:[&_input]:h-9">
       <TagsPanel
         scope="links"
         usageCounts={tagUsageCounts}
@@ -323,11 +325,12 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
         filteredCount={filtered.filter((r) => !r.is_deleted).length}
         onSelectAllFiltered={() => setSelectedIds(filtered.filter((r) => !r.is_deleted).map((r) => r.id))}
       />
+      </div>
 
 
       <div className="flex-1 min-w-0 space-y-4">
       <div className="flex items-center gap-3 flex-wrap p-4 border rounded-lg bg-muted/20">
-        <Button onClick={runScan} disabled={scanning} className="gap-2">
+        <Button onClick={runScan} disabled={scanning} className="gap-2 max-sm:w-full max-sm:whitespace-normal max-sm:h-auto max-sm:min-h-10">
           {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
           {scanning ? `Scanning… ${progress}%` : "Scan the Public Site"}
         </Button>
@@ -363,12 +366,12 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[240px] max-w-md">
+            <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[240px] max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter results…" className="pl-9" />
             </div>
             <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}
-              className="text-sm border rounded px-2 h-9 bg-background max-w-[200px]">
+              className="text-sm border rounded px-2 h-9 bg-background max-w-full sm:max-w-[200px]">
               <option value="all">All Locations</option>
               {locations.map((l) => <option key={l} value={l}>{l}</option>)}
             </select>
@@ -393,7 +396,39 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
           />
 
 
-          <div className="border rounded-lg overflow-hidden">
+          <ul className="space-y-2 sm:hidden" aria-label="Link Results">
+            {filtered.map((r) => {
+              const checked = selectedIds.includes(r.id);
+              return (
+                <li key={r.id} data-testid="link-card" className={`min-w-0 rounded-lg border p-3 text-xs ${r.is_deleted ? "bg-destructive/5" : checked ? "bg-primary/5" : ""}`}>
+                  <div className="flex items-start gap-2">
+                    <label className="-m-2 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center">
+                      <Checkbox checked={checked} aria-label="Select Row"
+                        onCheckedChange={(v) => setSelectedIds((cur) => v ? [...cur, r.id] : cur.filter((id) => id !== r.id))} />
+                    </label>
+                    <div className="min-w-0 flex-1 font-medium break-words">{r.link_text || <span className="italic opacity-60">No wording</span>}</div>
+                    <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-medium ${STATUS_COLORS[r.status] ?? STATUS_COLORS.Unchecked}`}>{statusLabel(r.status)}</span>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
+                    <dt className="text-muted-foreground">Found On</dt>
+                    <dd className="min-w-0 break-all">{r.is_chrome ? <>{r.location === LEGACY_HEADER ? HEADER_LOCATION : r.location} <span className="text-muted-foreground">(every page)</span></> : r.location ? <span className="font-mono text-[11px]">{r.location}</span> : "—"}</dd>
+                    <dt className="text-muted-foreground">Destination</dt>
+                    <dd className="min-w-0 break-all font-mono text-[11px]">{r.destination || "—"}</dd>
+                    <dt className="text-muted-foreground">Type</dt>
+                    <dd>{r.type}</dd>
+                  </dl>
+                  <div className="mt-2 flex items-center justify-between gap-2 [&_button]:min-h-9">
+                    <LabelPicker scope="links" value={r.tags} onChange={(next) => updateTags(r, next)} triggerLabel="Add" compact />
+                    {r.is_deleted && <Button type="button" variant="outline" size="sm" className="h-9 gap-1" onClick={() => dismissRow(r)}><Trash2 className="w-3.5 h-3.5" />Dismiss</Button>}
+                    {r.is_deleted && <span className="text-[10px] text-destructive">Deleted</span>}
+                  </div>
+                </li>
+              );
+            })}
+            {filtered.length === 0 && <li className="py-8 text-center text-muted-foreground">No matching links.</li>}
+          </ul>
+
+          <div className="hidden sm:block border rounded-lg overflow-hidden">
             <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: "36px" }} />
