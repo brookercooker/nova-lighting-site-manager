@@ -1,3 +1,4 @@
+import { WalkthroughCheckBar } from "./SubmitWalkthrough";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Minimize2 } from "lucide-react";
@@ -57,6 +58,7 @@ export default function PreviewPanel() {
   return (
     <section ref={sectionRef} className="flex h-full min-h-0 flex-col" aria-label="Preview">
       <ContentSyncNote previewFailed={previewFailed} />
+      <WalkthroughCheckBar />
       <div className={cn("shrink-0 overflow-hidden bg-background transition-[height] duration-200 motion-reduce:transition-none", ribbon && !ribbon.fading ? phone ? "h-2" : "h-12" : "h-0")}>
         <StageRibbon progress={ribbon} thin={phone} className={phone ? "pb-0.5" : "px-2 pt-1 pb-3"} />
       </div>

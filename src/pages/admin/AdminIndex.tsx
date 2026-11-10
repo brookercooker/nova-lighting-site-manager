@@ -565,11 +565,13 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
   const count = state?.publish?.open ?? 0;
   // The confirmation lives outside the menu, so it stays open after the menu closes.
   const [submitConfirm, setSubmitConfirm] = useState(false);
+  // Closed when the walkthrough opens, so it never covers the preview's checking bar after View Page.
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <>
-    <SubmitConfirmDialog open={submitConfirm} onOpenChange={setSubmitConfirm} />
+    <SubmitConfirmDialog open={submitConfirm} onOpenChange={setSubmitConfirm} fallback />
     <ModePageChooser {...modeSwitch.chooserProps} />
-    <MoreMenu>
+    <MoreMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <MoreMenuTrigger asChild>
         <Button ref={triggerRef} type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label={`More Options${count ? `: ${count} Waiting` : ""}`} title="More Options"><MoreHorizontal className="h-4 w-4" /></Button>
       </MoreMenuTrigger>
@@ -596,7 +598,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
         <MoreMenuSeparator /><MoreMenuLabel>Tools</MoreMenuLabel>
         <MoreMenuItem onClick={() => navigate("/manage/pages")}><FileText className="mr-2 h-4 w-4" />Pages</MoreMenuItem>
         <HeaderActions menuItems onExpand={onReview} />
-        {!editing && <div className="px-2 py-1"><SubmitButton onRequestSubmit={() => setSubmitConfirm(true)} /></div>}
+        {!editing && <div className="px-2 py-1"><SubmitButton onRequestSubmit={() => { setMenuOpen(false); setSubmitConfirm(true); }} /></div>}
         <MoreMenuSeparator />
         {showView && (
           <>

@@ -74,6 +74,10 @@ export type DraftRequest = {
   isUndo?: boolean;
   /** Sent by redeployed relays only. */
   page?: { name: string; path: string } | null;
+  /** Every page the request changed (newer relays); fall back to `page` when absent. */
+  pages?: { name: string; path: string }[];
+  /** Names of shared objects the request touched; every page using them changed too. */
+  objects?: string[];
   /** Plain lines saying what changed; empty for older requests. */
   details?: string[];
 };
