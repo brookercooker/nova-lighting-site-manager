@@ -109,16 +109,16 @@ export function pageNames(rows: ChangedRow[]): string {
 }
 
 export type ChecklistItem = { id: string; todo: string; done: string; locked: boolean };
-/** First person: "I will…" until ticked, then "I …ed" for the same action. At most five items. */
+/** Imperative instruction until ticked, then first-person past tense for the same action. At most five items. */
 export function checklistItems(rows: ChangedRow[], hasLinks: boolean, pagesDone: boolean, linksDone: boolean): ChecklistItem[] {
   const names = pageNames(rows);
   const list = names ? ` (${names})` : "";
   const items: ChecklistItem[] = rows.some((r) => r.page)
-    ? [{ id: "pages", todo: `I will check the changed pages${list}.`, done: `I checked the changed pages${list}.`, locked: pagesDone }] : [];
-  if (hasLinks) items.push({ id: "links", todo: "I will check the links I changed.", done: "I checked the links I changed.", locked: linksDone });
+    ? [{ id: "pages", todo: `Check the changed pages${list}.`, done: `I checked the changed pages${list}.`, locked: pagesDone }] : [];
+  if (hasLinks) items.push({ id: "links", todo: "Check the links that changed.", done: "I checked the links that changed.", locked: linksDone });
   items.push(
-    { id: "phone", todo: "I will look at the page on a phone as well.", done: "I looked at the page on a phone as well.", locked: false },
-    { id: "unintended", todo: "I will make sure nothing I didn't mean to change was changed.", done: "I made sure nothing I didn't mean to change was changed.", locked: false },
+    { id: "phone", todo: "Check how it looks on a phone.", done: "I checked how it looks on a phone.", locked: false },
+    { id: "unintended", todo: "Make sure nothing was changed by accident.", done: "I made sure nothing was changed by accident.", locked: false },
   );
   return items;
 }

@@ -37,7 +37,7 @@ describe("checklist", () => {
   it("names at most three pages and hides the links item without links", () => {
     const rows = ["A", "B", "C", "D", "E"].map((n) => ({ key: n, page: { name: n, path: "/" + n }, how: "" }));
     const items = checklistItems(rows, false, true, true);
-    expect(items[0].todo).toBe("I will check the changed pages (A, B, C and 2 more).");
+    expect(items[0].todo).toBe("Check the changed pages (A, B, C and 2 more).");
     expect(items[0].done).toBe("I checked the changed pages (A, B, C and 2 more).");
     expect(items.some((i) => i.id === "links")).toBe(false);
     expect(items.length).toBeLessThanOrEqual(5);

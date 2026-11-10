@@ -25,7 +25,7 @@ const viewAndTick = (name = "About") => {
   fireEvent.click(within(screen.getByText(name).closest("li")!).getByRole("checkbox", { name: "Yup, looks good" }));
 };
 const tickManual = () => {
-  for (const t of ["I will look at the page on a phone as well.", "I will make sure nothing I didn't mean to change was changed."])
+  for (const t of ["Check how it looks on a phone.", "Make sure nothing was changed by accident."])
     fireEvent.click(within(dialog()).getByRole("checkbox", { name: t }));
 };
 
@@ -89,7 +89,7 @@ describe("Submit for Review walkthrough", () => {
     expect(submit).toBeDisabled();
     expect(dialog()).toHaveTextContent("2 checklist items left to tick");
     expect(within(dialog()).getByRole("checkbox", { name: "I checked the changed pages (About)." })).toBeChecked();
-    expect(within(dialog()).getByRole("checkbox", { name: "I checked the links I changed." })).toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "I checked the links that changed." })).toBeChecked();
     tickManual();
     fireEvent.click(submit); fireEvent.click(submit);
     await vi.waitFor(() => expect(m.refresh).toHaveBeenCalledTimes(1));
@@ -100,9 +100,9 @@ describe("Submit for Review walkthrough", () => {
     m.data.rows = [];
     render(<SubmitConfirmDialog open onOpenChange={vi.fn()} />);
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    const box = within(dialog()).getByRole("checkbox", { name: "I will look at the page on a phone as well." });
+    const box = within(dialog()).getByRole("checkbox", { name: "Check how it looks on a phone." });
     fireEvent.click(box);
-    expect(within(dialog()).getByRole("checkbox", { name: "I looked at the page on a phone as well." })).toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "I checked how it looks on a phone." })).toBeChecked();
     expect(dialog()).not.toHaveTextContent("wording and pictures");
   });
   it("skips the links step when no links changed and hides that checklist item", () => {
