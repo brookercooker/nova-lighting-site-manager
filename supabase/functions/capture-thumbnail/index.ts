@@ -1,4 +1,5 @@
 import { managerCors, managerOrigins, allowedCaptureOrigin, validCapturePath } from "../_shared/managerSecurity.ts";
+import { parseAllowedOrigins } from "../_shared/embed.ts";
 // Server-side page/object thumbnail capture via Cloudflare Browser Rendering.
 // Auth: admin JWT required. Emits a short-lived render_token so the headless
 // browser can bypass the app's client-side AdminGate.
@@ -45,7 +46,7 @@ Deno.serve(async (req) => {
       return json({ error: "bad_request" }, 400);
     }
 
-    const origin = allowedCaptureOrigin(body.origin, allowed);
+    const origin = allowedCaptureOrigin(body.origin, parseAllowedOrigins(Deno.env.get("CAPTURE_ORIGINS")));
     if (!origin) return json({ error: "origin_not_allowed" }, 400);
     if (!validCapturePath(body.path)) return json({ error: "bad_request" }, 400);
 

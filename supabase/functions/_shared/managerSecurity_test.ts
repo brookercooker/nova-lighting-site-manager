@@ -1,4 +1,5 @@
 import { allowedCaptureOrigin, managerCors, managerOrigins, validCapturePath } from "./managerSecurity.ts";
+import { parseAllowedOrigins } from "./embed.ts";
 
 const allowed = managerOrigins("https://preview.example.test", "https://manager.example.test");
 function assert(condition: boolean, message: string) { if (!condition) throw new Error(message); }
@@ -20,6 +21,13 @@ Deno.test("capture accepts only an exact allowed origin, never a token-bearing d
   for (const value of ["https://attacker.lovable.app", "https://manager.example.test@evil.test", "https://manager.example.test/path", "https://manager.example.test?x=1", "https://manager.example.test#fragment", "http://manager.example.test", null]) {
     assert(allowedCaptureOrigin(value, allowed) === null, "Unsafe capture origin accepted");
   }
+});
+
+Deno.test("CAPTURE_ORIGINS permits the public sandbox independently of Manager CORS", () => {
+  const captureOrigins = parseAllowedOrigins("https://novalightingsandbox.lovable.app");
+  assert(allowedCaptureOrigin("https://novalightingsandbox.lovable.app", captureOrigins) === "https://novalightingsandbox.lovable.app", "Listed sandbox must be accepted");
+  assert(allowedCaptureOrigin("https://unlisted.lovable.app", captureOrigins) === null, "Unlisted hosting origin must be rejected");
+  assert(allowedCaptureOrigin("https://manager.example.test", captureOrigins) === null, "CORS permission must not grant capture permission");
 });
 
 Deno.test("capture paths must start with slash and contain neither double slash nor protocol", () => {
