@@ -16,6 +16,9 @@ describe("ErrorText", () => {
     expect(visible).toContain("Try sending it again in a moment.");
     expect(visible).not.toContain("object_registry");
     expect(screen.getByText("Technical Details")).toBeTruthy();
+    const chevron = screen.getByTestId("details-chevron");
+    expect(details.querySelector("summary")!.contains(chevron)).toBe(true);
+    expect(chevron.getAttribute("class")).toContain("group-open:rotate-90");
   });
   it("leaves a plain message unchanged", () => {
     const { container } = render(<div><ErrorText text="The change couldn't finish. Try again." /></div>);
