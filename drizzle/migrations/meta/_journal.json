@@ -50,6 +50,13 @@
       "when": 1793894487202,
       "tag": "0006_qa_nov5_staff_and_public_access",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794351903807,
+      "tag": "0007_normalize_admin_email_and_revoke_anon_privileges",
+      "breakpoints": true
     }
   ]
 }

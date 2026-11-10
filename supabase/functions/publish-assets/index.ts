@@ -1,3 +1,4 @@
+import { managerCors, managerOrigins } from "../_shared/managerSecurity.ts";
 // Promote images between the PRIVATE staging bucket (images-web-gated) and the
 // PUBLIC delivery bucket (images-web).
 //
@@ -9,23 +10,19 @@
 // file's reachability follows the publish state.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 const BUCKETS = {
   image: { gated: "images-web-gated", public: "images-web" },
   video: { gated: "videos-web-gated", public: "videos-web" },
 } as const;
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
 
 Deno.serve(async (req) => {
+  const allowed = managerOrigins(Deno.env.get("EMBED_PARENT_ORIGINS"), Deno.env.get("SITE_MANAGER_ORIGINS"));
+  const corsHeaders = managerCors(req, allowed);
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const url = Deno.env.get("SUPABASE_URL")!;

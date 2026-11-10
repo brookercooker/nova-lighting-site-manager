@@ -1,5 +1,6 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { z } from 'npm:zod@3.23.8';
+import { validSalesTaxCertPath } from './validation.ts';
 
 // Showroom → inbox routing. "No preference" routes to Orem.
 const SHOWROOM_INBOXES: Record<string, string> = {
@@ -28,7 +29,7 @@ const BodySchema = z.object({
   address: z.string().trim().max(200).optional().default(''),
   taxId: z.string().trim().max(40).optional().default(''),
   taxExempt: z.boolean().optional().default(false),
-  salesTaxCertPath: z.string().trim().max(300).nullable().optional().default(null),
+  salesTaxCertPath: z.string().refine(validSalesTaxCertPath, "Invalid certificate path").nullable().optional().default(null),
 });
 
 const escapeHtml = (value: string) =>
@@ -210,7 +211,7 @@ Deno.serve(async (req) => {
       }),
     );
 
-    return json({ ok: true, routed_to: to, delivered, mailchimp });
+    return json({ ok: true, delivered, mailchimp });
 
   } catch (err) {
     console.error('contact-inquiry failed:', err);

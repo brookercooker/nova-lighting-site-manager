@@ -1,8 +1,8 @@
+import { managerCors, managerOrigins, allowedCaptureOrigin, validCapturePath } from "../_shared/managerSecurity.ts";
 // Server-side page/object thumbnail capture via Cloudflare Browser Rendering.
 // Auth: admin JWT required. Emits a short-lived render_token so the headless
 // browser can bypass the app's client-side AdminGate.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { captureConfigured } from "./config.ts";
 
 const CF_ACCOUNT_ID = Deno.env.get("CLOUDFLARE_ACCOUNT_ID")!;
@@ -21,6 +21,11 @@ interface Body {
 }
 
 Deno.serve(async (req) => {
+  const allowed = managerOrigins(Deno.env.get("EMBED_PARENT_ORIGINS"), Deno.env.get("SITE_MANAGER_ORIGINS"));
+  const corsHeaders = managerCors(req, allowed);
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
@@ -35,15 +40,19 @@ Deno.serve(async (req) => {
     const isAdmin = (roleRows ?? []).some((r: any) => r.role === "admin");
     if (!isAdmin) return json({ error: "forbidden" }, 403);
 
+    const body = (await req.json()) as Body;
+    if (!body?.kind || !body?.id || !body?.path || !body?.origin) {
+      return json({ error: "bad_request" }, 400);
+    }
+
+    const origin = allowedCaptureOrigin(body.origin, allowed);
+    if (!origin) return json({ error: "origin_not_allowed" }, 400);
+    if (!validCapturePath(body.path)) return json({ error: "bad_request" }, 400);
+
     // Optional thumbnails must not turn an unconfigured service into a runtime failure.
     // Reuse the client's existing expected-skip handling; keep previous thumbnails untouched.
     if (!captureConfigured(CF_ACCOUNT_ID, CF_TOKEN)) {
       return json({ ok: false, skipped: "route_not_resolved", error: "route_not_resolved", detail: "Thumbnail service is not configured — keeping the previous thumbnail." });
-    }
-
-    const body = (await req.json()) as Body;
-    if (!body?.kind || !body?.id || !body?.path || !body?.origin) {
-      return json({ error: "bad_request" }, 400);
     }
 
     let capturePath = body.path;
@@ -75,7 +84,7 @@ Deno.serve(async (req) => {
     });
 
     const sep = capturePath.includes("?") ? "&" : "?";
-    const targetUrl = `${body.origin}${capturePath}${sep}render_token=${token}`;
+    const targetUrl = `${origin}${capturePath}${sep}render_token=${token}`;
 
     // Capture at two sizes. `snap()` returns both the screenshot and the page
     // HTML so we can detect and refuse to store a 404 / error snapshot.
@@ -129,11 +138,6 @@ Deno.serve(async (req) => {
   }
 });
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
 
 
 /** Detects the app's NotFound render (or Lovable login gate) so we never

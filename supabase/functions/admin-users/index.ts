@@ -1,16 +1,17 @@
+import { managerCors, managerOrigins } from "../_shared/managerSecurity.ts";
 // Admin-only: list users and update roles.
 // Actions:
 //   GET / (default): list users with their roles
 //   POST { action: "set_admin", user_id, is_admin }: add/remove admin role
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
 
 Deno.serve(async (req) => {
+  const allowed = managerOrigins(Deno.env.get("EMBED_PARENT_ORIGINS"), Deno.env.get("SITE_MANAGER_ORIGINS"));
+  const corsHeaders = managerCors(req, allowed, "GET, POST, OPTIONS");
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
@@ -32,7 +33,7 @@ Deno.serve(async (req) => {
     if (userErr || !userData.user) return json({ error: "invalid user" }, 401);
 
     const callerId = userData.user.id;
-    const callerEmail = userData.user.email ?? "";
+    const callerEmail = (userData.user.email ?? "").trim().toLowerCase();
 
     // Verify caller is admin using the service client directly. This avoids
     // depending on the public has_role RPC, whose permissions are intentionally
@@ -50,7 +51,7 @@ Deno.serve(async (req) => {
       const { data: adminEmail, error: emailErr } = await admin
         .from("admin_emails")
         .select("email")
-        .ilike("email", callerEmail)
+        .eq("email", callerEmail)
         .maybeSingle();
       if (emailErr) return json({ error: emailErr.message }, 500);
 
@@ -124,7 +125,6 @@ Deno.serve(async (req) => {
         return json({ ok: true });
       }
 
-
       const { user_id, is_admin } = body ?? {};
       if (action !== "set_admin" || typeof user_id !== "string") {
         return json({ error: "bad request" }, 400);
@@ -153,7 +153,6 @@ Deno.serve(async (req) => {
     }
 
 
-
     // GET: list users
     const { data: list, error: listErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
     if (listErr) return json({ error: listErr.message }, 500);
@@ -178,16 +177,8 @@ Deno.serve(async (req) => {
       is_user: true,
     }));
 
-
     return json({ users });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
 });
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}

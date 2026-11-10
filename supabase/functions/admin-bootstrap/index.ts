@@ -1,3 +1,4 @@
+import { managerCors, managerOrigins } from "../_shared/managerSecurity.ts";
 // Bootstraps admin roles.
 // - If the signed-in user's email is listed in admin_emails, ensures they have
 //   the 'admin' role in user_roles.
@@ -6,12 +7,13 @@
 // - Always ensures the caller has at least the 'user' role.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
 
 Deno.serve(async (req) => {
+  const allowed = managerOrigins(Deno.env.get("EMBED_PARENT_ORIGINS"), Deno.env.get("SITE_MANAGER_ORIGINS"));
+  const corsHeaders = managerCors(req, allowed);
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
@@ -28,13 +30,13 @@ Deno.serve(async (req) => {
     if (userErr || !userData.user?.email) return json({ error: "invalid user" }, 401);
 
     const uid = userData.user.id;
-    const email = userData.user.email;
+    const email = userData.user.email.trim().toLowerCase();
 
     // Only emails listed in admin_emails get a role; everyone else gets nothing.
     const { data: match } = await admin
       .from("admin_emails")
       .select("email")
-      .ilike("email", email)
+      .eq("email", email)
       .maybeSingle();
 
     if (!match) return json({ ok: true, bootstrapped: false });
@@ -49,10 +51,3 @@ Deno.serve(async (req) => {
     return json({ error: String(e) }, 500);
   }
 });
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
