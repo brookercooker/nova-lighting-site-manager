@@ -87,7 +87,7 @@ export default function FilterBar({
                       onTimeRangeChange("custom");
                       setCustomOpen(true);
                     }}
-                    className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                    className={`inline-flex min-h-9 items-center text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
                       active
                         ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
                         : "bg-background hover:bg-muted border-border text-muted-foreground"
@@ -142,7 +142,7 @@ export default function FilterBar({
                 onDateToChange("");
                 onTimeRangeChange(c.v);
               }}
-              className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+              className={`inline-flex min-h-9 items-center text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
                 active
                   ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
                   : "bg-background hover:bg-muted border-border text-muted-foreground"
