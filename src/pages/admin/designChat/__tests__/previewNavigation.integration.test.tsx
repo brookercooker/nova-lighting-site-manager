@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { DesignChatProvider, useDesignChat, NAV_FALLBACK_MS } from "../DesignChatContext";
 
 vi.mock("@/lib/authGate", () => ({ hasManagerUser: async () => true }));
-vi.mock("../helper", () => ({ EMBED_FN: "https://service.example/embed", SUPABASE_KEY: "" }));
+vi.mock("../helper", async (importOriginal) => ({ ...(await importOriginal<typeof import("../helper")>()), EMBED_FN: "https://service.example/embed", SUPABASE_KEY: "" }));
 vi.mock("../useHelperState", () => ({ useHelperState: () => ({ state: null, offline: true, refreshSoon: vi.fn() }) }));
 vi.mock("../useWaitProgress", () => ({ useWaitProgress: () => null }));
 vi.mock("../usePreviewNotifications", () => ({ usePreviewNotifications: vi.fn() }));
