@@ -9,6 +9,8 @@ import WaitProgress from "../WaitProgress";
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   refresh: vi.fn(),
+  retryNow: vi.fn(),
+  offline: false,
   stopVoice: vi.fn(),
   insert: vi.fn(),
   select: vi.fn(),
@@ -32,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   wait: undefined as any,
 }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({
-  state: { busy: mocks.busy, job: mocks.job, history: mocks.history }, offline: false, refreshSoon: mocks.refresh,
+  state: { busy: mocks.busy, job: mocks.job, history: mocks.history }, offline: mocks.offline, refreshSoon: mocks.refresh, retryNow: mocks.retryNow,
   chatDraft: mocks.draft,
   requestRetry: mocks.retry, waitProgress: mocks.wait,
   workingPage: null, clearWorkingPage: vi.fn(), editing: mocks.editing,
@@ -70,12 +72,23 @@ beforeEach(() => {
   mocks.page = null;
   mocks.editing = false;
   mocks.phone = false;
+  mocks.offline = false;
   mocks.syncPending = false; mocks.syncFailed = false; mocks.busy = false; mocks.job = undefined; mocks.retry = undefined; mocks.wait = undefined;
   mocks.guard.mockResolvedValue(false);
   mocks.insert.mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "registered", name: "Race Test Page", path: "/race-test-page" }, error: null }) }) });
 });
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+it.each([false, true])("offers connection retry without sending when phone=%s", (phone) => {
+  mocks.phone = phone; mocks.offline = true;
+  render(<MemoryRouter><ChatPanel /></MemoryRouter>);
+  expect(screen.getByText("Can't reach the design service right now. It will keep trying.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+  expect(mocks.retryNow).toHaveBeenCalledOnce();
+  expect(mocks.refresh).not.toHaveBeenCalled();
+  expect(mocks.post).not.toHaveBeenCalled();
+});
 it("keeps a working retry on the failed history message after the indicator disappears", () => {
   const retry = vi.fn().mockResolvedValue({ ok: true });
   mocks.retry = { canRetry: () => true, isReviewFailure: () => false, retry, disabled: false, localErrors: [] };

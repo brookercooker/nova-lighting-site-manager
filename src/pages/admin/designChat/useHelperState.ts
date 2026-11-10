@@ -17,6 +17,7 @@ export function useHelperState(delayFor: (s: RelayState | null) => number) {
   const delayRef = useRef(delayFor);
   delayRef.current = delayFor;
   const requestRefresh = useRef<() => void>(() => {});
+  const immediateRefresh = useRef<() => void>(() => {});
 
   useEffect(() => {
     let alive = true;
@@ -26,6 +27,7 @@ export function useHelperState(delayFor: (s: RelayState | null) => number) {
     let lastStarted = -Infinity;
     let inFlight = false;
     let refreshOnFinish = false;
+    let retryOnFinish = false;
     const controller = new AbortController();
     const hidden = () => document.visibilityState === "hidden";
     const delay = () => helperPollDelay(delayRef.current(latest), hidden(), failures);
@@ -38,17 +40,21 @@ export function useHelperState(delayFor: (s: RelayState | null) => number) {
       clearTimeout(timer);
       inFlight = true;
       lastStarted = Date.now();
+      const requireSignIn = () => {
+        latest = { busy: false, job: null, previewVersion: 0, history: [{ role: "note", text: SIGN_IN_REQUIRED }] };
+        failures = 0;
+        setState(latest); setOffline(false);
+      };
       try {
         if (!await hasManagerUser()) {
-          if (alive) {
-            latest = { busy: false, job: null, previewVersion: 0, history: [{ role: "note", text: SIGN_IN_REQUIRED }] };
-            setState(latest); setOffline(false);
-          }
+          if (alive) requireSignIn();
           return;
         }
         const headers = await relayHeaders();
         if (!alive) return;
         const res = await fetch(`${RELAY}/api/state`, { cache: "no-store", headers, signal: controller.signal });
+        if (!alive) return;
+        if (res.status === 401 || res.status === 403) { requireSignIn(); return; }
         if (!res.ok) throw new Error("not ok");
         const s: RelayState = await res.json();
         if (!alive) return;
@@ -63,8 +69,9 @@ export function useHelperState(delayFor: (s: RelayState | null) => number) {
       } finally {
         inFlight = false;
         if (alive) {
-          schedule(refreshOnFinish && !hidden() ? 0 : delay());
+          schedule(retryOnFinish || refreshOnFinish && !hidden() ? 0 : delay());
           refreshOnFinish = false;
+          retryOnFinish = false;
         }
       }
     };
@@ -84,19 +91,30 @@ export function useHelperState(delayFor: (s: RelayState | null) => number) {
       // Sends cannot bypass hidden-tab throttling or an active failure back-off.
       schedule(hidden() || failures > 0 ? Math.max(0, lastStarted + delay() - Date.now()) : 150);
     };
+    const retry = () => {
+      if (!alive) return;
+      clearTimeout(timer);
+      if (inFlight) retryOnFinish = true;
+      else void refresh();
+    };
+    immediateRefresh.current = retry;
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("online", retry);
     void refresh();
     return () => {
       alive = false;
       clearTimeout(timer);
       controller.abort();
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", retry);
       requestRefresh.current = () => {};
+      immediateRefresh.current = () => {};
     };
   }, []);
 
   /** Ask again right away (after sending a request, say). */
   const refreshSoon = useCallback(() => requestRefresh.current(), []);
+  const retryNow = useCallback(() => immediateRefresh.current(), []);
 
-  return { state, offline, refreshSoon };
+  return { state, offline, refreshSoon, retryNow };
 }

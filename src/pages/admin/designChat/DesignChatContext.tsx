@@ -67,6 +67,7 @@ export type DesignChat = {
   state: RelayState | null;
   offline: boolean;
   refreshSoon: () => void;
+  retryNow: () => void;
   preview: ReturnType<typeof usePreview>;
   device: Device;
   setDevice: (d: Device) => void;
@@ -131,7 +132,7 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
   }, []);
   // The preview hook needs the helper's state; the helper's polling speed needs to know when the preview last reloaded.
   const lastReload = useRef<{ current: number } | null>(null);
-  const { state, offline, refreshSoon } = useHelperState((s: RelayState | null) => {
+  const { state, offline, refreshSoon, retryNow } = useHelperState((s: RelayState | null) => {
     const recent = lastReload.current ? Date.now() - lastReload.current.current < 180_000 : false;
     return helperPollingInterval(s, recent);
   });
@@ -356,10 +357,10 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
     previewDestination, previewNavigating,
     chatDraft,
     mode,
-    state, offline, refreshSoon, preview, device, setDevice, boxRef, editBoxRef,
+    state, offline, refreshSoon, retryNow, preview, device, setDevice, boxRef, editBoxRef,
     inFull: full || coverFull, coverFull, toggleFull, workingPage, selectPage, clearWorkingPage,
     editing, startEditing, stopEditing, previewLocation, previewPage, previewPageLoading, previewRegistrable, drawing, objectOpen, openObject, closeObject, returnTo, refs, previewNav, reviewOpen, setReviewOpen, showPreviewPath,
-  }), [previewDestination, previewNavigating, waitProgress, chatDraft, reviewOpen, showPreviewPath, mode, refs, previewNav, objectOpen, returnTo, openObject, closeObject, previewLocation, previewPage, previewPageLoading, previewRegistrable, state, offline, refreshSoon, preview, device, full, coverFull, toggleFull, workingPage, selectPage, clearWorkingPage, editing, startEditing, stopEditing, drawing]);
+  }), [previewDestination, previewNavigating, waitProgress, chatDraft, reviewOpen, showPreviewPath, mode, refs, previewNav, objectOpen, returnTo, openObject, closeObject, previewLocation, previewPage, previewPageLoading, previewRegistrable, state, offline, refreshSoon, retryNow, preview, device, full, coverFull, toggleFull, workingPage, selectPage, clearWorkingPage, editing, startEditing, stopEditing, drawing]);
 
   return <Ctx.Provider value={value}><ManifestReceiverFrame />{children}</Ctx.Provider>;
 }

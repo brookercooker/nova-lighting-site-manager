@@ -6,6 +6,7 @@
 - Undo-pending draft gates disable every Submit control and display the relay reason; request undo flags only label cards, never grant authority.
 - Developer Review shares the header draft URL with its token message; warm auth before mounting, answer trusted child requests/load from memory, and bound the trusted-ready loading cover to 20 seconds to avoid handshake stalls.
 - Failed waits share persisted deadlines and interaction ownership; retry only captured prepared /send payloads, with a synchronous duplicate-send gate and history recovery, never reconstruct missing attachments or page context.
+- Chat connection retry and browser online events use the shared poller's immediate refresh, not send retries; automatic refreshSoon retains back-off, while 401/403 show the existing sign-in note rather than an outage.
 
 - More Labels command lists stop wheel/touch propagation and contain overscroll in a viewport-bounded scroller, preserving native input without reaching the enclosing Dialog's document scroll lock or the page behind it.
 - Chat navigation exposes a separate optimistic destination for toolbar feedback and a 150ms cue; only validated matching locations update page data/history, superseded replies are ignored, and retained-frame navigation keeps its single fallback. After a Manager destination matches, ignore conflicting reports from that preview window for a non-extending 1.5s settling window; new requests, replacement/editor windows and expiry release the guard, since cross-origin SPA location/intent cannot be read from iframe.src.

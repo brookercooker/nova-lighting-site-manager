@@ -41,7 +41,7 @@ const fmtTime = (ts?: number) => (ts ? new Date(ts).toLocaleTimeString([], { hou
  * fix, the page they picked to work on, and the box to type in.
  */
 export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgress }: { opening?: number; onDraw?: () => void; onAttention?: () => void; saveProgress?: WaitView | null } = {}) {
-  const { state, offline, refreshSoon, workingPage, drawing, editing, preview, refs, chatDraft, waitProgress, requestRetry, setDevice, setReviewOpen, previewPage, selectPage, startEditing, device, boxRef } = useDesignChat();
+  const { state, offline, refreshSoon, retryNow, workingPage, drawing, editing, preview, refs, chatDraft, waitProgress, requestRetry, setDevice, setReviewOpen, previewPage, selectPage, startEditing, device, boxRef } = useDesignChat();
   const navigate = useNavigate();
   const handoffPage = workingPage?.id ? workingPage : previewPage;
   const openSavedContent = async (reply: string) => {
@@ -431,9 +431,10 @@ export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgre
               <Mic className="h-4 w-4" />
             </Button>
           )}
-          {(offline || hint.text) && <span role="status" className={cn("flex-1 min-w-0 text-xs", phone && "order-last basis-full", offline || hint.bad ? "text-destructive" : "text-muted-foreground")}>
-            {offline ? "Can't reach the design service right now. It will keep trying." : hint.text}
-          </span>}
+          {(offline || hint.text) && <div role="status" className={cn("order-last basis-full min-w-0 flex flex-wrap items-center gap-x-2 text-xs break-words", offline || hint.bad ? "text-destructive" : "text-muted-foreground")}>
+            <span className="min-w-0">{offline ? "Can't reach the design service right now. It will keep trying." : hint.text}</span>
+            {offline && <Button type="button" variant="link" size="sm" className="min-h-9 h-auto px-0 text-xs text-destructive" onClick={retryNow}>Try Again</Button>}
+          </div>}
           <Button type="submit" disabled={busy && !changing || offline || attachments.uploading || requestRetry?.sending} className="ml-auto gap-2">
             <Send className="h-4 w-4" /> {changing ? "Queue it" : "Send"}
           </Button>

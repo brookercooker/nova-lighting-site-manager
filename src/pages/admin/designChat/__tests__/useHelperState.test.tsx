@@ -39,6 +39,66 @@ describe("helper polling delays", () => {
 });
 
 describe("mounted helper polling", () => {
+  it.each([401, 403])("shows the sign-in note for %s and recovers at the normal interval", async (status) => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({ ok: false, status } as Response);
+    const { result, unmount } = renderHook(() => useHelperState(() => 4000));
+    await advance(0);
+    expect(result.current.offline).toBe(true);
+    await advance(8000);
+    expect(result.current.offline).toBe(false);
+    expect(result.current.state).toEqual({ ...idle, history: [{ role: "note", text: "Sign in to load or save this" }] });
+    await advance(3999);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await advance(1);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(result.current.state).toEqual(idle);
+    unmount();
+  });
+  it("keeps 500 responses offline with automatic back-off", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: false, status: 500 } as Response);
+    const { result, unmount } = renderHook(() => useHelperState(() => 4000));
+    await advance(0);
+    expect(result.current.offline).toBe(true);
+    expect(result.current.state).toBeNull();
+    await advance(7999);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await advance(1);
+    expect(result.current.offline).toBe(false);
+    unmount();
+  });
+  it.each(["manual", "online"])("bypasses the 60-second back-off on %s refresh and retains refreshSoon throttling", async (action) => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("offline"));
+    const { result, unmount } = renderHook(() => useHelperState(() => 30_000));
+    await advance(0);
+    act(() => result.current.refreshSoon());
+    await advance(1000);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      if (action === "manual") result.current.retryNow();
+      else window.dispatchEvent(new Event("online"));
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.current.offline).toBe(false);
+    await advance(30_000);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    unmount();
+    await act(async () => window.dispatchEvent(new Event("online")));
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+  it("coalesces retries during an active poll into one immediate follow-up", async () => {
+    let finish: ((value: Response) => void) | undefined;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { result, unmount } = renderHook(() => useHelperState(() => 4000));
+    await advance(0);
+    act(() => { result.current.retryNow(); result.current.retryNow(); window.dispatchEvent(new Event("online")); });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await act(async () => finish?.({ ok: false, status: 500 } as Response));
+    await advance(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.current.offline).toBe(false);
+    unmount();
+  });
   it("shows a sign-in note without polling the protected service signed out", async () => {
     auth.user = false;
     const { result, unmount } = renderHook(() => useHelperState(() => 4000));
