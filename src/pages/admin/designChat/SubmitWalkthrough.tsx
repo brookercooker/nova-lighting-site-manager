@@ -44,7 +44,7 @@ export function walkProgress(data: WalkthroughData, s = walk.get()) {
 
 function pageCount(rows: ChangedRow[], ticked: string[]): string {
   if (!rows.length) return "No pages were changed in this draft.";
-  return `${rows.filter((r) => ticked.includes(r.key)).length} of ${rows.length} pages approved`;
+  return `${rows.filter((r) => ticked.includes(r.key)).length} of ${rows.length} ${rows.length === 1 ? "page" : "pages"} approved`;
 }
 const rowName = (r: ChangedRow) => r.page?.name ?? "Other site changes";
 const rowPath = (r: ChangedRow) => r.page?.path ?? "/";

@@ -2,6 +2,7 @@
  * The rules for what the Design Chat shows. Plain functions (no React) so they can be tested on their own.
  */
 import { readableReferences } from "./references";
+import { SIGN_IN_REQUIRED } from "@/lib/authGate";
 import type { Approval, ApprovalField, Entry, Finding, Job, RelayState, UploadRules } from "./helper";
 
 export const IDLE_HINT = "";
@@ -26,6 +27,7 @@ const NOTES: [RegExp, (text: string) => string][] = [
 /** The text to show for a history entry, or null to hide it (internal notes stay out). */
 export function visibleText(entry: Entry): string | null {
   if (entry.role === "note") {
+    if (entry.text === SIGN_IN_REQUIRED) return SIGN_IN_REQUIRED;
     for (const [re, out] of NOTES) if (re.test(entry.text)) return out(entry.text);
     return null;
   }

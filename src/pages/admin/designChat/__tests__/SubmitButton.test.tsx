@@ -114,7 +114,7 @@ describe("Submit for Review walkthrough", () => {
     m.data.rows = [{ key: "other", page: null, how: "2 changes that aren't tied to one page", count: 2 }];
     render(<PanelHost open onOpenChange={vi.fn()} />);
     expect(dialog()).toHaveTextContent("Other site changes");
-    expect(dialog()).toHaveTextContent("0 of 1 pages approved");
+    expect(dialog()).toHaveTextContent("0 of 1 page approved");
     expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeDisabled();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Open Site" }));
     expect(m.show).toHaveBeenCalledWith("/");
@@ -134,12 +134,19 @@ describe("Submit for Review walkthrough", () => {
     expect(dialog()).toHaveTextContent("No pages were changed in this draft.");
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeEnabled();
   });
+  it("uses plural progress for multiple pages", () => {
+    m.data.rows = [page("/a", "About"), page("/b", "Team")];
+    render(<PanelHost open />);
+    expect(dialog()).toHaveTextContent("0 of 2 pages approved");
+    viewAndTick();
+    expect(dialog()).toHaveTextContent("1 of 2 pages approved");
+  });
   it("keeps Submit disabled until pages, links and the checklist are done, then submits once", async () => {
     m.data.links = { status: "ok", unread: 0, partial: false, truncated: false, groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [{ key: "/a|mailto:x@y.z", href: "mailto:x@y.z", kind: "mail", label: null, requestIds: [], status: null }] }] };
     render(<PanelHost open onOpenChange={vi.fn()} />);
     expect(dialog()).toHaveTextContent("Step 1 of 3");
     viewAndTick();
-    expect(dialog()).toHaveTextContent("1 of 1 pages approved");
+    expect(dialog()).toHaveTextContent("1 of 1 page approved");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(dialog()).toHaveTextContent("Step 2 of 3");
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();

@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { helperPollDelay, useHelperState } from "../useHelperState";
+import { visibleText } from "../logic";
 const auth = vi.hoisted(() => ({ user: true }));
 vi.mock("@/lib/authGate", () => ({ hasManagerUser: async () => auth.user, SIGN_IN_REQUIRED: "Sign in to load or save this" }));
 
@@ -39,6 +40,22 @@ describe("helper polling delays", () => {
 });
 
 describe("mounted helper polling", () => {
+  it.each([401, 403])("preserves visible earlier messages and appends only one sign-in note for %s", async (status) => {
+    const history = [{ role: "user" as const, text: "Change the heading" }, { role: "assistant" as const, text: "The heading is updated." }];
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ ...idle, history }) } as Response)
+      .mockResolvedValueOnce({ ok: false, status } as Response)
+      .mockResolvedValueOnce({ ok: false, status } as Response);
+    const { result, unmount } = renderHook(() => useHelperState(() => 4000));
+    await advance(0);
+    await advance(4000);
+    expect(result.current.offline).toBe(false);
+    expect(result.current.state?.history.map(visibleText)).toEqual(["Change the heading", "The heading is updated.", "Sign in to load or save this"]);
+    await advance(4000);
+    expect(result.current.state?.history).toHaveLength(3);
+    await advance(4000);
+    expect(result.current.state).toEqual(idle);
+    unmount();
+  });
   it.each([401, 403])("shows the sign-in note for %s and recovers at the normal interval", async (status) => {
     vi.mocked(fetch).mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce({ ok: false, status } as Response);

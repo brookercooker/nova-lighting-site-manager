@@ -83,6 +83,7 @@ it.each([false, true])("offers connection retry without sending when phone=%s", 
   mocks.phone = phone; mocks.offline = true;
   render(<MemoryRouter><ChatPanel /></MemoryRouter>);
   expect(screen.getByText("Can't reach the design service right now. It will keep trying.")).toBeVisible();
+  expect(screen.queryByText("Sign in to load or save this")).toBeNull();
   expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
   expect(mocks.retryNow).toHaveBeenCalledOnce();
