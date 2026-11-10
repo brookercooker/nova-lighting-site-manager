@@ -342,6 +342,34 @@ describe("picked page and Back/Forward", () => {
   });
 });
 
+describe("leaving Manual Edit Mode", () => {
+  it("stop editing keeps the preview on the edited path", () => {
+    vi.useFakeTimers(); mocks.navigate.mockReturnValue(true);
+    const frame = document.createElement("iframe"); frame.src = "https://site.example/"; frame.dataset.sitePreview = "true"; document.body.appendChild(frame);
+    const editor = document.createElement("iframe"); editor.src = "https://site.example/contact"; editor.dataset.siteEditor = "true"; document.body.appendChild(editor);
+    const report = (f: HTMLIFrameElement, path: string) => act(() => window.dispatchEvent(new MessageEvent("message", { source: f.contentWindow, origin: "https://site.example", data: { source: "nova-site", type: "location", path } })));
+    const contact = { id: "contact-id", name: "Contact", path: "/contact" };
+    try {
+      const hook = renderHook(useDesignChat, { wrapper });
+      report(frame, "/");
+      act(() => hook.result.current.startEditing());
+      act(() => hook.result.current.selectPage(contact));
+      act(() => hook.result.current.startEditing());
+      report(editor, "/contact"); // the editor arriving must not confirm the Chat preview's navigation
+      act(() => hook.result.current.stopEditing());
+      report(frame, "/"); // Chat preview still on Home: it is asked again, the pick is kept
+      expect(mocks.navigate).toHaveBeenLastCalledWith({ action: "to", path: "/contact" });
+      expect(hook.result.current.workingPage).toEqual(contact);
+      act(() => vi.advanceTimersByTime(NAV_FALLBACK_MS));
+      expect(mocks.preview.mock.calls.at(-1)?.[1]).toBe("/contact");
+      report(frame, "/contact");
+      expect(hook.result.current.previewLocation?.path).toBe("/contact");
+      expect(hook.result.current.workingPage).toEqual(contact);
+      hook.unmount();
+    } finally { frame.remove(); editor.remove(); mocks.navigate.mockReturnValue(false); vi.useRealTimers(); }
+  });
+});
+
 describe("picked page reload", () => {
   it("does not restore a stored working page or its preview path on load", () => {
     sessionStorage.setItem(key, JSON.stringify(draft));

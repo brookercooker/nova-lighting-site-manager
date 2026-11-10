@@ -234,6 +234,16 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
   const clearWorkingPage = useCallback(() => { dispatch({ type: "clear" }); setObjectOpen(null); }, []);
   const startEditing = useCallback(() => dispatch({ type: "start" }), []);
   const stopEditing = useCallback(() => { dispatch({ type: "stop" }); setObjectOpen(null); }, []);
+  // Leaving Manual Edit Mode: make sure the Chat preview is on the page that was being edited.
+  const wasEditing = useRef(editing);
+  useEffect(() => {
+    const left = wasEditing.current && !editing;
+    wasEditing.current = editing;
+    const page = workRef.current.workingPage;
+    if (!left || !page) return;
+    if (pendingNav.current || (shownPath.current && previewAddressMatches(page.path, shownPath.current))) return;
+    navigatePreview({ action: "to", path: page.path }, page.path, () => { setPreviewPath(page.path); setNavNonce((n) => n + 1); });
+  }, [editing, navigatePreview]);
   const [objectOpen, setObjectOpen] = useState<ObjectOpen | null>(null);
   // From Tools > Objects the editor starts in the same tick as editing, so that path doesn't wait for it.
   const openObject = useCallback((id: string, section?: string, opts?: { slot?: string; from?: "page" | "objects" }) => {
@@ -279,6 +289,12 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
         return;
       }
       const notFound = d.notFound === true;
+      if (!reportingFrame.hasAttribute("data-site-preview")) {
+        // The Manual Edit frame shows the page too, but it is a separate window: its reports must never
+        // confirm a navigation meant for the Chat preview, or the preview stays on its old page after editing.
+        setPreviewLocation((cur) => (cur && cur.path === d.path && cur.search === search && Boolean(cur.notFound) === notFound ? cur : { path: d.path, search, ...(notFound ? { notFound: true } : {}) }));
+        return;
+      }
       const t = target.current;
       if (t && !previewAddressMatches(t.path, d.path, search)) {
         // Still showing an earlier page: ask again (bounded) rather than adopt it.
