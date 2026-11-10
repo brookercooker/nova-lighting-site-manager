@@ -8,7 +8,6 @@ import { usePreview } from "./usePreview";
 import { usePreviewPage, type PreviewPage } from "./usePreviewPage";
 import { useDrawing, type Drawing } from "./useDrawing";
 import type { RegistrablePage } from "./registerPage";
-import { isInternalPath } from "./registerPage";
 import { syncManifestPages } from "../manifestPageSync";
 import { MANIFEST_CHANGED } from "../siteManifest";
 import ManifestReceiverFrame from "./ManifestReceiverFrame";
@@ -39,16 +38,8 @@ export type Device = "mobile" | "tablet" | "desktop";
 /** A page the person picked in the Pages tab for the chat to work on. */
 export type WorkingPage = { id?: string; name: string; path: string };
 
-const WORKING_PAGE_KEY = "nova:design-chat:working-page";
-function restoredWorkingPage(): WorkingPage | null {
-  try {
-    const page = JSON.parse(sessionStorage.getItem(WORKING_PAGE_KEY) ?? "null");
-    if (!page || typeof page.name !== "string" || !page.name.trim()
-      || typeof page.path !== "string" || !page.path.startsWith("/") || page.path.startsWith("//")
-      || page.path.length > 300 || isInternalPath(page.path)) return null;
-    return { name: page.name, path: page.path, ...(typeof page.id === "string" ? { id: page.id } : {}) };
-  } catch { return null; }
-}
+// Older builds kept the picked page in tab storage; it is no longer restored because it went stale.
+const LEGACY_WORKING_PAGE_KEY = "nova:design-chat:working-page";
 
 /** The working page and whether it is open in the editor. Kept pure so the rules can be tested. */
 export type WorkingState = { workingPage: WorkingPage | null; editing: boolean };
@@ -145,8 +136,7 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
     return helperPollingInterval(s, recent);
   });
 
-  const [restoredPage] = useState(restoredWorkingPage);
-  const [previewPath, setPreviewPath] = useState<string | null>(restoredPage?.path ?? null);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
   useEffect(() => { if (!offline) observeContentSyncState(state); }, [state, offline]);
   const [navNonce, setNavNonce] = useState(0);
   const preview = usePreview(state, previewPath, navNonce);
@@ -164,7 +154,7 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
   const [coverFull, setCoverFull] = useState(false); // or, if it won't, by covering the window
   const boxRef = useRef<HTMLDivElement>(null);
   const editBoxRef = useRef<HTMLDivElement>(null);
-  const [work, dispatch] = useReducer(workingReducer, { workingPage: restoredPage, editing: false });
+  const [work, dispatch] = useReducer(workingReducer, { workingPage: null, editing: false });
   const editing = work.editing;
   const mode = editing ? "manual" : "chat";
   const location = useLocation();
@@ -191,12 +181,10 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
   }, [editing]);
 
   const workingPage = work.workingPage;
-  useEffect(() => {
-    try {
-      if (workingPage) sessionStorage.setItem(WORKING_PAGE_KEY, JSON.stringify(workingPage));
-      else sessionStorage.removeItem(WORKING_PAGE_KEY);
-    } catch { /* Page selection still works when tab storage is unavailable. */ }
-  }, [workingPage]);
+  useEffect(() => { try { sessionStorage.removeItem(LEGACY_WORKING_PAGE_KEY); } catch { /* storage unavailable */ } }, []);
+  // Read by the location listener so a settled visitor navigation can release a stale picked page.
+  const workRef = useRef(work);
+  workRef.current = work;
   // Back/Forward/page choice move the mounted preview in place; a src change happens only as a single fallback.
   const pendingNav = useRef<{ expect: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const settledNav = useRef<{ address: string; source: MessageEventSource; until: number } | null>(null);
@@ -210,7 +198,7 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
   }, []);
   const shownPath = useRef<string | null>(null);
   // The page asked for sticks until the preview reports it (first-load race: the frame may still be on the home page).
-  const target = useRef<{ path: string; tries: number } | null>(restoredPage ? { path: restoredPage.path, tries: 0 } : null);
+  const target = useRef<{ path: string; tries: number } | null>(null);
   // `sticky` re-asks for a picked page until it arrives (first-load race). History steps are not sticky: the step already
   // moved the index, the pending confirmation and fallback cover a lost message, and re-sends would fight later steps.
   const navigatePreview = useCallback((nav: PreviewNavigate, expect: string, fallback: () => void, sticky = true) => {
@@ -300,6 +288,11 @@ export function DesignChatProvider({ children }: { children: ReactNode }) {
       target.current = null;
       const pending = pendingNav.current;
       if (pending && !previewAddressMatches(pending.expect, d.path, search)) return;
+      // A settled location the Manager didn't request (visitor link, builder navigation) releases a
+      // picked page it no longer matches, like the chip's X, so requests never carry a stale page.
+      const w = workRef.current;
+      if (!pending && !t && !settledNav.current && !w.editing && w.workingPage && reportingFrame.hasAttribute("data-site-preview")
+        && !previewAddressMatches(w.workingPage.path, d.path, search)) dispatch({ type: "clear" });
       if ((pending || t) && reportingFrame.hasAttribute("data-site-preview")) {
         settledNav.current = { address: d.path + search, source: event.source, until: Date.now() + NAV_SETTLE_MS };
       }

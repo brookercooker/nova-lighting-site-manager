@@ -241,43 +241,73 @@ describe("preview Back confirmation", () => {
   });
 });
 
-describe("picked page reload", () => {
-  it("restores the Draft chip and preview path during a running request, then lets a new pick win", () => {
-    const first = renderHook(useDesignChat, { wrapper });
-    act(() => first.result.current.selectPage(draft));
-    act(() => first.result.current.startEditing());
-    expect(JSON.parse(sessionStorage.getItem(key) ?? "null")).toEqual(draft);
-    first.unmount();
-    const reloaded = renderHook(useDesignChat, { wrapper });
-    expect(reloaded.result.current.workingPage).toEqual(draft);
-    expect(reloaded.result.current.editing).toBe(false);
-    expect(mocks.preview.mock.calls.at(-1)?.[1]).toBe("/draft");
-    const about = { id: "about-id", name: "About", path: "/about" };
-    act(() => reloaded.result.current.selectPage(about));
-    expect(reloaded.result.current.workingPage).toEqual(about);
-    expect(reloaded.result.current.previewDestination).toBe("/about");
-    reloaded.unmount();
-    const again = renderHook(useDesignChat, { wrapper });
-    expect(again.result.current.workingPage).toEqual(about);
-    expect(mocks.preview.mock.calls.at(-1)?.[1]).toBe("/about");
-  });
-  it("retains the page when leaving editing but clears the chip deliberately across reloads", () => {
+describe("picked page follows the preview", () => {
+  const setup = () => {
+    mocks.navigate.mockReturnValue(true);
+    const frame = document.createElement("iframe"); frame.src = "https://site.example/"; frame.dataset.sitePreview = "true"; document.body.appendChild(frame);
+    const report = (path: string, f: HTMLIFrameElement = frame) => act(() => window.dispatchEvent(new MessageEvent("message", { source: f.contentWindow, origin: "https://site.example", data: { source: "nova-site", type: "location", path } })));
+    return { frame, report };
+  };
+  const contact = { id: "contact-id", name: "Contact", path: "/contact" };
+  afterEach(() => { document.querySelectorAll("iframe").forEach((f) => f.remove()); mocks.navigate.mockReturnValue(false); vi.useRealTimers(); });
+
+  it("clears the picked page after a settled report of a different path while not editing", () => {
+    vi.useFakeTimers(); const { report } = setup();
     const hook = renderHook(useDesignChat, { wrapper });
-    act(() => hook.result.current.selectPage(draft));
-    act(() => hook.result.current.startEditing());
-    act(() => hook.result.current.stopEditing());
-    expect(JSON.parse(sessionStorage.getItem(key) ?? "null")).toEqual(draft);
-    act(() => hook.result.current.clearWorkingPage());
-    expect(sessionStorage.getItem(key)).toBeNull();
-    hook.unmount();
-    const again = renderHook(useDesignChat, { wrapper });
-    expect(again.result.current.workingPage).toBeNull();
+    act(() => hook.result.current.selectPage(contact)); report("/contact");
+    act(() => vi.advanceTimersByTime(NAV_SETTLE_MS));
+    report("/experiment");
+    expect(hook.result.current.workingPage).toBeNull();
+    expect(hook.result.current.previewLocation?.path).toBe("/experiment");
   });
-  it.each(["broken JSON", JSON.stringify({ name: "Bad", path: "//elsewhere" }), JSON.stringify({ name: "Manager", path: "/manage/preview" })])("ignores invalid stored page %s", value => {
-    sessionStorage.setItem(key, value);
+  it("keeps the picked page when the reported path matches", () => {
+    vi.useFakeTimers(); const { report } = setup();
+    const hook = renderHook(useDesignChat, { wrapper });
+    act(() => hook.result.current.selectPage(contact)); report("/contact");
+    act(() => vi.advanceTimersByTime(NAV_SETTLE_MS));
+    report("/contact/"); report("/contact");
+    expect(hook.result.current.workingPage).toEqual(contact);
+  });
+  it("keeps the picked page while editing", () => {
+    vi.useFakeTimers(); const { report } = setup();
+    const editor = document.createElement("iframe"); editor.src = "https://site.example/"; editor.dataset.siteEditor = "true"; document.body.appendChild(editor);
+    const hook = renderHook(useDesignChat, { wrapper });
+    act(() => hook.result.current.selectPage(contact)); report("/contact");
+    act(() => hook.result.current.startEditing());
+    act(() => vi.advanceTimersByTime(NAV_SETTLE_MS));
+    report("/experiment"); report("/team", editor);
+    expect(hook.result.current.workingPage).toEqual(contact);
+    expect(hook.result.current.editing).toBe(true);
+  });
+  it("does not clear a fresh pick when the earlier page reports before the new one arrives", () => {
+    vi.useFakeTimers(); const { report } = setup();
+    const hook = renderHook(useDesignChat, { wrapper });
+    report("/brands");
+    act(() => hook.result.current.selectPage(contact));
+    report("/brands");
+    expect(hook.result.current.workingPage).toEqual(contact);
+    report("/contact");
+    expect(hook.result.current.workingPage).toEqual(contact);
+    report("/brands"); // late duplicate inside the settling window
+    expect(hook.result.current.workingPage).toEqual(contact);
+  });
+});
+
+describe("picked page reload", () => {
+  it("does not restore a stored working page or its preview path on load", () => {
+    sessionStorage.setItem(key, JSON.stringify(draft));
     const hook = renderHook(useDesignChat, { wrapper });
     expect(hook.result.current.workingPage).toBeNull();
     expect(mocks.preview.mock.calls.at(-1)?.[1]).toBeNull();
+    expect(sessionStorage.getItem(key)).toBeNull();
+  });
+  it("a pick lasts only for the session in memory, not across a reload", () => {
+    const first = renderHook(useDesignChat, { wrapper });
+    act(() => first.result.current.selectPage(draft));
+    expect(first.result.current.workingPage).toEqual(draft);
+    first.unmount();
+    const again = renderHook(useDesignChat, { wrapper });
+    expect(again.result.current.workingPage).toBeNull();
   });
   it("still selects and clears pages when tab storage is blocked", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("Blocked"); });
