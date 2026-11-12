@@ -48,6 +48,6 @@ export default function TextIconLinkPanel({ sel, edits, onChange, editsFor, onSc
     </ToolField>
     {edits[`icon:${sel.key}`] !== undefined && <Button type="button" variant="ghost" size="sm" onClick={() => { const next = { ...edits }; delete next[`icon:${sel.key}`]; delete next[iconPositionKey(sel.key)]; onChange(next); }}>Use Original Icon</Button>}
   </ToolGroup><ToolGroup title="Link" icon={LinkIcon} summary={hasLink ? link?.href ?? originalLink(target.el).href : "None"} initiallyCollapsed>
-    <InlineDestinationPanel embedded selection={{ ...sel, link: target }} editsFor={scope => editsFor?.(scope) ?? edits} onChange={(scope, next) => onScopeChange ? onScopeChange(scope, next) : onChange(next)} pages={pages} />
+    <InlineDestinationPanel embedded linkKnown={!!sel.link} selection={{ ...sel, link: target }} editsFor={scope => editsFor?.(scope) ?? edits} onChange={(scope, next) => onScopeChange ? onScopeChange(scope, next) : onChange(next)} pages={pages} />
   </ToolGroup></>;
 }

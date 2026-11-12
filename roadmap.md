@@ -156,6 +156,7 @@
 - [x] Walkthrough: per-page ticks are link confirmations only; "Things to Look At on Each Page" plain bullets on the Pages step and in the Checking Changes bar.
 - [x] Walkthrough: link verification lives only on the Check the Changed Links step (Show on Page + Check This Link); step 1 Approve needs only an opened page; link bridge runs only on step 2.
 - [x] Walkthrough: Change This Link for links marked wrong (Manual Edit Mode on the link's page, banner with Back to Review, Replaced by Hand after a save).
-- [ ] Change This Link: select the link in the edit frame by its destination — needs a Public `edit-select-link` message (spec in chat, Nov 12).
+- [x] Change This Link: auto-select the link in the edit frame (Public edit-select-link).
 - [x] Change This Link fixes: save returns to step 2 with approvals kept; hand-set links listed; friendly page names; "nothing left" note.
-- [ ] Links step as a true draft-vs-live link diff and Link Address showing a card's real destination: need Public frame link inventory and ancestor link metadata (spec in chat, Nov 12).
+- [x] Link Address uses selection.link when the frame sends it.
+- [ ] True draft-vs-live Links step: Manager side ready; waits on Public link-inventory and the VITE_PUBLIC_LIVE_URL live-site address.

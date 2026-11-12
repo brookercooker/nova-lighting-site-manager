@@ -1,0 +1,97 @@
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEditSelectLink } from "../linkFix";
+import { diffInventories, loadNetLinks, netReviewLinks, parseInventory, requestInventory } from "../linkInventory";
+import { remoteSelection } from "../../remoteSelection";
+import TextIconLinkPanel from "../../TextIconLinkPanel";
+import { walk } from "../submitWalkthroughStore";
+
+const post = vi.fn();
+const win = { postMessage: post } as unknown as Window;
+const frame = { src: "https://site.example/", contentWindow: win } as unknown as HTMLIFrameElement;
+const msg = (data: unknown, origin = "https://site.example", source: unknown = win) => act(() => {
+  const e = new MessageEvent("message", { data, origin }); Object.defineProperty(e, "source", { value: source }); window.dispatchEvent(e);
+});
+beforeEach(() => { vi.clearAllMocks(); walk.reset(); });
+afterEach(cleanup);
+
+describe("edit-select-link", () => {
+  it("sends the raw href and again after edit-ready; ignores wrong origin, window or href", async () => {
+    vi.useFakeTimers();
+    const h = renderHook(() => useEditSelectLink("/contact", () => frame));
+    expect(post).toHaveBeenCalledWith({ source: "nova-manager", type: "edit-select-link", href: "/contact" }, "https://site.example");
+    msg({ source: "nova-site", type: "edit-ready" }); act(() => { vi.runAllTimers(); });
+    expect(post).toHaveBeenCalledTimes(2);
+    msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: true }, "https://evil.example");
+    msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: true }, "https://site.example", {});
+    msg({ source: "nova-site", type: "edit-select-link-result", href: "/other", found: true });
+    expect(h.result.current).toBe("pending");
+    msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: false, count: 0 });
+    expect(h.result.current).toBe("missing");
+    msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: true, count: 1 });
+    expect(h.result.current).toBe("found");
+    vi.useRealTimers();
+  });
+});
+
+describe("selection.link destination", () => {
+  it("shows the card's destination and writes the override on the card, without the fallback hint", () => {
+    walk.startFix({ key: "/|/contact", fingerprint: "f", path: "/", pageName: "Homepage", address: "/contact", href: "/contact" });
+    const sel = remoteSelection({ key: "0.2.1", scope: "page", kind: "text", tag: "span", text: "Book a Consultation", link: { key: "0.2", scope: "page", tag: "a", attrs: { href: "/contact" } } } as any);
+    const change = vi.fn();
+    render(<TextIconLinkPanel sel={sel} edits={{}} onChange={change} onScopeChange={change} />);
+    fireEvent.click(screen.getAllByText("Link")[0]);
+    const input = screen.getByLabelText("Link Address") as HTMLInputElement;
+    expect(input.value).toBe("/contact");
+    expect(document.querySelector("[data-link-fix-hint]")).toBeNull();
+    fireEvent.change(input, { target: { value: "/gallery" } }); fireEvent.keyDown(input, { key: "Enter" }); fireEvent.blur(input);
+    expect(change).toHaveBeenCalledWith("page", expect.objectContaining({ "link:0.2": JSON.stringify({ href: "/gallery" }) }));
+  });
+  it("keeps the card explanation only when selection.link is absent", () => {
+    walk.startFix({ key: "/|/contact", fingerprint: "f", path: "/", pageName: "Homepage", address: "/contact", href: "/contact" });
+    const sel = remoteSelection({ key: "0.2.1", scope: "page", kind: "text", tag: "span", text: "Book a Consultation" } as any);
+    render(<TextIconLinkPanel sel={sel} edits={{}} onChange={vi.fn()} />);
+    fireEvent.click(screen.getAllByText("Link")[0]);
+    expect(document.querySelector("[data-link-fix-hint]")).not.toBeNull();
+  });
+});
+
+const inv = (path: string, links: [string, string][]) => ({ path, links: links.map(([key, href]) => ({ key, scope: "page", href, label: null })) });
+describe("link inventory", () => {
+  it("validates and caps inventories", () => {
+    expect(parseInventory({ source: "nova-site", type: "link-inventory", v: 2, path: "/", links: [] })).toBeNull();
+    const many = Array.from({ length: 600 }, (_, i) => ({ key: String(i), scope: "page", href: "/x" + i }));
+    expect(parseInventory({ source: "nova-site", type: "link-inventory", v: 1, path: "/", links: many })!.links).toHaveLength(500);
+  });
+  it("lists new or changed destinations; links equal to live drop off", () => {
+    const d = diffInventories(inv("/", [["0.1", "/contact"], ["0.2", "/gallery"], ["0.3", "/new"]]), inv("/", [["0.1", "/contact"], ["0.2", "/contact"]]));
+    expect(d.map(l => l.href)).toEqual(["/gallery", "/new"]);
+    const base = { groups: [{ page: { name: "Homepage", path: "/" }, label: "Homepage", links: [{ key: "/|/contact", href: "/contact", kind: "internal" as const, label: null, requestIds: ["r"], status: null }] }], unread: 0, partial: false, truncated: false };
+    const out = netReviewLinks(base, { "/": d }, []);
+    expect(out.groups[0].links.map(l => l.href)).toEqual(["/gallery", "/new"]);
+    expect(netReviewLinks(base, { "/": [] }, []).groups).toHaveLength(0);
+    expect(netReviewLinks(base, {}, [])).toEqual(base);
+  });
+  it("falls back when the frame doesn't answer, and compares draft with live when it does", async () => {
+    const silent = vi.fn(async () => null);
+    expect(await loadNetLinks(["/", "/b"], "https://live.example/", silent)).toEqual({});
+    expect(silent).toHaveBeenCalledTimes(2); // only the first page is probed
+    const answering = vi.fn(async (url: string) => url.startsWith("https://live.example") ? inv("/", [["0.1", "/contact"]]) : inv("/", [["0.1", "/gallery"]]));
+    const out = await loadNetLinks(["/"], "https://live.example/", answering);
+    expect(out["/"].map(l => l.href)).toEqual(["/gallery"]);
+    expect(await loadNetLinks(["/"], null, answering)).toEqual({});
+  });
+  it("requestInventory resolves from its own frame and times out to null", async () => {
+    vi.useFakeTimers();
+    const p = requestInventory("https://site.example/a", 3000);
+    const f = document.querySelector<HTMLIFrameElement>("iframe[title='Link Inventory']")!;
+    const e = new MessageEvent("message", { data: { source: "nova-site", type: "link-inventory", v: 1, path: "/a", links: [{ key: "0", scope: "page", href: "/x" }] }, origin: "https://site.example" });
+    Object.defineProperty(e, "source", { value: f.contentWindow }); window.dispatchEvent(e);
+    expect((await p)?.links[0].href).toBe("/x");
+    expect(document.querySelector("iframe[title='Link Inventory']")).toBeNull();
+    const q = requestInventory("https://site.example/b", 3000);
+    vi.advanceTimersByTime(3100);
+    expect(await q).toBeNull();
+    vi.useRealTimers();
+  });
+});

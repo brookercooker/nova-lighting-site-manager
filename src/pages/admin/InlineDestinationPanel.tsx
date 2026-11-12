@@ -13,12 +13,14 @@ import { useWalk } from "./designChat/submitWalkthroughStore";
 
 const ERROR = "That address isn't allowed. Use a web address starting with https://, a page path starting with /, mailto:, tel: or #.";
 
-export default function InlineDestinationPanel({ selection, editsFor, onChange, pages, embedded = false }: {
+export default function InlineDestinationPanel({ selection, editsFor, onChange, pages, embedded = false, linkKnown }: {
   selection: InlineSelection | null;
   editsFor: (scope: string) => InlineEdits;
   onChange: (scope: string, next: InlineEdits) => void;
   pages: { id: string; name: string; path: string }[];
   embedded?: boolean;
+  /** Whether the frame reported the element that really holds the link (selection.link); defaults to selection.link being set. */
+  linkKnown?: boolean;
 }) {
   const target = selection?.link;
   const edits = target ? editsFor(target.scope) : {};
@@ -50,7 +52,7 @@ export default function InlineDestinationPanel({ selection, editsFor, onChange, 
     if (embedded && !address) { setError(""); onChange(target.scope, { ...edits, [key]: JSON.stringify({ unlinked: true }) }); return; }
     save(address);
   };
-  const missing = !!fix && !destination && !edit
+  const missing = !!fix && !(linkKnown ?? !!selection?.link) && !destination && !edit
     ? <p data-link-fix-hint className="text-xs text-muted-foreground">This text has no link of its own. The link to {fix.address} may be on the card or button around it, which can't be selected here yet.</p> : null;
   const content = <>{missing}
     <div className="relative space-y-1" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false); }}>

@@ -7,7 +7,7 @@ export const REPIN_MS = 120_000;
 
 /** Session-only walkthrough progress, outside any component so it survives the dialog closing for View Page. */
 /** The return point of Change This Link: which wrong link is being replaced by hand, and whether a save happened. */
-export type LinkFix = { key: string; fingerprint: string; path: string; pageName: string; address: string; saved: boolean; returning?: boolean };
+export type LinkFix = { key: string; fingerprint: string; href?: string; path: string; pageName: string; address: string; saved: boolean; returning?: boolean };
 export type WalkStep = "pages" | "links" | "checklist";
 export type Checking = { key: string; kind: "page" | "link"; name: string } | null;
 export type WalkState = {

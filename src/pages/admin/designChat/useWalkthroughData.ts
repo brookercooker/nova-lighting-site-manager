@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
+import { liveSiteBase, loadNetLinks, netReviewLinks } from "./linkInventory";
 import { supabase } from "@/prototype/client";
 import { codePagePaths, loadSiteManifest } from "../siteManifest";
 import { RELAY, relayHeaders, type RelayState } from "./helper";
@@ -84,8 +85,13 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   }, [enabled, client]);
   const handPaths = useMemo(() => new Set(reviewPages.data ? reviewPages.data.rows.filter(r => r.how.includes("content")).map(r => normPath(r.path))
     : (requests ?? []).filter(r => r.source === "content").flatMap(r => (r.pages ?? (r.page ? [r.page] : [])).map(p => normPath(p.path)))), [reviewPages.data, requests]);
-  const merged = useMemo(() => links.data ? mergeReviewLinks(links.data, pages.data ?? [], handPaths) : null, [links.data, pages.data, handPaths]);
-  const linkResult: LinksResult = links.isError ? { status: "failed" } : merged && !links.isFetching && !pages.isFetching ? { status: "ok", ...merged } : { status: "loading" };
+  // True draft-vs-live comparison when the live site is configured and the frames answer link-inventory; otherwise today's list.
+  const live = liveSiteBase();
+  const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
+  const inventory = useQuery({ queryKey: ["walkthrough", "inventory", sig, changedPaths], queryFn: () => loadNetLinks(changedPaths, live), enabled: enabled && !!live && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
+  const merged = useMemo(() => links.data ? netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data]);
+  const inventoryPending = !!live && changedPaths.length > 0 && enabled && inventory.isFetching;
+  const linkResult: LinksResult = links.isError ? { status: "failed" } : merged && !links.isFetching && !pages.isFetching && !inventoryPending ? { status: "ok", ...merged } : { status: "loading" };
   const pagesStatus = reviewPages.isError || objects.isError || pages.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
   const fingerprintedRows = rows.map((row) => {
     const path = row.page?.path;
