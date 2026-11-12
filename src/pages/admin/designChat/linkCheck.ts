@@ -16,18 +16,18 @@ export function frameOrigin(frame: HTMLIFrameElement | null): string | null {
 const fromFrame = (event: MessageEvent, frame: HTMLIFrameElement | null) =>
   !!frame?.contentWindow && event.source === frame.contentWindow && frameOrigin(frame) === event.origin;
 
-export type LinkState = "todo" | "done" | "wrong" | "replaced";
+export type LinkState = "todo" | "done" | "replaced";
 /** Frame entries never carry "replaced": links replaced by hand are omitted from the frame list. */
 export type LinkCheckEntry = { raw: string; state: Exclude<LinkState, "replaced"> };
 export const MAX_LISTED_LINKS = 100;
-export const linkState = (key: string, linkTicked: string[], wrong: Record<string, string> | string[], replaced: Record<string, string> = {}): LinkState =>
-  key in replaced ? "replaced" : (Array.isArray(wrong) ? wrong.includes(key) : key in wrong) ? "wrong" : linkTicked.includes(key) ? "done" : "todo";
-const RANK: Record<LinkCheckEntry["state"], number> = { wrong: 2, todo: 1, done: 0 };
+export const linkState = (key: string, linkTicked: string[], replaced: Record<string, string> = {}): LinkState =>
+  key in replaced ? "replaced" : linkTicked.includes(key) ? "done" : "todo";
+const RANK: Record<LinkCheckEntry["state"], number> = { todo: 1, done: 0 };
 /** Every changed link (page and shared-piece groups) for the frame, one entry per raw href, capped at 100. Replaced by Hand links are omitted. */
-export function linkCheckList(groups: LinkGroup[], linkTicked: string[], wrong: Record<string, string>, replaced: Record<string, string> = {}): LinkCheckEntry[] {
+export function linkCheckList(groups: LinkGroup[], linkTicked: string[], replaced: Record<string, string> = {}): LinkCheckEntry[] {
   const out = new Map<string, LinkCheckEntry["state"]>();
   for (const l of groups.flatMap(g => g.links)) {
-    const st = linkState(l.key, linkTicked, wrong, replaced);
+    const st = linkState(l.key, linkTicked, replaced);
     if (st === "replaced") continue;
     const prev = out.get(l.href);
     if (prev === undefined ? out.size < MAX_LISTED_LINKS : RANK[st] > RANK[prev]) out.set(l.href, st);
@@ -94,26 +94,26 @@ export function linkText(l: { href: string; kind: LinkKind; label?: string | nul
   return linkAddress(l);
 }
 export const linkAddress = (l: { href: string; kind: LinkKind }) => l.kind === "mail" || l.kind === "phone" ? l.href.replace(/^(mailto|tel):/i, "") : l.href;
-export type PageCheck = { id: string; todo: string; done: string; ticked: boolean; link?: ReviewLink; wrong?: boolean; state?: LinkState; auto: boolean };
-export const LINK_BADGE: Record<LinkState, string> = { todo: "Needs Checking", done: "Confirmed", wrong: "Marked as Wrong", replaced: "Replaced by Hand" };
+export type PageCheck = { id: string; todo: string; done: string; ticked: boolean; link?: ReviewLink; state?: LinkState; auto: boolean };
+export const LINK_BADGE: Record<LinkState, string> = { todo: "Needs Checking", done: "Confirmed", replaced: "Replaced by Hand" };
 /** Resolved links: confirmed, or replaced by hand after Change This Link. */
 export const linkResolved = (st: LinkState) => st === "done" || st === "replaced";
 /** "2 of 3 links need checking", or "All links confirmed". */
-export function linksNeedChecking(links: ReviewLink[], linkTicked: string[], wrong: Record<string, string>, replaced: Record<string, string> = {}): string | null {
+export function linksNeedChecking(links: ReviewLink[], linkTicked: string[], replaced: Record<string, string> = {}): string | null {
   if (!links.length) return null;
-  const left = links.filter(l => !linkResolved(linkState(l.key, linkTicked, wrong, replaced))).length;
+  const left = links.filter(l => !linkResolved(linkState(l.key, linkTicked, replaced))).length;
   return left ? `${left} of ${links.length} ${links.length === 1 ? "link needs" : "links need"} checking` : "All links confirmed";
 }
 export const LINK_HINT = "Dashed orange outlines on the page mark links to check. Click one to confirm where it goes.";
 /** Plain suggestions shown on the Pages step and in the Checking Changes bar; never ticked, stored or gating. */
 export const PAGE_SUGGESTIONS = ["How the page looks on a phone", "That the text that changed reads correctly", "That the images and layout look right"];
 /** One item per changed link on the page; each ticks itself when the link is confirmed. Pages without links have none. */
-export function pageChecks(row: ChangedRow, links: ReviewLink[], linkTicked: string[], wrong: string[], pages: Pick<ManagerPage, "name" | "path">[] = []): PageCheck[] {
+export function pageChecks(row: ChangedRow, links: ReviewLink[], linkTicked: string[], pages: Pick<ManagerPage, "name" | "path">[] = []): PageCheck[] {
   if (!row.page) return [];
   const items: PageCheck[] = [];
   for (const l of links) {
     const name = linkText(l, pages), to = linkAddress(l);
-    items.push({ id: "link:" + l.key, todo: `Check that “${name}” goes to ${to}.`, done: `I confirmed “${name}” goes to ${to}.`, ticked: linkTicked.includes(l.key) && !wrong.includes(l.key), link: l, wrong: wrong.includes(l.key), state: linkState(l.key, linkTicked, wrong), auto: true });
+    items.push({ id: "link:" + l.key, todo: `Check that “${name}” goes to ${to}.`, done: `I confirmed “${name}” goes to ${to}.`, ticked: linkTicked.includes(l.key), link: l, state: linkState(l.key, linkTicked), auto: true });
   }
   return items;
 }

@@ -14,7 +14,7 @@ const pages = [{ name: "Inspiration Gallery", path: "/gallery", build_status: "r
 beforeEach(() => {
   vi.clearAllMocks(); walk.reset(); m.phone = false;
   m.resolve.mockResolvedValue({ href: "/contact", blank: true }); m.save.mockResolvedValue(["Homepage: changed link to /gallery"]);
-  walk.update(s => ({ ...s, open: true, ticked: ["page:/"], approvals: { "page:/": "p1" }, linkTicked: ["/|/team"], linkApprovals: { "/|/team": "l1" }, linkWrong: { [link.key]: "wrong" } }));
+  walk.update(s => ({ ...s, open: true, ticked: ["page:/"], approvals: { "page:/": "p1" }, linkTicked: ["/|/team"], linkApprovals: { "/|/team": "l1" } }));
   walk.editLink({ link, group, rows: [], fingerprint: "own" });
 });
 afterEach(cleanup);
@@ -61,11 +61,27 @@ it("resolution failure offers only the existing Manual fallback, including share
   expect(m.fallback).toHaveBeenCalledWith(link, expect.objectContaining({ page: null }), rows, "own");
   expect(m.save).not.toHaveBeenCalled();
 });
-it("phone uses a bottom sheet and Cancel discards local input without changing the wrong link", async () => {
+it("phone uses a bottom sheet and Cancel discards local input without changing approvals", async () => {
   m.phone = true; render(<ReviewLinkEditor pages={pages} />);
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
   fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/gallery" } });
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  expect(walk.get().reviewEdit).toBeNull(); expect(walk.get().linkWrong[link.key]).toBe("wrong"); expect(m.save).not.toHaveBeenCalled();
+  expect(walk.get().reviewEdit).toBeNull(); expect(walk.get().linkTicked).toEqual(["/|/team"]); expect(m.save).not.toHaveBeenCalled();
+});
+it("editing a confirmed link replaces the old confirmation and leaves the new link unconfirmed", async () => {
+  walk.update(s => ({ ...s, linkTicked: [...s.linkTicked, link.key], linkApprovals: { ...s.linkApprovals, [link.key]: "confirmed" } }));
+  render(<ReviewLinkEditor pages={pages} />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/gallery" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
+  await waitFor(() => expect(m.notify).toHaveBeenCalled());
+  expect(walk.get().linkReplaced[link.key]).toBe("own");
+  expect(walk.get().linkTicked).not.toContain(link.key);
+  expect(walk.get().linkTicked).not.toContain("/|/gallery");
+});
+it("legacy wrong state is safely dropped without changing current approvals", () => {
+  walk.update(s => ({ ...s, linkWrong: { [link.key]: "legacy" } }));
+  expect(walk.get()).not.toHaveProperty("linkWrong");
+  expect(walk.get().linkTicked).toEqual(["/|/team"]);
 });

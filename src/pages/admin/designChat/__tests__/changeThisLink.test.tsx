@@ -27,31 +27,29 @@ beforeEach(() => { vi.clearAllMocks(); walk.reset(); m.editing = false; m.state 
 afterEach(cleanup);
 
 async function changeWrong(h: ReturnType<typeof render>) {
-  const { linkFingerprints } = await import("../SubmitWalkthrough");
-  act(() => walk.markWrong("/a|/gallery", linkFingerprints(m.data)["/a|/gallery"]));
-  fireEvent.click(screen.getByRole("button", { name: "Change This Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit Link Destination" }));
   await screen.findByRole("button", { name: "Open in Manual Edit" });
   fireEvent.click(screen.getByRole("button", { name: "Open in Manual Edit" }));
   await waitFor(() => expect(m.start).toHaveBeenCalled());
   m.editing = true; h.rerender(<Host />);
 }
 
-describe("Change This Link", () => {
-  it("appears only for wrong links", async () => {
-    const h = render(<Host />); toLinks();
-    expect(screen.queryByRole("button", { name: "Change This Link" })).toBeNull();
-    const { linkFingerprints } = await import("../SubmitWalkthrough");
-    act(() => walk.markWrong("/a|/gallery", linkFingerprints(m.data)["/a|/gallery"]));
-    expect(screen.getByRole("button", { name: "Change This Link" })).toBeTruthy();
-    h.unmount();
+describe("Edit Link Destination", () => {
+  it("opens the inline panel directly from an unresolved or confirmed row", async () => {
+    render(<Host />); toLinks();
+    act(() => walk.confirmLink("/a|/gallery", "fp", true));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Link Destination" }));
+    expect(walk.get().reviewEdit?.link.href).toBe("/gallery");
+    expect(m.start).not.toHaveBeenCalled();
+    expect(walk.get().fix).toBeNull();
   });
-  it("shows in the Check This Link window only once marked wrong", async () => {
+  it("dialog editing closes it and opens the inline panel without a wrong decision", () => {
     render(<Host />);
     act(() => walk.update(w => ({ ...w, linkCheck: { raw: "/gallery", href: "/gallery", kind: "internal", label: null, path: "/a", page: "/a" } })));
-    expect(screen.queryByRole("button", { name: "Change This Link" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "This Isn't Right" }));
-    act(() => walk.update(w => ({ ...w, linkCheck: { raw: "/gallery", href: "/gallery", kind: "internal", label: null, path: "/a", page: "/a" } })));
-    expect(screen.getByRole("button", { name: "Change This Link" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Link Destination" }));
+    expect(walk.get().linkCheck).toBeNull();
+    expect(walk.get().reviewEdit?.link.href).toBe("/gallery");
+    expect(m.start).not.toHaveBeenCalled();
   });
   it("resolution fallback opens Manual Edit Mode on the link's page and shows the banner", async () => {
     const h = render(<Host />); toLinks();
@@ -63,14 +61,14 @@ describe("Change This Link", () => {
     expect(screen.getByText("Changing a link on About. Find the link to /gallery, change where it goes, then Save Changes.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Back to Review" })).toBeTruthy();
   });
-  it("Back to Review without a save leaves the link wrong", async () => {
+  it("Back to Review without a save leaves the link needing checking", async () => {
     const h = render(<Host />); toLinks();
     await changeWrong(h);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Back to Review" })); });
     expect(walk.get().fix).toBeNull();
     expect(walk.get().open).toBe(true);
     expect(walk.get().step).toBe("links");
-    expect(linkState("/a|/gallery", walk.get().linkTicked, walk.get().linkWrong, walk.get().linkReplaced)).toBe("wrong");
+    expect(linkState("/a|/gallery", walk.get().linkTicked, walk.get().linkReplaced)).toBe("todo");
   });
   it("after a save becomes Replaced by Hand, counts as approved and unblocks Next; the new link needs checking", async () => {
     const h = render(<Host />); toLinks();
@@ -92,7 +90,7 @@ describe("Change This Link", () => {
     expect(p.linksLeft).toBe(1);
     act(() => walk.confirmLink("/a|/gallery-new", linkFingerprints(m.data)["/a|/gallery-new"], true));
     expect((screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
-    expect(linkCheckList(m.data.links.groups, walk.get().linkTicked, walk.get().linkWrong, walk.get().linkReplaced).map(e => e.raw)).toEqual(["/gallery-new"]);
+    expect(linkCheckList(m.data.links.groups, walk.get().linkTicked, walk.get().linkReplaced).map(e => e.raw)).toEqual(["/gallery-new"]);
   });
   it("a fingerprint change clears Replaced by Hand", () => {
     act(() => walk.update(w => ({ ...w, linkReplaced: { "/a|/gallery": "old" } })));
@@ -109,7 +107,6 @@ describe("Change This Link", () => {
     m.editing = true; const h = render(<Host />);
     m.editing = false; h.rerender(<Host />);
     expect(walk.get().fix).toBeNull();
-    expect(walk.get().linkWrong).toEqual({});
   });
   it("shared-piece groups use the first changed page", () => {
     const rows = [{ key: "other", page: null, how: "x" }, { key: "page:/b", page: { name: "Blog", path: "/b" }, how: "x" }] as any;

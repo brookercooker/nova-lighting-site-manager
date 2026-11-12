@@ -55,11 +55,11 @@ describe("link-click validation", () => {
 
 describe("per-page checks", () => {
   it("lists only changed links; a page without links has no items", () => {
-    expect(pageChecks(row as any, [], [], [])).toEqual([]);
-    const link = pageChecks(row as any, [team as any], ["/a|/team"], []).at(-1)!;
+    expect(pageChecks(row as any, [], [])).toEqual([]);
+    const link = pageChecks(row as any, [team as any], ["/a|/team"]).at(-1)!;
     expect(link.done).toBe("I confirmed “Team” goes to /team.");
     expect(link.auto).toBe(true);
-    expect(pageChecks(row as any, [team as any], [], []).map(i => i.todo)).toEqual(["Check that “Team” goes to /team."]);
+    expect(pageChecks(row as any, [team as any], []).map(i => i.todo)).toEqual(["Check that “Team” goes to /team."]);
   });
   it("ignores older saved general ticks without crashing", () => {
     walk.update(s => ({ ...s, pageChecks: { "page:/a": { fp: "v1", ids: ["phone"] } } } as any));
@@ -89,7 +89,7 @@ describe("Approve gating and the Check This Link window", () => {
     render(<Host />);
     expect(panel().getByText(/Dashed orange outlines/)).toBeInTheDocument();
     const row = within(document.querySelector("[data-walk-link='/a|/team']") as HTMLElement);
-    expect(row.getAllByRole("button").map(b => b.textContent)).toEqual(["Show on Page", "Check This Link"]);
+    expect(row.getAllByRole("button").map(b => b.textContent)).toEqual(["Show on Page", "Check This Link", "Edit Link Destination"]);
     expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
     fireEvent.click(row.getByRole("button", { name: "Check This Link" }));
     expect(win().getByText("A page on your site")).toBeInTheDocument();
@@ -106,16 +106,15 @@ describe("Approve gating and the Check This Link window", () => {
     expect(panel().getByText(/1 of 1 link/)).toBeInTheDocument();
     expect(panel().getByRole("button", { name: "Next" })).toBeEnabled();
   });
-  it("This Isn't Right marks the link and blocks Next until it changes", () => {
+  it("Edit Link Destination opens in-review editing even before verification", () => {
     act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"], viewed: ["page:/a"] })));
     render(<Host />);
     fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    fireEvent.click(win().getByRole("button", { name: "This Isn't Right" }));
-    expect(panel().getByText("Marked as Wrong")).toBeInTheDocument();
-    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
-    m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...team, requestIds: ["r1", "r2"] }] }] } };
-    act(() => walk.update(s => ({ ...s })));
-    expect(Object.keys(walk.get().linkWrong)).toEqual([]);
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
+    fireEvent.click(win().getByRole("button", { name: "Edit Link Destination" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(walk.get().reviewEdit?.link.key).toBe("/a|/team");
+    expect(walk.get().fix).toBeNull();
   });
   it("opens external HTTPS destinations directly and requires an actual opening click", () => {
     render(<LinkCheckWindow />);
@@ -176,7 +175,6 @@ describe("Approve gating and the Check This Link window", () => {
     act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team", href: "/team", kind: "internal", label: null, path: "/a", page: "/a" } })));
     fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
     expect(walk.get().linkTicked).toEqual([]);
-    expect(walk.get().linkWrong).toEqual({});
     expect(screen.queryByRole("dialog")).toBeNull();
   });
   it("a page-not-found link may still be opened and confirmed intentionally", () => {
@@ -228,7 +226,7 @@ function Bridge({ active, links = [] }: { active: boolean; links?: any[] }) {
 }
 const ready = (v = 2) => ({ source: "nova-site", type: "link-check-ready", v, enabled: true });
 describe("frame bridge", () => {
-  const Wired = () => { const s = useWalk(); const links = linkCheckList(m.data.links.groups, s.linkTicked, s.linkWrong); return <Bridge active={s.checking?.kind === "page"} links={links} />; };
+  const Wired = () => { const s = useWalk(); const links = linkCheckList(m.data.links.groups, s.linkTicked, s.linkReplaced); return <Bridge active={s.checking?.kind === "page"} links={links} />; };
   it("sends the list on enable, re-sends on state change, opens only listed v2 clicks, and switches off on Keep Editing", () => {
     const f = frameWith();
     const post = vi.spyOn(f.contentWindow!, "postMessage");
@@ -247,8 +245,8 @@ describe("frame bridge", () => {
     expect(win().getByText("Is this the correct destination?")).toBeInTheDocument();
     act(() => walk.confirmLink("/a|/team", "fp", true));
     expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "done" }] }, ORIGIN);
-    act(() => walk.markWrong("/a|/team", "fp"));
-    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "wrong" }] }, ORIGIN);
+    act(() => walk.confirmLink("/a|/team", "fp", false));
+    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "todo" }] }, ORIGIN);
     act(() => walk.keepEditing());
     expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: false }, ORIGIN);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -279,16 +277,14 @@ describe("links needing checks", () => {
   it("shows badges and Show on Page sends focus; the Links step says Needs Checking", () => {
     const f = frameWith();
     const post = vi.spyOn(f.contentWindow!, "postMessage");
-    walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], linkWrong: {}, checking: { key: "/a|/team", kind: "link", name: "Team" } }));
+    walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], checking: { key: "/a|/team", kind: "link", name: "Team" } }));
     render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
     expect(screen.getAllByText("Needs Checking").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Show on Page" }));
     expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check-focus", raw: "/team" }, ORIGIN);
     act(() => walk.confirmLink("/a|/team", "fp", true));
     expect(screen.getByText("Confirmed")).toBeInTheDocument();
-    act(() => walk.markWrong("/a|/team", "fp"));
-    expect(screen.getByText("Marked as Wrong")).toBeInTheDocument();
-    act(() => walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], linkTicked: [], linkWrong: {} })));
+    act(() => walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], linkTicked: [] })));
     const link = document.querySelector("[data-walk-link='/a|/team']") as HTMLElement;
     expect(within(link).getByText("Needs Checking")).toBeInTheDocument();
     expect(within(link).queryByText("Not Reviewed")).toBeNull();
