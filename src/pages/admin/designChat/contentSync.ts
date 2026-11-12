@@ -2,7 +2,8 @@ import { mergeChangeLines } from "../changeLines";
 import { toast } from "sonner";
 import { postToHelper, RELAY, type RelayState } from "./helper";
 
-export const CONTENT_SAVED = "nova:content-saved";
+export { CONTENT_SAVED } from "./contentSavedEvent";
+import { CONTENT_SAVED } from "./contentSavedEvent";
 export const CONTENT_SYNC_CHANGED = "nova:content-sync-changed";
 export const SYNC_RETRY_MS = 20_000;
 export const SYNC_RETRY_WINDOW_MS = 30 * 60_000;

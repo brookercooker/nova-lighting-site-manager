@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 import type { LinkClick } from "./linkCheck";
 
 /** Session-only walkthrough progress, outside any component so it survives the dialog closing for View Page. */
+/** The return point of Change This Link: which wrong link is being replaced by hand, and whether a save happened. */
+export type LinkFix = { key: string; fingerprint: string; path: string; pageName: string; address: string; saved: boolean; returning?: boolean };
 export type WalkStep = "pages" | "links" | "checklist";
 export type Checking = { key: string; kind: "page" | "link"; name: string } | null;
 export type WalkState = {
@@ -15,8 +17,12 @@ export type WalkState = {
   linkCheck: (LinkClick & { page: string | null }) | null;
   /** Set by each Submit opening; consumed by the one automatic open of the first changed page. */
   autoOpen: boolean;
+  /** Wrong links the reviewer replaced by hand in Manual Edit Mode, with the link fingerprint at the time. */
+  linkReplaced: Record<string, string>;
+  /** Set while Change This Link is open in Manual Edit Mode; cleared by Keep Editing and normal mode exits. */
+  fix: LinkFix | null;
 };
-const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkWrong: {}, linkCheck: null, autoOpen: false });
+const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkWrong: {}, linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null });
 let state = initial();
 const listeners = new Set<() => void>();
 const hosts = new Map<string, boolean>();
@@ -29,7 +35,24 @@ export const walk = {
   mount(id: string, fallback: boolean) { hosts.set(id, fallback); return () => { hosts.delete(id); }; },
   open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null, autoOpen: true })); },
   close() { walk.update((s) => ({ ...s, open: false })); },
-  keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", linkCheck: null })); },
+  keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", linkCheck: null, fix: null })); },
+  /** Change This Link: remember the return point (step "links", which link) and close the walkthrough. */
+  startFix(fix: Omit<LinkFix, "saved" | "returning">) { walk.update(s => ({ ...s, open: false, checking: null, linkCheck: null, step: "links", fix: { ...fix, saved: false } })); },
+  fixSaved() { if (state.fix && !state.fix.saved) walk.update(s => s.fix ? { ...s, fix: { ...s.fix, saved: true } } : s); },
+  fixReturning(on: boolean) { if (state.fix) walk.update(s => s.fix ? { ...s, fix: { ...s.fix, returning: on } } : s); },
+  /** Leaving Manual Edit Mode some other way (or cancelled entry): forget the return point, change nothing else. */
+  clearFix() { if (state.fix) walk.update(s => ({ ...s, fix: null })); },
+  /** Back to Review: after a save the link becomes Replaced by Hand; without one it stays wrong. Reopens on the Links step. */
+  finishFix() {
+    const fix = state.fix;
+    walk.update(s => {
+      if (!fix?.saved) return { ...s, fix: null };
+      const linkWrong = { ...s.linkWrong }; delete linkWrong[fix.key];
+      const linkApprovals = { ...s.linkApprovals }; delete linkApprovals[fix.key];
+      return { ...s, fix: null, linkWrong, linkApprovals, linkTicked: s.linkTicked.filter(k => k !== fix.key), linkReplaced: { ...s.linkReplaced, [fix.key]: fix.fingerprint } };
+    });
+    walk.reopen("links");
+  },
   /** Confirm (or unconfirm) a changed link from the Check This Link window; counts like the Links step's approval. */
   confirmLink(key: string, fingerprint: string, on: boolean) {
     walk.update(s => {
@@ -53,12 +76,15 @@ export const walk = {
       return { ...s, [field]: map, [ticks]: toggle(s[ticks], key, !approved), changed: s.changed.filter(k => k !== key) };
     });
   },
-  reconcile(pages: Record<string, string>, links?: Record<string, string>) {
+  /** `own` is each link's own fingerprint (key, address, requests); Replaced by Hand uses it because hand saves change the page-level link fingerprint. */
+  reconcile(pages: Record<string, string>, links?: Record<string, string>, own?: Record<string, string>) {
     const invalid = Object.entries(state.approvals).filter(([k,v]) => pages[k] !== v).map(([k]) => k);
     const badLinks = links ? Object.entries(state.linkApprovals).filter(([k,v]) => links[k] !== v).map(([k]) => k) : [];
     const fixedLinks = links ? Object.entries(state.linkWrong).filter(([k, v]) => links[k] !== v).map(([k]) => k) : [];
-    if (!invalid.length && !badLinks.length && !fixedLinks.length) return;
+    const staleReplaced = own ? Object.entries(state.linkReplaced).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
+    if (!invalid.length && !badLinks.length && !fixedLinks.length && !staleReplaced.length) return;
     walk.update(s => ({ ...s,
+      linkReplaced: Object.fromEntries(Object.entries(s.linkReplaced).filter(([k]) => !staleReplaced.includes(k))),
       linkWrong: Object.fromEntries(Object.entries(s.linkWrong).filter(([k]) => !fixedLinks.includes(k))), ticked: s.ticked.filter(k => !invalid.includes(k)), viewed: s.viewed.filter(k => !invalid.includes(k)),
       linkTicked: s.linkTicked.filter(k => !badLinks.includes(k)), linkOpened: s.linkOpened.filter(k => !badLinks.includes(k)),
       approvals: Object.fromEntries(Object.entries(s.approvals).filter(([k]) => !invalid.includes(k))), linkApprovals: Object.fromEntries(Object.entries(s.linkApprovals).filter(([k]) => !badLinks.includes(k))),

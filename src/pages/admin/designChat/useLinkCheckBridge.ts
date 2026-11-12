@@ -11,7 +11,7 @@ export function LinkCheckBridge({ root, frameKey }: { root: RefObject<HTMLElemen
   const { state } = useDesignChat();
   const s = useWalk();
   const data = useWalkthroughData(state, true);
-  const links = data?.links.status === "ok" ? linkCheckList(data.links.groups, s.linkTicked, s.linkWrong) : [];
+  const links = data?.links.status === "ok" ? linkCheckList(data.links.groups, s.linkTicked, s.linkWrong, s.linkReplaced) : [];
   useLinkCheckBridge(root, true, frameKey, links);
   return null;
 }

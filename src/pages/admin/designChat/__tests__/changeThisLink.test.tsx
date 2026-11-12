@@ -1,0 +1,117 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SubmitWalkthroughPanel, LinkCheckWindow, walkProgress } from "../SubmitWalkthrough";
+import { walk, useWalk } from "../submitWalkthroughStore";
+import { LINK_BADGE, fixPage, linkCheckList, linkState } from "../linkCheck";
+import { LinkFixBanner, useClearFixOnExit } from "../linkFix";
+import { CONTENT_SAVED } from "../contentSavedEvent";
+
+const m = vi.hoisted(() => ({ state: null as any, data: null as any, editing: false, select: vi.fn(), start: vi.fn(), review: vi.fn(), register: vi.fn() }));
+vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, editing: m.editing, setReviewOpen: m.review, refreshSoon: vi.fn(), showPreviewPath: vi.fn(), selectPage: m.select, startEditing: m.start }) }));
+vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
+vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
+vi.mock("../pageSelection", () => ({ workingPageFrom: (p: any) => ({ id: p.id, name: p.name, path: p.path }) }));
+vi.mock("../usePreviewPage", () => ({ registerPreviewPage: (p: any) => { m.register(p); return Promise.resolve({ id: "id" + p.path, ...p }); } }));
+
+const link = (href: string, page = "/a") => ({ key: `${page}|${href}`, href, kind: "internal", label: null, requestIds: [] });
+const groups = (links: any[]) => [{ page: { name: "About", path: "/a" }, label: "About", links }];
+function setData(links: any[], extra: any[] = []) {
+  m.data = { rows: [{ key: "page:/a", page: { name: "About", path: "/a" }, how: "x" }], pages: [], pagesStatus: "ok",
+    links: { status: "ok", groups: [...groups(links), ...extra], unread: 0, partial: false, truncated: false } };
+}
+function Host() { const s = useWalk(); useClearFixOnExit(m.editing); return <>{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<LinkCheckWindow /><LinkFixBanner /></>; }
+const toLinks = () => act(() => { walk.open("panel"); walk.update(w => ({ ...w, step: "links", ticked: ["page:/a"], autoOpen: false, checking: null })); });
+
+beforeEach(() => { vi.clearAllMocks(); walk.reset(); m.editing = false; m.state = { busy: false, publish: { ok: true, open: 1 }, review: { enabled: true } }; setData([link("/gallery")]); });
+afterEach(cleanup);
+
+async function changeWrong(h: ReturnType<typeof render>) {
+  const { linkFingerprints } = await import("../SubmitWalkthrough");
+  act(() => walk.markWrong("/a|/gallery", linkFingerprints(m.data)["/a|/gallery"]));
+  fireEvent.click(screen.getByRole("button", { name: "Change This Link" }));
+  await waitFor(() => expect(m.start).toHaveBeenCalled());
+  m.editing = true; h.rerender(<Host />);
+}
+
+describe("Change This Link", () => {
+  it("appears only for wrong links", async () => {
+    const h = render(<Host />); toLinks();
+    expect(screen.queryByRole("button", { name: "Change This Link" })).toBeNull();
+    const { linkFingerprints } = await import("../SubmitWalkthrough");
+    act(() => walk.markWrong("/a|/gallery", linkFingerprints(m.data)["/a|/gallery"]));
+    expect(screen.getByRole("button", { name: "Change This Link" })).toBeTruthy();
+    h.unmount();
+  });
+  it("shows in the Check This Link window only once marked wrong", async () => {
+    render(<Host />);
+    act(() => walk.update(w => ({ ...w, linkCheck: { raw: "/gallery", href: "/gallery", kind: "internal", label: null, path: "/a", page: "/a" } })));
+    expect(screen.queryByRole("button", { name: "Change This Link" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "This Isn't Right" }));
+    act(() => walk.update(w => ({ ...w, linkCheck: { raw: "/gallery", href: "/gallery", kind: "internal", label: null, path: "/a", page: "/a" } })));
+    expect(screen.getByRole("button", { name: "Change This Link" })).toBeTruthy();
+  });
+  it("opens Manual Edit Mode on the link's page and shows the banner", async () => {
+    const h = render(<Host />); toLinks();
+    await changeWrong(h);
+    expect(m.register).toHaveBeenCalledWith({ path: "/a", name: "About" });
+    expect(m.select).toHaveBeenCalledWith({ id: "id/a", name: "About", path: "/a" });
+    expect(walk.get().open).toBe(false);
+    expect(walk.get().fix).toMatchObject({ key: "/a|/gallery", path: "/a", saved: false });
+    expect(screen.getByText("Changing a link on About. Find the link to /gallery, change where it goes, then Save Changes.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to Review" })).toBeTruthy();
+  });
+  it("Back to Review without a save leaves the link wrong", async () => {
+    const h = render(<Host />); toLinks();
+    await changeWrong(h);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Back to Review" })); });
+    expect(walk.get().fix).toBeNull();
+    expect(walk.get().open).toBe(true);
+    expect(walk.get().step).toBe("links");
+    expect(linkState("/a|/gallery", walk.get().linkTicked, walk.get().linkWrong, walk.get().linkReplaced)).toBe("wrong");
+  });
+  it("after a save becomes Replaced by Hand, counts as approved and unblocks Next; the new link needs checking", async () => {
+    const h = render(<Host />); toLinks();
+    await changeWrong(h);
+    act(() => { window.dispatchEvent(new Event(CONTENT_SAVED)); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Done, Back to Review" })); });
+    m.editing = false;
+    // The refetch lists the new destination alongside the old one, whose fingerprint is unchanged.
+    const old = m.data.links.groups[0].links[0];
+    const { linkFingerprints } = await import("../SubmitWalkthrough");
+    setData([old, link("/gallery-new")]);
+    h.rerender(<Host />);
+    expect(screen.getByText(LINK_BADGE.replaced)).toBeTruthy();
+    expect(screen.getByText(LINK_BADGE.todo)).toBeTruthy();
+    expect(screen.getByText("1 of 2 links approved")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByRole("button", { name: "Check This Link" })).toHaveLength(1);
+    const p = walkProgress(m.data, walk.get());
+    expect(p.linksLeft).toBe(1);
+    act(() => walk.confirmLink("/a|/gallery-new", linkFingerprints(m.data)["/a|/gallery-new"], true));
+    expect((screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect(linkCheckList(m.data.links.groups, walk.get().linkTicked, walk.get().linkWrong, walk.get().linkReplaced).map(e => e.raw)).toEqual(["/gallery-new"]);
+  });
+  it("a fingerprint change clears Replaced by Hand", () => {
+    act(() => walk.update(w => ({ ...w, linkReplaced: { "/a|/gallery": "old" } })));
+    walk.reconcile({}, { "/a|/gallery": "x" }, { "/a|/gallery": "old" });
+    expect(walk.get().linkReplaced).toEqual({ "/a|/gallery": "old" });
+    walk.reconcile({}, { "/a|/gallery": "x" }, { "/a|/gallery": "new" });
+    expect(walk.get().linkReplaced).toEqual({});
+  });
+  it("Keep Editing and leaving Manual Edit Mode clear the return point", () => {
+    walk.startFix({ key: "k", fingerprint: "f", path: "/a", pageName: "About", address: "/x" });
+    walk.keepEditing();
+    expect(walk.get().fix).toBeNull();
+    walk.startFix({ key: "k", fingerprint: "f", path: "/a", pageName: "About", address: "/x" });
+    m.editing = true; const h = render(<Host />);
+    m.editing = false; h.rerender(<Host />);
+    expect(walk.get().fix).toBeNull();
+    expect(walk.get().linkWrong).toEqual({});
+  });
+  it("shared-piece groups use the first changed page", () => {
+    const rows = [{ key: "other", page: null, how: "x" }, { key: "page:/b", page: { name: "Blog", path: "/b" }, how: "x" }] as any;
+    expect(fixPage({ page: null, label: "Header", links: [] }, rows)).toEqual({ path: "/b", name: "Blog" });
+    expect(fixPage({ page: null, label: "Header", links: [] }, [])).toEqual({ path: "/", name: "Home" });
+    expect(fixPage({ page: { name: "About", path: "/a" }, label: "About", links: [] }, rows)).toEqual({ path: "/a", name: "About" });
+  });
+});

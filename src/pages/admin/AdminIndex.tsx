@@ -24,6 +24,7 @@ import WorkingPageChip from "./designChat/WorkingPageChip";
 import ContentSyncNote from "./designChat/ContentSyncNote";
 import ReviewChangesView from "./designChat/ReviewChangesView";
 import { SubmitWalkthroughPanel } from "./designChat/SubmitWalkthrough";
+import { LinkFixBanner, useClearFixOnExit } from "./designChat/linkFix";
 import { useWalk, walk } from "./designChat/submitWalkthroughStore";
 import { HEADER_HEIGHT_CLASS } from "./designChat/layout";
 import { rememberTopDropAnchor } from "./designChat/TopDropPanel";
@@ -240,6 +241,7 @@ function AdminShell() {
   const sidePanelWidth = layout.tier === "wide" ? undefined : clampPanelWidth(panelWidth, layout.tier);
   const reviewShown = designChat.reviewOpen && !manual && (phone || !chatCollapsed);
   const walkthrough = useWalk();
+  useClearFixOnExit(editing);
   useEffect(() => {
     if (!walkthrough.open) return;
     designChat.setReviewOpen(true);
@@ -394,7 +396,8 @@ function AdminShell() {
               </div>
             )}
             {tab === "preview" && editing && workingPage?.id && (
-              <div className="h-full w-full">
+              <div className="flex h-full w-full flex-col [&>*:last-child]:min-h-0 [&>*:last-child]:flex-1">
+                <LinkFixBanner />
                 <Suspense fallback={<TabSkeleton />}>
                   {objectOpen ? (
                     <DesignTab key={`object-${objectOpen.id}`} embedded pageId={workingPage.id} objectId={objectOpen.id} onObjectInfo={setObjectInfo} />

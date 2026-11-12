@@ -155,3 +155,5 @@
 - [x] Walkthrough fixes: no "Tick every check first" note; auto-open first changed page once per Submit (desktop only); Show on Page opens the page then focuses after link-check-ready; "Link to <page>" fallback for unlabelled internal links.
 - [x] Walkthrough: per-page ticks are link confirmations only; "Things to Look At on Each Page" plain bullets on the Pages step and in the Checking Changes bar.
 - [x] Walkthrough: link verification lives only on the Check the Changed Links step (Show on Page + Check This Link); step 1 Approve needs only an opened page; link bridge runs only on step 2.
+- [x] Walkthrough: Change This Link for links marked wrong (Manual Edit Mode on the link's page, banner with Back to Review, Replaced by Hand after a save).
+- [ ] Change This Link: select the link in the edit frame by its destination — needs a Public `edit-select-link` message (spec in chat, Nov 12).

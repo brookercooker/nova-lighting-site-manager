@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Eye, Send, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Pencil, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Eye, Send, Undo2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,9 @@ import { useWalkthroughData, type WalkthroughData } from "./useWalkthroughData";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { changeFingerprint, OTHER_KEY, checklistItems, internalLinkChip, itemTicked, linkChip, remaining, type Chip, type ManagerPage, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 import { add, toggle, useWalk, walk, type WalkState, type WalkStep } from "./submitWalkthroughStore";
-import { KIND_TEXT, LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, linkState, focusWhenReady, linkAddress, linkText, linksNeedChecking, matchChangedLink, pageChecks, pageLinks, postLinkFocus, type PageCheck } from "./linkCheck";
+import { KIND_TEXT, LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, linkState, focusWhenReady, linkAddress, linkText, linksNeedChecking, linkResolved, matchChangedLink, pageChecks, pageLinks, postLinkFocus, type PageCheck } from "./linkCheck";
 import { shownPreviewFrame } from "./previewNavigate";
+import { useChangeLink } from "./linkFix";
 
 /** Navigation that also works when the dialog is rendered outside a router (tests). */
 function useGoToPreview(): () => void {
@@ -38,7 +39,7 @@ export function walkProgress(data: WalkthroughData, s = walk.get()) {
   const pagesLeft = pageRows.filter((r) => !s.ticked.includes(r.key)).length;
   const allLinks = data.links.status === "ok" ? data.links.groups.flatMap((g) => g.links) : [];
   const hasLinksStep = data.links.status === "failed" || allLinks.length > 0;
-  const linksLeft = allLinks.filter((l) => !s.linkTicked.includes(l.key)).length;
+  const linksLeft = allLinks.filter((l) => !linkResolved(linkState(l.key, s.linkTicked, s.linkWrong, s.linkReplaced))).length;
   const items = checklistItems(pageRows, allLinks.length > 0, pagesLeft === 0, linksLeft === 0);
   const checksLeft = items.filter((i) => !itemTicked(i, s.checks)).length;
   const steps: WalkStep[] = ["pages", ...(hasLinksStep ? ["links" as const] : []), "checklist"];
@@ -91,6 +92,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
   const data = useWalkthroughData(state, true);
   const p = walkProgress(data, s);
   const goToPreview = useGoToPreview();
+  const changeLink = useChangeLink();
   const [sending, setSending] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
@@ -101,7 +103,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
   useEffect(() => {
     if (data.pagesStatus && data.pagesStatus !== "ok") return;
     if (state && count === 0 && data.rows.length === 0) { walk.reset(); return; }
-    walk.reconcile(pagePrints, data.links.status === "ok" ? linkPrints : undefined);
+    walk.reconcile(pagePrints, data.links.status === "ok" ? linkPrints : undefined, data.links.status === "ok" ? ownLinkFingerprints(data) : undefined);
   }, [count, changeFingerprint(pagePrints), changeFingerprint(linkPrints), data.pagesStatus, data.links.status]);
   const reviewOn = state?.review?.enabled !== false;
   const label = reviewOn ? "Submit for Review" : "Publish";
@@ -157,7 +159,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
           const already = walk.get().checking?.key === l.key;
           if (!already) openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
           if (already) postLinkFocus(shownPreviewFrame(document), l.href); else focusWhenReady(() => shownPreviewFrame(document), l.href);
-        }} />}
+        }} onChange={(l, g) => void changeLink(l, g, p.pageRows, ownLinkPrint(l))} />}
         {p.step === "checklist" && (
           <ul className="space-y-3" aria-label="Submission Checklist">
             {p.items.map((item) => {
@@ -247,9 +249,15 @@ export function linkFingerprints(data: WalkthroughData): Record<string, string> 
   return Object.fromEntries(data.links.status === "ok" ? data.links.groups.flatMap(g => g.links.map(l => [l.key, changeFingerprint({ page: g.page?.path, links: g.links.map(x => ({ key: x.key, href: x.href, requestIds: x.requestIds })).sort((a,b) => a.key.localeCompare(b.key)), pageChange: data.rows.find(r => r.page?.path === g.page?.path)?.fingerprint })])) : []);
 }
 
+/** One link's own fingerprint: its key, address and the requests that changed it. Unaffected by hand edits elsewhere on the page. */
+export const ownLinkPrint = (l: ReviewLink) => changeFingerprint({ key: l.key, href: l.href, requestIds: [...l.requestIds].sort() });
+export function ownLinkFingerprints(data: WalkthroughData): Record<string, string> {
+  return Object.fromEntries(data.links.status === "ok" ? data.links.groups.flatMap(g => g.links.map(l => [l.key, ownLinkPrint(l)])) : []);
+}
+
 const CHIP_TONE: Record<Chip["tone"], string> = { ok: "border-border bg-secondary text-secondary-foreground", warn: "border-border bg-muted text-foreground", bad: "border-destructive bg-destructive text-destructive-foreground" };
 
-function LinksStep({ data, onShow }: { data: WalkthroughData; onShow: (l: ReviewLink, g: LinkGroup) => void }) {
+function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: (l: ReviewLink, g: LinkGroup) => void; onChange: (l: ReviewLink, g: LinkGroup) => void }) {
   const s = useWalk();
   if (data.links.status === "failed") return <p role="status" className="text-sm">Links couldn't be listed right now. Open the changed pages and click the links you added or changed.</p>;
   if (data.links.status !== "ok") return <p className="text-sm text-muted-foreground">Listing the changed links…</p>;
@@ -268,7 +276,7 @@ function LinksStep({ data, onShow }: { data: WalkthroughData; onShow: (l: Review
               const manual = l.kind === "mail" || l.kind === "phone";
               const address = manual ? l.href.replace(/^(mailto|tel):/i, "") : l.href;
               const part = l.kind === "anchor" ? linkPath(l, g).part : null;
-              const st = linkState(l.key, s.linkTicked, s.linkWrong);
+              const st = linkState(l.key, s.linkTicked, s.linkWrong, s.linkReplaced);
               return (
                 <li key={l.key} data-walk-link={l.key} className={cn("space-y-2 min-w-0 rounded-md border p-3", s.checking?.key === l.key && "border-primary bg-primary/5")}>
                   <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{linkText(l, data.pages)}</p><Badge variant={st === "wrong" ? "destructive" : "secondary"} className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[st]}</Badge></div>
@@ -277,10 +285,11 @@ function LinksStep({ data, onShow }: { data: WalkthroughData; onShow: (l: Review
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
                   {chip?.tone === "bad" && <p className="text-xs text-destructive">Fix this before submitting, or approve it if it is intended.</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}
-                  <div className="flex flex-wrap items-start gap-x-4 gap-y-1 pt-1">
+                  {st === "replaced" ? null : <div className="flex flex-wrap items-start gap-x-4 gap-y-1 pt-1">
+                    {st === "wrong" && <Button type="button" className="h-11" onClick={() => onChange(l, g)}><Pencil className="h-4 w-4" aria-hidden />Change This Link</Button>}
                     {!manual && <Button type="button" variant="outline" className="h-11" onClick={() => onShow(l, g)}><Eye className="h-4 w-4" aria-hidden />Show on Page</Button>}
                     <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11" onClick={() => { const t = linkText(l, data.pages); openLinkCheck(l.href, l.kind, l.label ?? (t !== linkAddress(l) ? t : null), g.page?.path ?? null); }}>{st === "done" ? <Check className="h-4 w-4" aria-hidden /> : null}Check This Link</Button>
-                  </div>
+                  </div>}
                 </li>
               );
             })}
@@ -308,7 +317,7 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
   const ready = (!data.pagesStatus || data.pagesStatus === "ok") && data.links.status !== "loading";
   const fingerprints = Object.fromEntries(data.rows.map(r => [r.key, r.fingerprint ?? changeFingerprint(r)]));
   const links = linkFingerprints(data);
-  useEffect(() => { if (ready) walk.reconcile(fingerprints, data.links.status === "ok" ? links : undefined); }, [ready, changeFingerprint(fingerprints), changeFingerprint(links)]);
+  useEffect(() => { if (ready) walk.reconcile(fingerprints, data.links.status === "ok" ? links : undefined, data.links.status === "ok" ? ownLinkFingerprints(data) : undefined); }, [ready, changeFingerprint(fingerprints), changeFingerprint(links)]);
   const row = c.kind === "page" ? data.rows.find(r => r.key === c.key) : undefined;
   const { phone } = useManagerLayout();
   const [sheet, setSheet] = useState(false);
@@ -364,6 +373,7 @@ function LinkCheckDialog() {
   const { state } = useDesignChat();
   const s = useWalk();
   const lc = s.linkCheck!;
+  const changeLink = useChangeLink();
   const data = useWalkthroughData(state, true);
   const { phone } = useManagerLayout();
   const groups = data.links.status === "ok" ? data.links.groups : [];
@@ -417,7 +427,8 @@ function LinkCheckDialog() {
             <Checkbox id="link-check-confirm" className="mt-1 h-5 w-5" checked={ticked} onCheckedChange={v => setTick(v === true)} />
             <label htmlFor="link-check-confirm" aria-live="polite" className="min-w-0 cursor-pointer break-words text-sm">{ticked ? `I confirmed this link goes to ${address}` : "I checked that this goes to the right place"}</label>
           </div>
-          {wrong && <p role="status" className="text-xs text-destructive">Marked as wrong</p>}
+          {wrong && <div className="flex flex-wrap items-center gap-2"><p role="status" className="text-xs text-destructive">Marked as wrong</p>
+            {match && <Button type="button" variant="outline" className="h-11" onClick={() => { const g = groups.find(x => x.links.some(y => y.key === match.key)); if (g) void changeLink(match, g, data.rows, ownLinkPrint(match)); }}><Pencil className="h-4 w-4" aria-hidden />Change This Link</Button>}</div>}
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" className="h-11" onClick={() => { if (match) walk.markWrong(match.key, fp); close(); }}>This Isn't Right</Button>
             <Button type="button" className="h-11" onClick={close}>Close</Button>
