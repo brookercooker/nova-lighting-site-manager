@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/prototype/client";
 import { toRouteSlug } from "./slug";
-import { localDateToIso } from "@/lib/landingDates";
+import { localDateToIso, landingScheduleCheck } from "@/lib/landingDates";
 import { notifyContentEdited } from "./designChat/contentSync";
 import { pageChangeNote } from "./contentChangeNotes";
 
@@ -52,7 +52,10 @@ export default function CreateLandingPageDialog({
   const path = slug ? `/landing/${slug}` : "";
   const dupe = !!path && takenPaths.has(path.toLowerCase());
   const dupeName = !!name.trim() && takenNames.has(name.trim().toLowerCase());
-  const valid = !!slug && !dupe && !dupeName;
+  const startAt = localDateToIso(startDate, startTime);
+  const endAt = alwaysOn ? null : localDateToIso(endDate, endTime);
+  const schedule = landingScheduleCheck(startAt, endAt, alwaysOn);
+  const valid = !!slug && !dupe && !dupeName && !schedule.invalidOrder;
 
   const submit = async () => {
     if (!valid) return;
@@ -66,8 +69,8 @@ export default function CreateLandingPageDialog({
         tags: [],
         page_type: "landing",
         build_status: "draft",
-        start_at: localDateToIso(startDate, startTime),
-        end_at: alwaysOn ? null : localDateToIso(endDate, endTime),
+        start_at: startAt,
+        end_at: endAt,
       };
       const { error } = await (supabase as any).from("pages").insert(payload);
       if (error) throw error;
@@ -133,6 +136,8 @@ export default function CreateLandingPageDialog({
             <input type="checkbox" checked={alwaysOn} onChange={(e) => setAlwaysOn(e.target.checked)} />
             Always on (No End Date)
           </label>
+          {schedule.invalidOrder && <p role="alert" className="text-sm text-destructive">The end date has to be after the start date.</p>}
+          {schedule.expired && <p role="status" className="text-sm text-muted-foreground">These dates are in the past. This page will be expired as soon as it is created.</p>}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

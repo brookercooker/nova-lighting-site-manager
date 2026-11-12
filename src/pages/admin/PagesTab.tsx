@@ -305,7 +305,8 @@ export default function PagesTab() {
   };
 
   const matches = (p: Page, needle: string) => {
-    const n = needle.toLowerCase();
+    const n = needle.trim().toLowerCase();
+    if (!n) return true;
     const test = (v: string) => (v ?? "").toLowerCase().includes(n);
     switch (searchField) {
       case "name": return test(p.name);
@@ -383,18 +384,18 @@ export default function PagesTab() {
   return (
     <div className="space-y-4">
       <div className="nova-library-tabs inline-flex rounded-lg border p-1 bg-muted/30">
-        <button onClick={() => setView("static")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="static"?"bg-background shadow-sm":"text-muted-foreground"}`}>
+        <Button variant="ghost" onClick={() => setView("static")}
+          className={`inline-flex h-auto min-h-11 sm:min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="static"?"bg-background shadow-sm":"text-muted-foreground"}`}>
           <FileText className="w-3.5 h-3.5" /> Static Pages
-        </button>
-        <button onClick={() => setView("landing")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="landing"?"bg-background shadow-sm":"text-muted-foreground"}`}>
+        </Button>
+        <Button variant="ghost" onClick={() => setView("landing")}
+          className={`inline-flex h-auto min-h-11 sm:min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="landing"?"bg-background shadow-sm":"text-muted-foreground"}`}>
           <Megaphone className="w-3.5 h-3.5" /> Landing Pages
-        </button>
-        <button onClick={() => setView("audit")}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="audit"?"bg-background shadow-sm":"text-muted-foreground"}`}>
+        </Button>
+        <Button variant="ghost" onClick={() => setView("audit")}
+          className={`inline-flex h-auto min-h-11 sm:min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="audit"?"bg-background shadow-sm":"text-muted-foreground"}`}>
           <ListChecks className="w-3.5 h-3.5" /> Link Audit
-        </button>
+        </Button>
       </div>
 
     {view === "audit" ? (

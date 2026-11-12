@@ -27,6 +27,15 @@ vi.mock("../WorkStatusPopover", () => ({ default: () => null }));
 
 beforeEach(() => { cleanup(); state.rows = []; state.error = null; state.notify.mockClear(); state.load.mockClear(); state.choose.mockClear(); state.start.mockClear(); });
 describe("Pages list synchronization", () => {
+  it("treats whitespace-only search as empty without removing pages", async () => {
+    state.rows = [{ id: "home", name: "Homepage", path: "/", tags: [], build_status: "ready", archived_at: null }];
+    render(<MemoryRouter><PagesTab /></MemoryRouter>);
+    await screen.findByRole("button", { name: "Homepage" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search Pages" }), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Homepage" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search Pages" }), { target: { value: " Homepage " } });
+    expect(screen.getByRole("button", { name: "Homepage" })).toBeInTheDocument();
+  });
   it("removes externally deleted rows when the window regains focus", async () => {
     state.rows = [{ id: "gone", name: "Deleted Outside Manager", path: "/external", tags: [], build_status: "ready", archived_at: null }];
     render(<MemoryRouter><PagesTab /></MemoryRouter>);

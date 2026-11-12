@@ -1,4 +1,3 @@
-import { SlidersHorizontal } from "lucide-react";
 import ArchivedBadge from "./ArchivedBadge";
 import "./pageTables.css";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,6 +17,8 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import TagsPanel from "./TagsPanel";
+import LibraryLabels from "./LibraryLabels";
+import "./libraryLayout.css";
 import LabelsCell from "./LabelsCell";
 import SelectionBar from "./SelectionBar";
 import FilterBar, { type TimeRange } from "./FilterBar";
@@ -124,7 +125,6 @@ export default function LandingPagesView() {
   };
   const [rows, setRows] = useState<Landing[]>([]);
   const [q, setQ] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [searchField, setSearchField] = useState<Field>("all");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | FilterLabel>("all");
@@ -218,7 +218,7 @@ export default function LandingPagesView() {
   const archivedCount = useMemo(() => rows.filter((r) => r.archived_at).length, [rows]);
 
   const filtered = useMemo(() => {
-    const needle = q.toLowerCase();
+    const needle = q.trim().toLowerCase();
     const list = rows
       .filter((r) => {
         if (hiddenIds.has(r.id)) return false;
@@ -392,9 +392,8 @@ export default function LandingPagesView() {
   };
 
   return (
-    <div className="flex gap-4 items-start">
-      <div data-labels-panel data-open={filterOpen || undefined} className="shrink-0 max-md:hidden max-md:data-[open]:fixed max-md:data-[open]:inset-0 max-md:data-[open]:z-50 max-md:data-[open]:block max-md:data-[open]:overflow-y-auto max-md:data-[open]:bg-background max-md:data-[open]:p-4">
-        {filterOpen && <div className="mb-3 flex items-center justify-between md:hidden"><span className="text-base font-semibold">Filter</span><Button type="button" size="sm" onClick={() => setFilterOpen(false)}>Done</Button></div>}
+    <div className="nova-library-area"><div className="nova-library-layout flex gap-4 items-start">
+      <LibraryLabels>
       <TagsPanel
         scope="landing"
         usageCounts={usageCounts}
@@ -408,10 +407,9 @@ export default function LandingPagesView() {
         filteredCount={filtered.length}
         onSelectAllFiltered={() => setSelected(new Set(filtered.map((r) => r.id)))}
       />
-      </div>
+      </LibraryLabels>
 
-      <div className="flex-1 min-w-0 space-y-3">
-      <Button type="button" variant="outline" size="sm" className="gap-1.5 md:hidden" onClick={() => setFilterOpen(true)}><SlidersHorizontal className="h-4 w-4" aria-hidden />Filter</Button>
+      <div className="nova-library-content flex-1 min-w-0 space-y-3">
         <div className="flex items-stretch gap-0 rounded-lg border-2 border-border focus-within:border-primary bg-background shadow-sm overflow-hidden">
           <div className="flex items-center pl-4 pr-2 text-muted-foreground">
             <Search className="w-5 h-5" />
@@ -685,6 +683,7 @@ export default function LandingPagesView() {
           </table>
       <ListPager {...pager} total={filtered.length} />
         </div>
+      </div>
       </div>
 
       <CreateLandingPageDialog open={creating} onOpenChange={setCreating} onCreated={load} />

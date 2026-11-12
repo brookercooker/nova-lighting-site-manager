@@ -171,15 +171,15 @@ export default function TagsPanel({
 
           <Popover>
             <PopoverTrigger asChild>
-              <button
+              <Button variant="ghost" size="icon"
                 type="button"
                 onClick={(e) => e.stopPropagation()}
-                className="shrink-0 focus:outline-none"
+                className="h-11 w-11 shrink-0 focus:outline-none"
                 title={`Change color — ${color.name}`}
                 aria-label={`Change color for ${n.row.path}`}
               >
                 <Tag className="w-4 h-4" style={{ color: color.iconStroke, fill: color.iconFill }} strokeWidth={2} />
-              </button>
+              </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="w-auto p-2" collisionPadding={16} onClick={(e) => e.stopPropagation()}>
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1">
@@ -192,9 +192,9 @@ export default function TagsPanel({
             </PopoverContent>
           </Popover>
 
-          <span className={`text-xs truncate flex-1 ${active ? "font-medium" : ""}`}>{n.row.name}</span>
+          <span className={`min-w-0 break-words text-xs flex-1 ${active ? "font-medium" : ""}`}>{n.row.name}</span>
 
-          <div className="flex items-center gap-0.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {selectedCount > 0 && (
               <button
                 type="button"
@@ -205,24 +205,24 @@ export default function TagsPanel({
                 <Plus className="w-3 h-3" />
               </button>
             )}
-            <button
+            <Button variant="ghost" size="icon"
               type="button"
               onClick={(e) => { e.stopPropagation(); setEditing(n.row); }}
-              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted-foreground/20"
+              className="h-11 w-11 rounded hover:bg-muted-foreground/20"
               title="Edit Label"
               aria-label={`Edit ${n.row.path}`}
             >
               <Pencil className="w-3 h-3" />
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost" size="icon"
               type="button"
               onClick={(e) => { e.stopPropagation(); setDeleting(n.row); }}
-              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive hover:text-destructive-foreground"
+              className="h-11 w-11 rounded hover:bg-destructive hover:text-destructive-foreground"
               title="Delete Label"
               aria-label={`Delete ${n.row.path}`}
             >
               <Trash2 className="w-3 h-3" />
-            </button>
+            </Button>
             <span className={`text-[10px] tabular-nums ml-1 ${active ? "text-[hsl(30_25%_35%)]" : "text-muted-foreground"} group-hover:hidden`}>
               {hasChildren ? rollup : (usageCounts[n.row.path] ?? 0)}
             </span>
@@ -236,7 +236,7 @@ export default function TagsPanel({
   };
 
   return (
-    <aside className={bare ? "w-full" : "w-40 xl:w-56 shrink-0 sticky top-0 self-start max-h-[calc(100vh-9rem)]"}>
+    <aside className={bare ? "w-full" : "w-72 max-w-full shrink-0 sticky top-0 self-start max-h-[calc(100vh-9rem)]"}>
       <div className={bare ? "flex flex-col max-h-[45vh]" : "border rounded-lg bg-muted/20 flex flex-col max-h-[calc(100vh-9rem)]"}>
         {!bare && (
           <div className="px-3 pt-3 pb-2 flex items-center gap-2">
@@ -504,6 +504,8 @@ function DeleteLabelDialog({
       description={
         <div className="space-y-3">
           <div className="text-sm">
+            This label is used on <strong>{usageCounts[row.path] ?? 0}</strong> {itemLabel}.
+            {" "}
             {hasChildren ? (
               <>Has <strong>{descendants.length}</strong> descendant label{descendants.length === 1 ? "" : "s"}.</>
             ) : "This label has no children."}

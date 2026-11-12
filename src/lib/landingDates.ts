@@ -12,6 +12,14 @@ export function localDateToIso(date: string, time?: string): string | null {
   return d.toISOString();
 }
 
+/** Optional schedule dates; a finite end must be strictly later than a finite start. */
+export function landingScheduleCheck(start: string | null, end: string | null, alwaysOn: boolean, now = Date.now()) {
+  const startMs = start ? Date.parse(start) : NaN;
+  const endMs = !alwaysOn && end ? Date.parse(end) : NaN;
+  const invalidOrder = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs <= startMs;
+  return { invalidOrder, expired: !invalidOrder && Number.isFinite(endMs) && endMs < now };
+}
+
 /** Split a stored ISO back into { date: "YYYY-MM-DD", time: "HH:MM" } in local time. */
 export function isoToLocalParts(iso: string | null): { date: string; time: string } {
   if (!iso) return { date: "", time: "" };
