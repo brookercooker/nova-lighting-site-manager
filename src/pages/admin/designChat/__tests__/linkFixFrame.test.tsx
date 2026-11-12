@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEditSelectLink } from "../linkFix";
-import { diffInventories, loadNetLinks, netReviewLinks, parseInventory, requestInventory } from "../linkInventory";
+import { diffInventories, loadNetLinks, netReviewLinks, parseInventory, requestInventory, requestFrameInventory } from "../linkInventory";
 import { remoteSelection } from "../../remoteSelection";
 import TextIconLinkPanel from "../../TextIconLinkPanel";
 import { walk } from "../submitWalkthroughStore";
@@ -22,6 +22,20 @@ const ready = () => {
 };
 
 describe("edit-select-link", () => {
+  it("inventory requests retry the synchronized frame and trust only its origin/window/path", async () => {
+    vi.useFakeTimers();
+    const promise = requestFrameInventory(frame, "https://site.example/", 3000);
+    const inventory = { source: "nova-site", type: "link-inventory", v: 1, path: "/", links: [{ key: "0.5.0.0", scope: "page", href: "/inspiration-gallery" }] };
+    msg(inventory, "https://evil.example");
+    msg(inventory, "https://site.example", window);
+    msg({ ...inventory, path: "/other" });
+    vi.advanceTimersByTime(500);
+    expect(post).toHaveBeenCalledTimes(2);
+    msg(inventory);
+    expect((await promise)?.links[0].key).toBe("0.5.0.0");
+    vi.advanceTimersByTime(5000);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
   it("waits for editor readiness and ignores wrong origin, window or href", () => {
     vi.useFakeTimers();
     const h = renderHook(() => useEditSelectLink("/contact", () => frame));

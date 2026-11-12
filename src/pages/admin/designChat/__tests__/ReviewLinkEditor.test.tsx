@@ -50,6 +50,14 @@ it("validation and save errors retain the typed destination", async () => {
   await screen.findByText("Your new link couldn't be saved. Try again.");
   expect(field).toHaveValue("/gallery"); expect(walk.get().reviewEdit).not.toBeNull();
 });
+it("pre-existing saved/preview mismatch offers Manual without a changed-since-open loop", async () => {
+  m.resolve.mockRejectedValue(new Error("The saved link and the page don't match yet. Use Open in Manual Edit to change it."));
+  render(<ReviewLinkEditor pages={pages} />);
+  await screen.findByRole("button", { name: "Open in Manual Edit" });
+  expect(screen.queryByRole("button", { name: "Save New Link" })).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByRole("status")).toHaveTextContent("saved link and the page don't match yet");
+});
 it("resolution failure offers only the existing Manual fallback, including shared-page selection", async () => {
   m.resolve.mockRejectedValue(new Error("We couldn't find this link on the page"));
   const rows = [{ key: "page:/about", page: { name: "About", path: "/about" }, how: "x" }];

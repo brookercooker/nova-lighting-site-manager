@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ inventory: null as any, row: null as any, save: vi.fn(), table: "", filters: [] as any[] }));
-vi.mock("../linkInventory", () => ({ requestInventory: async () => m.inventory }));
+vi.mock("../linkInventory", () => ({ requestInventory: async () => m.inventory, requestFrameInventory: async () => m.inventory }));
 vi.mock("../../saveRow", () => ({ saveRow: m.save }));
 vi.mock("@/prototype/client", () => ({ supabase: { from: (table: string) => { m.table = table; const q = { select: () => q, eq: (key: string, value: string) => { m.filters.push([key, value]); return q; }, maybeSingle: async () => ({ data: m.row, error: null }) }; return q; } } }));
 import { resolveReviewLink, saveReviewLink } from "../reviewLinkSave";
@@ -12,6 +12,32 @@ beforeEach(() => {
   m.save.mockResolvedValue({ error: null });
 });
 describe("review link writes", () => {
+  it("adopts inventory fp only when absent for the unique Inspiration Gallery link", async () => {
+    m.inventory.links = [{ ...m.inventory.links[0], key: "0.5.0.0", href: "/inspiration-gallery", originalHref: "/contact", label: "BOOK A CONSULTATION" }];
+    m.row.inline_edits["link:0.5.0.0"] = '{"href":"/inspiration-gallery"}';
+    const r = await resolveReviewLink("/", "/inspiration-gallery", "Link to Inspiration Gallery");
+    expect(r.edits["fp:0.5.0.0"]).toBe(m.inventory.links[0].fingerprint);
+    await saveReviewLink(r, "/contact", false);
+    expect(m.save.mock.calls[0][1].inline_edits["link:0.5.0.0"]).toBe('{"href":"/contact"}');
+    expect(m.save.mock.calls[0][1].inline_edits["fp:0.5.0.0"]).toBe(m.inventory.links[0].fingerprint);
+  });
+  it("preserves an existing stored fingerprint even when inventory has a different one", async () => {
+    const stored = '{"v":1,"tag":"div","t":"stored"}';
+    m.row.inline_edits["fp:0.5.0.1"] = stored;
+    const r = await resolveReviewLink("/", "/contact", null);
+    expect(r.edits["fp:0.5.0.1"]).toBe(stored);
+    await saveReviewLink(r, "/gallery", false);
+    expect(m.save.mock.calls[0][1].inline_edits["fp:0.5.0.1"]).toBe(stored);
+  });
+  it("logs only mismatch field/booleans and never calls pre-existing href skew a new change", async () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    m.row.inline_edits["link:0.5.0.1"] = '{"href":"/other?__lovable_token=secret-value"}';
+    await expect(resolveReviewLink("/", "/contact", null)).rejects.toThrow("saved link and the page don't match yet");
+    expect(debug).toHaveBeenCalledWith("[review-link] metadata mismatch", { field: "href", storedOverride: true, inventoryMatchesReview: true });
+    expect(JSON.stringify(debug.mock.calls)).not.toContain("secret-value");
+    expect(JSON.stringify(debug.mock.calls)).not.toContain("/other");
+    debug.mockRestore();
+  });
   it("matches stored page key first among three Contact links and shared links, ignoring Manager labels", async () => {
     m.inventory.links = [
       { ...m.inventory.links[0], label: "EXPLORE GALLERIES", originalHref: "/inspiration-gallery" },

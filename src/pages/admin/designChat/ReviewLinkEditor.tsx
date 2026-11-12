@@ -29,6 +29,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
   const [blank, setBlank] = useState(false);
   const [resolved, setResolved] = useState<ResolvedReviewLink | null>(null);
   const [finding, setFinding] = useState(true);
+  const [resolutionHint, setResolutionHint] = useState(FIND_LINK_ERROR);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -39,7 +40,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
     let active = true;
     void resolveReviewLink(page.path, edit.link.href, edit.link.label, embed, { elementKey: edit.link.elementKey, scope: edit.link.scope }).then(r => {
       if (active) { setResolved(r); setBlank(r.blank); setFinding(false); }
-    }).catch(() => { if (active) { setFinding(false); } });
+    }).catch(e => { if (active) { setResolutionHint(e instanceof Error ? e.message : FIND_LINK_ERROR); setFinding(false); } });
     return () => { active = false; };
   }, [page.path, edit.link.href, edit.link.label, embed]);
   const cancel = () => { if (!savingRef.current) walk.update(s => ({ ...s, reviewEdit: null })); };
@@ -68,7 +69,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
     <label className="flex min-h-11 sm:min-h-8 items-center justify-between gap-3 text-sm">Open in New Tab<Switch aria-label="Open in New Tab" checked={blank} disabled={!resolved || saving} onCheckedChange={setBlank} /></label>
     {finding && <p role="status" className="text-sm text-muted-foreground">Finding the link on this page…</p>}
     {error && resolved && <p id="review-link-error" role="alert" className="break-words text-sm text-destructive">{error}</p>}
-    {!finding && !resolved && <><p role="status" className="text-sm">{FIND_LINK_ERROR}</p><Button type="button" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => { walk.update(s => ({ ...s, reviewEdit: null })); void fallback(edit.link, edit.group, edit.rows, edit.fingerprint); }}><Pencil className="h-4 w-4" aria-hidden />Open in Manual Edit</Button></>}
+    {!finding && !resolved && <><p role="status" className="text-sm">{resolutionHint}</p><Button type="button" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => { walk.update(s => ({ ...s, reviewEdit: null })); void fallback(edit.link, edit.group, edit.rows, edit.fingerprint); }}><Pencil className="h-4 w-4" aria-hidden />Open in Manual Edit</Button></>}
     <div className="grid grid-cols-2 gap-1.5">{(finding || resolved) && <Button type="button" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" disabled={!resolved || saving} onClick={() => void save()}><Save className="h-4 w-4" aria-hidden />{saving ? "Saving…" : "Save New Link"}</Button>}<Button type="button" variant="outline" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" disabled={saving} onClick={cancel}><X className="h-4 w-4" aria-hidden />Cancel</Button></div>
   </div>;
   return phone ? <Sheet open onOpenChange={o => { if (!o) cancel(); }}><SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto overflow-x-hidden"><SheetHeader className="mb-2"><SheetTitle>Edit Link Destination</SheetTitle><SheetDescription>{page.name}</SheetDescription></SheetHeader>{content}</SheetContent></Sheet>

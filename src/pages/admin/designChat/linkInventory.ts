@@ -6,6 +6,27 @@ export type InventoryLink = { key: string; scope: string; href: string; label: s
 export type Inventory = { path: string; links: InventoryLink[] };
 export const MAX_INVENTORY = 500;
 export const INVENTORY_TIMEOUT_MS = 3000;
+/** Ask the already-synchronized preview first; never read its cross-origin DOM or accept sibling replies. */
+export function requestFrameInventory(frame: HTMLIFrameElement, url: string, timeoutMs = INVENTORY_TIMEOUT_MS): Promise<Inventory | null> {
+  const requested = new URL(url);
+  const current = new URL(frame.src);
+  if (requested.protocol !== "https:" || current.origin !== requested.origin || !frame.contentWindow) return Promise.resolve(null);
+  return new Promise(resolve => {
+    const source = frame.contentWindow;
+    let done = false;
+    const finish = (inventory: Inventory | null) => { if (done) return; done = true; clearTimeout(timer); clearInterval(retry); window.removeEventListener("message", receive); resolve(inventory); };
+    const receive = (e: MessageEvent) => {
+      if (e.origin !== requested.origin || e.source !== source) return;
+      const inventory = parseInventory(e.data);
+      if (inventory && normPath(inventory.path) === normPath(requested.pathname)) finish(inventory);
+    };
+    const ask = () => source?.postMessage({ source: "nova-manager", type: "link-inventory-request", v: 1 }, requested.origin);
+    window.addEventListener("message", receive);
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    const retry = setInterval(ask, 500);
+    ask();
+  });
+}
 const ok = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max && !/[\u0000-\u001f]/.test(v);
 
 export function parseInventory(d: any): Inventory | null {
