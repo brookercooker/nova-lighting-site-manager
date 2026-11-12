@@ -205,8 +205,8 @@ function Approval({ approved, enabled, onClick, hint }: { approved: boolean; ena
 
 function NewTab({ href, onOpen }: { href: string; onOpen: () => void }) {
   return <TooltipProvider><Tooltip><TooltipTrigger asChild>
-    <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open in New Tab" onClick={onOpen}><ExternalLink className="h-4 w-4" aria-hidden /></a></Button>
-  </TooltipTrigger><TooltipContent>Open in New Tab</TooltipContent></Tooltip></TooltipProvider>;
+    <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open Link to Verify" onClick={onOpen}><ExternalLink className="h-4 w-4" aria-hidden /></a></Button>
+  </TooltipTrigger><TooltipContent>Open Link to Verify</TooltipContent></Tooltip></TooltipProvider>;
 }
 
 /** "Things to Look At on Each Page": plain bullets, never ticked or stored. */
@@ -389,8 +389,13 @@ function LinkCheckDialog() {
   const ticked = !!match && s.linkTicked.includes(match.key);
   const wrong = !!match && match.key in s.linkWrong;
   const fp = match ? linkFingerprints(data)[match.key] ?? changeFingerprint(match) : "";
+  const verificationKey = match?.key ?? `${lc.page ?? ""}|${lc.raw}`;
+  const verificationPrint = match ? ownLinkPrint(match) : changeFingerprint({ href: lc.raw, page: lc.page });
+  const opened = s.verificationOpened[verificationKey] === verificationPrint;
+  const canConfirm = ticked || manual || opened;
+  const confirmHint = manual ? "Check that this address is correct, then confirm." : !opened && !ticked ? "Open the link first, then confirm it goes to the right place." : "Confirm that the link goes to the right place.";
   const close = () => walk.update(w => ({ ...w, linkCheck: null }));
-  const confirm = (on: boolean) => { if (match) walk.confirmLink(match.key, fp, on); close(); };
+  const confirm = (on: boolean) => { if (on && !canConfirm) return; if (match) walk.confirmLink(match.key, fp, on); close(); };
   const name = lc.label ?? (internal ? linkText({ href: dest ?? lc.href, kind: "internal", label: null }, data.pages) : address);
   return (
     <Dialog open onOpenChange={o => { if (!o) close(); }}>
@@ -404,7 +409,7 @@ function LinkCheckDialog() {
           <div><p className="text-xs text-muted-foreground">Goes To</p><p data-link-address className="break-all font-mono text-lg leading-snug">{address}</p></div>
           {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
           {!match && <p className="text-xs text-muted-foreground">This link wasn't changed in this draft, so checking it here isn't counted.</p>}
-          {tabUrl && !manual && <Button asChild variant="outline" className="h-11 w-full"><a href={tabUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" aria-hidden />Open in New Tab</a></Button>}
+          {tabUrl && !manual && <Button asChild variant={!opened && !ticked ? "default" : "outline"} className="h-11 w-full"><a href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={() => walk.openedVerification(verificationKey, verificationPrint)}><ExternalLink className="h-4 w-4" aria-hidden />Open Link to Verify</a></Button>}
           <p className="text-sm font-medium">Is this the correct destination?</p>
         </div>
         <div className="shrink-0 space-y-2 border-t px-4 py-3">
@@ -412,7 +417,8 @@ function LinkCheckDialog() {
           {wrong && <div className="flex flex-wrap items-center gap-2"><p role="status" className="text-xs text-destructive">Marked as wrong</p>
             {match && <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { const g = groups.find(x => x.links.some(y => y.key === match.key)); if (g) { walk.editLink({ link: match, group: g, rows: data.rows, fingerprint: ownLinkPrint(match) }); walk.reopen("links"); } }}><Pencil className="h-4 w-4" aria-hidden />Change This Link</Button>}</div>}
           <div className="flex flex-col gap-2">
-            <Button type="button" variant={ticked ? "secondary" : "default"} className="h-11 w-full" onClick={() => confirm(!ticked)}>{ticked ? <Undo2 className="h-4 w-4" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}{ticked ? "Unconfirm" : "Confirm Link"}</Button>
+            <Button type="button" variant={ticked ? "secondary" : canConfirm ? "default" : "outline"} className="h-11 w-full" disabled={!canConfirm} aria-disabled={!canConfirm} aria-describedby="link-confirm-hint" onClick={() => confirm(!ticked)}>{ticked ? <Undo2 className="h-4 w-4" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}{ticked ? "Unconfirm" : "Confirm Link"}</Button>
+            <p id="link-confirm-hint" aria-live="polite" className="text-xs leading-relaxed text-muted-foreground">{confirmHint}</p>
             <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { if (match) walk.markWrong(match.key, fp); close(); }}>This Isn't Right</Button>
             <Button type="button" variant="outline" className="h-11 w-full" onClick={close}>Close</Button>
           </div>

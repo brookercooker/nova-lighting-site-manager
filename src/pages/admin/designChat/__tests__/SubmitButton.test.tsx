@@ -34,6 +34,8 @@ const confirmLinks = () => {
   while (within(dialog()).queryAllByRole("button", { name: "Check This Link" }).filter(b => !b.querySelector("svg")).length) {
     fireEvent.click(within(dialog()).getAllByRole("button", { name: "Check This Link" }).filter(b => !b.querySelector("svg"))[0]);
     const win = within(screen.getByRole("dialog", { name: "Check This Link" }));
+    const open = win.queryByRole("link", { name: "Open Link to Verify" });
+    if (open) fireEvent.click(open);
     fireEvent.click(win.getByRole("button", { name: "Confirm Link" }));
   }
 };
@@ -69,7 +71,7 @@ describe("Submit for Review walkthrough", () => {
   });
   it("renders the new-tab affordance as an accessible icon link in the row title line", () => {
     render(<PanelHost open />);
-    const link = within(dialog()).getByRole("link", { name: "Open in New Tab" });
+    const link = within(dialog()).getByRole("link", { name: "Open Link to Verify" });
     expect(link.textContent).toBe("");
     expect(link.querySelector("svg")).not.toBeNull();
     expect(link.closest("li")).not.toBeNull();
@@ -131,9 +133,9 @@ describe("Submit for Review walkthrough", () => {
     fireEvent.click(within(dialog()).getByRole("button", { name: "Open Site" }));
     expect(m.show).toHaveBeenCalledWith("/");
   });
-  it("Open in New Tab also unlocks the tick, with a safe new-tab link", () => {
+  it("Open Link to Verify also unlocks the tick, with a safe new-tab link", () => {
     render(<PanelHost open onOpenChange={vi.fn()} />);
-    const link = within(dialog()).getByRole("link", { name: "Open in New Tab" });
+    const link = within(dialog()).getByRole("link", { name: "Open Link to Verify" });
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(link.getAttribute("href")).toMatch(/\/a$/);
     fireEvent.click(link);

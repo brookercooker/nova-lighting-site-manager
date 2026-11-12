@@ -94,6 +94,10 @@ describe("Approve gating and the Check This Link window", () => {
     fireEvent.click(row.getByRole("button", { name: "Check This Link" }));
     expect(win().getByText("A page on your site")).toBeInTheDocument();
     expect(win().getByText("Page found")).toBeInTheDocument();
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
+    expect(win().getByRole("button", { name: "Confirm Link" })).toHaveAttribute("aria-disabled", "true");
+    expect(win().getByRole("button", { name: "Confirm Link" })).toHaveAttribute("aria-describedby", "link-confirm-hint");
+    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
     expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
     fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
     expect(walk.get().linkTicked).toEqual(["/a|/team"]);
@@ -113,14 +117,16 @@ describe("Approve gating and the Check This Link window", () => {
     act(() => walk.update(s => ({ ...s })));
     expect(Object.keys(walk.get().linkWrong)).toEqual([]);
   });
-  it("opens external HTTPS destinations directly without requiring a tab visit to confirm", () => {
+  it("opens external HTTPS destinations directly and requires an actual opening click", () => {
     render(<LinkCheckWindow />);
     act(() => walk.update(s => ({ ...s, linkCheck: { raw: "https://other.example/x", href: "https://other.example/x", kind: "external", label: "Partner", path: "/a", page: "/a" } })));
     expect(win().getByText("A different website")).toBeInTheDocument();
-    expect(win().getByRole("link", { name: "Open in New Tab" })).toHaveAttribute("rel", "noopener noreferrer");
-    expect(win().getByRole("link", { name: "Open in New Tab" })).toHaveAttribute("href", "https://other.example/x");
-    expect(win().getByRole("link", { name: "Open in New Tab" })).toHaveAttribute("target", "_blank");
+    expect(win().getByRole("link", { name: "Open Link to Verify" })).toHaveAttribute("rel", "noopener noreferrer");
+    expect(win().getByRole("link", { name: "Open Link to Verify" })).toHaveAttribute("href", "https://other.example/x");
+    expect(win().getByRole("link", { name: "Open Link to Verify" })).toHaveAttribute("target", "_blank");
     expect(win().getByText("This link wasn't changed in this draft, so checking it here isn't counted.")).toBeInTheDocument();
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
+    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
     fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
     expect(walk.get().linkTicked).toEqual([]);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -130,14 +136,16 @@ describe("Approve gating and the Check This Link window", () => {
     act(() => walk.update(s => ({ ...s, linkCheck: { raw, href: raw, kind: kind as any, label: null, path: "/a", page: "/a" } })));
     expect(win().getByText(text)).toBeInTheDocument();
     expect(win().getAllByText(address).length).toBeGreaterThan(0);
-    expect(win().queryByRole("link", { name: "Open in New Tab" })).toBeNull();
+    expect(win().queryByRole("link", { name: "Open Link to Verify" })).toBeNull();
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
+    expect(win().getByText("Check that this address is correct, then confirm.")).toBeInTheDocument();
     expect(win().queryByRole("button", { name: "Copy Address" })).toBeNull();
   });
   it("opens internal destinations using the shown draft preview base, preserving its query", () => {
     m.preview = { shownId: 4, frames: [{ id: 4, url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/a?fixture=draft" }] };
     render(<LinkCheckWindow />);
     act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team?view=all#people", href: "/team?view=all#people", kind: "internal", label: null, path: "/a", page: "/a" } })));
-    const url = new URL(win().getByRole("link", { name: "Open in New Tab" }).getAttribute("href") ?? "");
+    const url = new URL(win().getByRole("link", { name: "Open Link to Verify" }).getAttribute("href") ?? "");
     expect(url.origin).toBe("https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app");
     expect(url.pathname + url.hash).toBe("/team#people");
     expect(url.searchParams.get("fixture")).toBe("draft");
@@ -147,12 +155,13 @@ describe("Approve gating and the Check This Link window", () => {
     render(<LinkCheckWindow />);
     act(() => walk.update(s => ({ ...s, linkCheck: { raw: "#faq", href: "#faq", kind: "anchor", label: "FAQ", path: "/a", page: "/a" } })));
     expect(win().getByText("A section of this page")).toBeInTheDocument();
-    expect(win().getByRole("link", { name: "Open in New Tab" }).getAttribute("href")).toMatch(/\/a#faq$/);
+    expect(win().getByRole("link", { name: "Open Link to Verify" }).getAttribute("href")).toMatch(/\/a#faq$/);
   });
   it("Unconfirm returns a confirmed link to Needs Checking and blocks Next", () => {
     act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
     render(<Host />);
     fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
+    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
     fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
     fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
     expect(win().getByText("Confirmed")).toBeInTheDocument();
@@ -177,7 +186,8 @@ describe("Approve gating and the Check This Link window", () => {
     expect(panel().getByText("Fix this before submitting, or approve it if it is intended.")).toBeInTheDocument();
     fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
     expect(win().getByText("Page not found")).toBeInTheDocument();
-    expect(win().getByRole("link", { name: "Open in New Tab" })).toBeInTheDocument();
+    expect(win().getByRole("link", { name: "Open Link to Verify" })).toBeInTheDocument();
+    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
     expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
     fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
     expect(panel().getByText("Confirmed")).toBeInTheDocument();
@@ -188,6 +198,26 @@ describe("Approve gating and the Check This Link window", () => {
     act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team", href: "/team", kind: "internal", label: "<img src=x onerror=alert(1)>", path: "/a", page: "/a" } })));
     expect(win().getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
     expect(document.querySelector("img[src='x']")).toBeNull();
+  });
+  it("keeps opening permission on reopen but clears it when its fingerprint changes", async () => {
+    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
+    render(<Host />);
+    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
+    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
+    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
+    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
+    const { ownLinkPrint } = await import("../SubmitWalkthrough");
+    expect(walk.get().verificationOpened[team.key]).toBe(ownLinkPrint(team as any));
+    act(() => walk.reconcile({}, undefined, { [team.key]: "changed" }));
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
+  });
+  it("a replacement clears opening memory for old and new links", () => {
+    walk.openedVerification(team.key, "old");
+    walk.openedVerification("/a|/gallery", "prior");
+    walk.editLink({ link: team as any, group: m.data.links.groups[0], rows: [], fingerprint: "old" });
+    walk.savedLink("/a", { ...team, key: "/a|/gallery", href: "/gallery" } as any);
+    expect(walk.get().verificationOpened).toEqual({});
   });
 });
 

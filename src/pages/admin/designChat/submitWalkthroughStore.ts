@@ -13,6 +13,8 @@ export type Checking = { key: string; kind: "page" | "link"; name: string } | nu
 export type WalkState = {
   reviewEdit: { link: ReviewLink; group: LinkGroup; rows: ChangedRow[]; fingerprint: string } | null;
   savedReviewLinks: { path: string; link: ReviewLink }[];
+  /** Actual verification-tab clicks only, keyed by link key and its own fingerprint. */
+  verificationOpened: Record<string, string>;
   open: boolean; host: string | null; step: WalkStep;
   viewed: string[]; ticked: string[]; linkOpened: string[]; linkTicked: string[]; checks: string[];
   checking: Checking;
@@ -30,7 +32,7 @@ export type WalkState = {
   /** The page just saved through Change This Link: its approval and confirmed links follow the hand save instead of resetting. */
   repin: { path: string; until: number } | null;
 };
-const initial = (): WalkState => ({ reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkWrong: {}, linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
+const initial = (): WalkState => ({ verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkWrong: {}, linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
 let state = initial();
 const listeners = new Set<() => void>();
 const hosts = new Map<string, boolean>();
@@ -45,10 +47,12 @@ export const walk = {
   close() { walk.update((s) => ({ ...s, open: false })); },
   keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", linkCheck: null, fix: null, reviewEdit: null })); },
   editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, linkCheck: null, step: "links" })); },
+  openedVerification(key: string, fingerprint: string) { walk.update(s => ({ ...s, verificationOpened: { ...s.verificationOpened, [key]: fingerprint } })); },
   savedLink(path: string, link: ReviewLink) {
     const edit = state.reviewEdit;
     if (!edit) return;
     walk.update(s => ({ ...s, reviewEdit: null, repin: { path: normPath(path), until: Date.now() + REPIN_MS },
+      verificationOpened: Object.fromEntries(Object.entries(s.verificationOpened).filter(([k]) => k !== edit.link.key && k !== link.key)),
       linkWrong: Object.fromEntries(Object.entries(s.linkWrong).filter(([k]) => k !== edit.link.key)),
       linkTicked: s.linkTicked.filter(k => k !== edit.link.key),
       linkReplaced: { ...s.linkReplaced, [edit.link.key]: edit.fingerprint },
@@ -67,7 +71,7 @@ export const walk = {
       if (!fix?.saved) return { ...s, fix: null };
       const linkWrong = { ...s.linkWrong }; delete linkWrong[fix.key];
       const linkApprovals = { ...s.linkApprovals }; delete linkApprovals[fix.key];
-      return { ...s, fix: null, repin: { path: normPath(fix.path), until: Date.now() + REPIN_MS }, linkWrong, linkApprovals, linkTicked: s.linkTicked.filter(k => k !== fix.key), linkReplaced: { ...s.linkReplaced, [fix.key]: fix.fingerprint } };
+      return { ...s, fix: null, verificationOpened: Object.fromEntries(Object.entries(s.verificationOpened).filter(([k]) => k !== fix.key)), repin: { path: normPath(fix.path), until: Date.now() + REPIN_MS }, linkWrong, linkApprovals, linkTicked: s.linkTicked.filter(k => k !== fix.key), linkReplaced: { ...s.linkReplaced, [fix.key]: fix.fingerprint } };
     });
     walk.reopen("links");
   },
@@ -110,8 +114,10 @@ export const walk = {
     const badLinks = links ? Object.entries(state.linkApprovals).filter(([k,v]) => links[k] !== v).map(([k]) => k) : [];
     const fixedLinks = links ? Object.entries(state.linkWrong).filter(([k, v]) => links[k] !== v).map(([k]) => k) : [];
     const staleReplaced = own ? Object.entries(state.linkReplaced).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
-    if (!invalid.length && !badLinks.length && !fixedLinks.length && !staleReplaced.length) return;
+    const staleOpened = own ? Object.entries(state.verificationOpened).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
+    if (!invalid.length && !badLinks.length && !fixedLinks.length && !staleReplaced.length && !staleOpened.length) return;
     walk.update(s => ({ ...s,
+      verificationOpened: Object.fromEntries(Object.entries(s.verificationOpened).filter(([k]) => !staleOpened.includes(k))),
       linkReplaced: Object.fromEntries(Object.entries(s.linkReplaced).filter(([k]) => !staleReplaced.includes(k))),
       linkWrong: Object.fromEntries(Object.entries(s.linkWrong).filter(([k]) => !fixedLinks.includes(k))), ticked: s.ticked.filter(k => !invalid.includes(k)), viewed: s.viewed.filter(k => !invalid.includes(k)),
       linkTicked: s.linkTicked.filter(k => !badLinks.includes(k)), linkOpened: s.linkOpened.filter(k => !badLinks.includes(k)),
