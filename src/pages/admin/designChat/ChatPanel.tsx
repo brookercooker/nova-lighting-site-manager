@@ -27,6 +27,7 @@ import { waitSuggestions, type WaitAction } from "./waitSuggestions";
 import { supabase } from "@/prototype/client";
 import { loadModePages } from "./pageSelection";
 import WorkingPageChip from "./WorkingPageChip";
+import { DismissErrorButton, ErrorDetails, useChatPerson, useErrorDismissals, type ErrorEntry } from "./chatErrors";
 
 const SUGGESTIONS = [
   "Make the headline larger",
@@ -140,10 +141,14 @@ export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgre
     else setHint("Changes are saved in your draft. You can leave this page and come back.");
   };
   const working = isWorking(state);
-  const messages = useMemo(
+  const { person, isAdmin } = useChatPerson();
+  const dismissals = useErrorDismissals(person);
+  const allMessages = useMemo(
     () => [...(state?.history ?? []), ...(requestRetry?.localErrors ?? [])].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0)).map((e, i) => ({ e, i, shown: visibleText(e) })).filter((m) => m.shown !== null),
     [state?.history, requestRetry?.localErrors.map(e => e.ts).join(",")],
   );
+  // Dismissing only hides a line for this person; busy, blocked and Submit state never read this.
+  const messages = allMessages.filter(m => !dismissals.hidden(m.e as ErrorEntry));
   const problems = problemsModel(state);
   const rules = state?.uploads ?? DEFAULT_UPLOADS;
 
@@ -265,7 +270,8 @@ export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgre
             e.role === "error" && "self-stretch max-w-none bg-destructive/10 text-destructive",
           )} data-live-note={e.role === "note" && shown === LIVE_NOTE ? "" : undefined}>
             {e.role === "note" && shown === LIVE_NOTE && <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />}
-            {e.role === "error" && typeof shown === "string" ? <ErrorText text={shown} /> : shown}
+            {e.role === "error" ? <div className="flex items-start gap-1"><div className="min-w-0 flex-1">{typeof shown === "string" ? <ErrorText text={shown} /> : shown}</div><DismissErrorButton phone={phone} onDismiss={() => dismissals.dismiss(e as ErrorEntry)} /></div> : shown}
+            {e.role === "error" && isAdmin && (e as ErrorEntry).hasDetail === true && <ErrorDetails id={(e as ErrorEntry).id} />}
             {e.role === "error" && requestRetry && e.ts !== undefined && !requestRetry.isReviewFailure(e.ts) && <div className="mt-1 text-xs">
               {requestRetry.canRetry(e.ts) ? <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" disabled={requestRetry.disabled || editing} onClick={() => { void requestRetry.retry(e.ts ?? 0, () => waitProgress?.request?.errorControls?.dismiss()).then(result => { if (result && !result.ok) setHint(result.error, true); }); }}>Try Again</Button>
                 : <p>{requestRetry.retryNote(e.ts)}</p>}

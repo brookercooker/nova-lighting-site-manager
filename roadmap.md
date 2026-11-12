@@ -151,3 +151,4 @@
 - [x] Submit for Review: per-page "Check this page" items, Checks panel in the check bar, and the Check This Link window (frame link-check bridge).
 
 - [x] Check This Link v2: send changed-link list with states, open only listed links, Needs Checking badges, counts, Show on Page
+- [x] Chat errors: Dismiss Error per person; admin Show Details from /api/admin/error-details
