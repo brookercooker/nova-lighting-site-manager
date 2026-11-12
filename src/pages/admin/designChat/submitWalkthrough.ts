@@ -135,7 +135,7 @@ export function parseReviewLinks(d: any): ReviewLinks | null {
 
 /** Internal links are checked against the Manager's own page list. */
 export function internalLinkChip(href: string, pages: ManagerPage[]): Chip {
-  const path = normPath(href);
+  const path = normPath(href.split(/[?#]/)[0] || "/");
   const page = pages.find((p) => normPath(p.path) === path);
   if (!page) return { text: "Page not found", tone: "bad" };
   return page.build_status === "ready" ? { text: "Page found", tone: "ok" } : { text: "Page isn't published yet", tone: "warn" };

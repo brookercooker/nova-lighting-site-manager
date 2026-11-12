@@ -23,7 +23,7 @@ describe("review link writes", () => {
     expect(r.blank).toBe(true);
     const lines = await saveReviewLink(r, "/gallery", true);
     expect(m.save).toHaveBeenCalledWith("pages", expect.objectContaining({ inline_edits: { "html:0.1": "untouched", "fp:0.5.0.1": '{"v":1,"tag":"div","t":"abc"}', "link:0.5.0.1": '{"href":"/gallery","target":"_blank"}' } }), "p", "version1");
-    expect(lines[0]).toContain('Homepage: changed the link "Book a Consultation" link to /gallery');
+    expect(lines[0]).toContain('Homepage: Changed link: Book a Consultation to /gallery');
   });
   it("writes an object scope to its registry row, never the page", async () => {
     m.inventory.links[0].scope = "object:obj1";
@@ -42,5 +42,11 @@ describe("review link writes", () => {
   it("propagates conflict errors without saving another map", async () => {
     m.save.mockResolvedValue({ error: { message: "This page changed while you were editing." } });
     await expect(saveReviewLink(await resolveReviewLink("/", "/contact", null), "/gallery", false)).rejects.toThrow("changed while");
+  });
+  it("never stores the preview token in a destination", async () => {
+    await saveReviewLink(await resolveReviewLink("/", "/contact", null), "/gallery?__lovable_token=test-credential&view=all", false);
+    const value = m.save.mock.calls[0][1].inline_edits["link:0.5.0.1"];
+    expect(JSON.parse(value).href).toBe("/gallery?view=all");
+    expect(value).not.toContain("test-credential");
   });
 });

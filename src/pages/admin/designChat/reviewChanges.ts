@@ -1,4 +1,5 @@
 import type { DraftRequest } from "./helper";
+import { linkHistoryLine } from "../linkDisplay";
 
 export type ChangeKind = "chat" | "content" | "developer" | "automatic";
 export const CHANGE_LABEL: Record<ChangeKind, string> = {
@@ -18,7 +19,7 @@ export function changeKind(r: DraftRequest): ChangeKind {
 
 export function changeTitle(r: DraftRequest): { title: string | null; body: string } {
   const text = r.request ?? "";
-  if (r.source === "content" && text.startsWith(CONTENT_PREFIX)) return { title: "Edits Made in the Site Manager", body: text.slice(CONTENT_PREFIX.length).trim() };
+  if (r.source === "content" && text.startsWith(CONTENT_PREFIX)) return { title: "Edits Made in the Site Manager", body: text.slice(CONTENT_PREFIX.length).trim().split("\n").map(linkHistoryLine).join("\n") };
   return { title: null, body: text };
 }
 

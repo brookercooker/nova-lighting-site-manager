@@ -5,6 +5,7 @@ import { inlineChangeLines } from "../changeLines";
 import { LINK_DESTINATION_ERROR, validTextLink } from "../textAdornment";
 import { requestInventory, type InventoryLink } from "./linkInventory";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
+import { publicLinkAddress } from "../linkDisplay";
 
 export type ResolvedReviewLink = { table: "pages" | "object_registry"; id: string; name: string; updatedAt: string; edits: InlineEdits; element: InventoryLink; href: string; blank: boolean };
 export const FIND_LINK_ERROR = "We couldn't find this link on the page";
@@ -37,6 +38,7 @@ export async function resolveReviewLink(path: string, href: string, label: strin
 
 /** Same confirmed-row save and change descriptions as Manual Edit; successful saves reset local undo history. */
 export async function saveReviewLink(resolved: ResolvedReviewLink, href: string, blank: boolean): Promise<string[]> {
+  href = publicLinkAddress(href);
   if (!validTextLink(href)) throw new Error(LINK_DESTINATION_ERROR);
   const key = `link:${resolved.element.key}`;
   const next = { ...resolved.edits, [key]: JSON.stringify({ href, ...(blank ? { target: "_blank" } : {}) }) };

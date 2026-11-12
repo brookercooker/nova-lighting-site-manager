@@ -177,19 +177,32 @@ describe("Approve gating and the Check This Link window", () => {
     expect(walk.get().linkTicked).toEqual([]);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
-  it("a page-not-found link may still be opened and confirmed intentionally", () => {
+  it("a missing internal page cannot be confirmed even after opening or with stale approval", () => {
     m.data.pages = [];
     act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
     render(<Host />);
-    expect(panel().getByText("Fix this before submitting, or approve it if it is intended.")).toBeInTheDocument();
     fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    expect(win().getByText("Page not found")).toBeInTheDocument();
-    expect(win().getByRole("link", { name: "Open Link to Verify" })).toBeInTheDocument();
     fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
-    fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
-    expect(panel().getByText("Confirmed")).toBeInTheDocument();
-    expect(panel().getByRole("button", { name: "Next" })).toBeEnabled();
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
+    expect(win().getByText("This page doesn't exist. Edit the link destination to fix it.")).toBeInTheDocument();
+    act(() => walk.confirmLink("/a|/team", "fp", true));
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
+    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
+    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+  it("an unnamed unknown destination has a friendly source-page label", () => {
+    render(<LinkCheckWindow />);
+    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/gallery", href: "/gallery", kind: "internal", label: null, page: "/", path: "/" } })));
+    expect(win().getByText("Text link on Homepage")).toBeInTheDocument();
+  });
+  it("never displays draft credentials but retains them only in the opening URL", () => {
+    m.preview = { shownId: 4, frames: [{ id: 4, url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/a?__lovable_token=test-credential" }] };
+    render(<LinkCheckWindow />);
+    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team", href: "/team", kind: "internal", label: null, page: "/a", path: "/a" } })));
+    const tab = win().getByRole("link", { name: "Open Link to Verify" });
+    expect(tab.getAttribute("href")).toContain("__lovable_token=test-credential");
+    expect(tab).not.toHaveAttribute("title");
+    expect(screen.getByRole("dialog").textContent).not.toContain("test-credential");
   });
   it("renders label text as text, never HTML", () => {
     render(<LinkCheckWindow />);

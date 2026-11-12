@@ -80,6 +80,7 @@ describe("Edit Link Destination", () => {
     const old = m.data.links.groups[0].links[0];
     const { linkFingerprints } = await import("../SubmitWalkthrough");
     setData([old, link("/gallery-new")]);
+    m.data.pages = [{ name: "Gallery", path: "/gallery-new", build_status: "ready" }];
     h.rerender(<Host />);
     expect(screen.getByText(LINK_BADGE.replaced)).toBeTruthy();
     expect(screen.getByText(LINK_BADGE.todo)).toBeTruthy();

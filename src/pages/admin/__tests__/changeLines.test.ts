@@ -22,7 +22,7 @@ describe("change lines", () => {
   it("describes links, pictures and long text with an ellipsis", () => {
     const lines = inlineChangeLines("Homepage", {}, { "link:3": JSON.stringify({ href: "/sale" }), "img:4": "/a.webp" },
       { "3": { tag: "a", kind: "button", text: "See What's Possible" }, "4": { tag: "img", text: "" } });
-    expect(lines).toContain('Homepage: changed the button "See What\'s Possible" link to /sale');
+    expect(lines).toContain('Homepage: Changed link: See What\'s Possible to /sale');
     expect(lines).toContain("Homepage: replaced the picture");
     const long = inlineChangeLines("P", { "1": "x".repeat(80) }, { "1": "y" })[0];
     expect(long).toContain("…");

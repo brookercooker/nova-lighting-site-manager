@@ -78,6 +78,7 @@ describe("Submit for Review walkthrough", () => {
     expect(link.parentElement).toContainElement(within(dialog()).getByRole("button", { name: "About" }));
   });
   it("invalidates a link approval when its group changes and unticks the derived checklist", () => {
+    m.data.pages = [{ name: "Team", path: "/team", build_status: "ready" }];
     const link = { key: "/a|/team", href: "/team", kind: "internal", label: "Team", requestIds: ["first"], status: null };
     m.data.links = { status: "ok", groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [link] }] };
     const host = render(<PanelHost open />);

@@ -12,6 +12,7 @@ import { postToHelper, type DraftRequest } from "./helper";
 import { developerFindings, reviewBlocked } from "./logic";
 import { atMs, CHANGE_LABEL, changeKind, changeTitle, newestFirst, relativeTime, waitingLine } from "./reviewChanges";
 import { requestAuthor } from "./submitWalkthrough";
+import { linkHistoryLine } from "../linkDisplay";
 
 /** Changes waiting for review, from the relay's draft.requests only (never the chat history). Replaces the chat in the left column. */
 export default function ReviewChangesView({ embedded = false }: { onShowPreview: () => void; embedded?: boolean }) {
@@ -115,7 +116,7 @@ export function ChangeDetails({ details }: { details: string[] }) {
   return (
     <div className="space-y-1">
       <ul className="list-disc space-y-0.5 pl-4 text-xs" aria-label="What Changed">
-        {shown.map((d, i) => <li key={i} className="break-words">{d}</li>)}
+        {shown.map((d, i) => <li key={i} className="break-words">{linkHistoryLine(d)}</li>)}
       </ul>
       {details.length > 4 && (
         <button type="button" className="text-xs underline underline-offset-2" aria-expanded={all} onClick={() => setAll(!all)}>

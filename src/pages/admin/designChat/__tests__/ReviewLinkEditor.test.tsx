@@ -56,6 +56,7 @@ it("resolution failure offers only the existing Manual fallback, including share
   walk.editLink({ link, group: { ...group, page: null }, rows, fingerprint: "own" });
   render(<ReviewLinkEditor pages={pages} />);
   await screen.findByRole("button", { name: "Open in Manual Edit" });
+  expect(screen.getByText("Saving here isn't available yet for this link; Open in Manual Edit")).toBeInTheDocument();
   expect(m.resolve).toHaveBeenCalledWith("/about", "/contact", "Consultation", undefined);
   fireEvent.click(screen.getByRole("button", { name: "Open in Manual Edit" }));
   expect(m.fallback).toHaveBeenCalledWith(link, expect.objectContaining({ page: null }), rows, "own");

@@ -1,4 +1,5 @@
 import { parseKey, type InlineEdits } from "@/lib/inlineEditCore";
+import { publicLinkAddress, shortLinkLabel } from "./linkDisplay";
 
 /** Plain-language summaries of a Manual Edit save, sent to the relay as `changes`. Never CSS names, keys or ids. */
 export type ElementLabel = { tag?: string; kind?: string; text?: string; style?: Record<string, string> };
@@ -102,7 +103,7 @@ export function inlineChangeLines(subject: string, before: InlineEdits, after: I
     let line: string;
     if (extras.length === 0) continue;
     if (extras.length === 1 && wording !== null) line = `changed ${named} to ${quote(wording)}`;
-    else if (extras.length === 1 && link) line = link.startsWith("link") ? `changed ${named} ${link}` : `${link} on ${named}`;
+    else if (extras.length === 1 && link) line = link.startsWith("link to ") ? `Changed link: ${shortLinkLabel(oldText || "Text link")} to ${publicLinkAddress(link.slice(8))}` : `${link} on ${named}`;
     else if (extras.length === 1 && picture) line = `replaced the picture${oldText ? ` in ${quote(oldText)}` : ""}`;
     else if (extras.length === 1 && moved) line = `moved ${named}`;
     else line = `${oldText ? `${n} ${quote(oldText)}` : n} ${extras.join(", ")}`;
