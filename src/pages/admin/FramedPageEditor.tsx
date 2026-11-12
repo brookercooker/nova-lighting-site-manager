@@ -310,7 +310,7 @@ export default function FramedPageEditor(props: FramedPageEditorProps) {
       {status === "loading" && target ? (props.objectScope ? "Loading the object editor…" : "Loading the page editor…") : (failure ?? (props.objectScope ? "Couldn't reach the public object page" : "Couldn't reach the public page"))}
       {(status === "failed" || !target) && <Button variant="outline" size="sm" onClick={() => { setOpening({ path: props.path, base: props.base }); setAttempt((n) => n + 1); }}>Retry</Button>}
     </div>}
-    {target && <iframe key={`${target}|${attempt}|${frameRevision}`} ref={frame} src={target} title="Public Page Editor" data-site-editor="true" className={`w-full border-0 ${status !== "ready" ? "invisible absolute" : filling ? "block h-full" : "block"}`} height={filling ? "100%" : height} onError={() => setStatus("failed")} />}
+    {target && <iframe key={`${target}|${attempt}|${frameRevision}`} ref={frame} src={target} title="Public Page Editor" data-site-editor="true" data-edit-ready={status === "ready"} className={`w-full border-0 ${status !== "ready" ? "invisible absolute" : filling ? "block h-full" : "block"}`} height={filling ? "100%" : height} onError={() => setStatus("failed")} />}
   </div>;
 }
 const strings = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");

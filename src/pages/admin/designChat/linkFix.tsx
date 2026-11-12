@@ -60,10 +60,11 @@ export function LinkFixBanner() {
     if (!ok) { walk.fixReturning(false); return; }
     walk.finishFix(); setReviewOpen(true); nav("/manage/preview");
   };
-  return <div role="region" aria-label="Changing a Link" data-link-fix className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-secondary px-3 py-1.5 text-sm text-secondary-foreground">
+  return <div role="region" aria-label="Changing a Link" data-link-fix className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-secondary px-3 py-3 text-sm text-secondary-foreground sm:py-2">
     <div className="w-full min-w-0 break-words sm:w-auto sm:flex-1">
-      <p>{found === "found" ? `Changing a link on ${fix.pageName}. The link to ${fix.address} is selected. Change where it goes, then Save Changes.` : fixBannerText(fix.pageName, fix.address)}</p>
-      {found === "missing" && <p role="status" className="text-xs">We couldn't find it automatically. Look for the link to {fix.address} on this page.</p>}
+      <p>{found.state === "found" ? `Changing a link on ${fix.pageName}. The link to ${fix.address} is selected. Change where it goes, then Save Changes.` : fixBannerText(fix.pageName, fix.address)}</p>
+      {found.state === "missing" && <p role="status" className="mt-2 text-xs leading-relaxed">We couldn't find it automatically. Look for the link to {fix.address} on this page.</p>}
+      {found.state === "found" && found.count > 1 && <p role="status" className="mt-2 text-xs leading-relaxed">{found.count} links on this page go there; the first is selected.</p>}
     </div>
     <Button type="button" variant={fix.saved ? "default" : "outline"} className="h-11 w-full sm:h-9 sm:w-auto" onClick={() => void backToReview()}>
       <ArrowLeft className="h-4 w-4" aria-hidden />{fix.saved ? "Done, Back to Review" : "Back to Review"}
@@ -79,34 +80,60 @@ export function useClearFixOnExit(editing: boolean) {
   }, [editing]);
 }
 
-export type SelectLinkResult = "pending" | "found" | "missing";
+export type SelectLinkResult = { state: "pending" | "found" | "missing"; count: number };
 /**
- * Asks the edit frame to select the element linking to `href` (Public edit-select-link): once now and again after every
- * edit-ready (after the editor's own edit-init). Replies count only from the exact frame window and origin, for this href.
- * Frames that never answer stay "pending", so the banner keeps its plain instructions.
+ * Wait for the editor's edit-ready/edit-init gate, then retry for six seconds.
+ * Replies count only from the exact ready frame window and origin, for this href.
  */
 export function useEditSelectLink(href: string | null, getFrame: () => HTMLIFrameElement | null = () => document.querySelector<HTMLIFrameElement>("iframe[data-site-editor]")): SelectLinkResult {
-  const [result, setResult] = useState<SelectLinkResult>("pending");
+  const [result, setResult] = useState<SelectLinkResult>({ state: "pending", count: 0 });
   useEffect(() => {
-    setResult("pending");
+    setResult({ state: "pending", count: 0 });
     if (!href) return;
+    let active: HTMLIFrameElement | null = null;
+    let finished = false;
+    let retry: ReturnType<typeof setInterval> | undefined;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    let readyTimer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => { clearInterval(retry); clearTimeout(deadline); };
     const send = () => {
       const f = getFrame(), origin = frameOrigin(f);
-      if (!f?.contentWindow || !origin) return;
+      if (f !== active || !f?.contentWindow || !origin || finished) return;
       try { f.contentWindow.postMessage({ source: "nova-manager", type: "edit-select-link", href }, origin); } catch { /* frame gone */ }
     };
-    let t: ReturnType<typeof setTimeout> | undefined;
+    const begin = () => {
+      const f = getFrame();
+      if (!f?.contentWindow || !frameOrigin(f) || f === active) return;
+      stop(); active = f; finished = false;
+      setResult({ state: "pending", count: 0 });
+      retry = setInterval(send, 500);
+      deadline = setTimeout(() => { stop(); if (!finished) setResult({ state: "missing", count: 0 }); }, 6000);
+      send();
+    };
+    const checkReady = () => {
+      const f = getFrame();
+      if (active && (f !== active || f?.getAttribute?.("data-edit-ready") === "false")) {
+        stop(); active = null; finished = false; setResult({ state: "pending", count: 0 });
+      }
+      if (f?.getAttribute?.("data-edit-ready") === "true") begin();
+    };
     const on = (e: MessageEvent) => {
       const f = getFrame();
       if (!f?.contentWindow || e.source !== f.contentWindow || e.origin !== frameOrigin(f)) return;
       const d = e.data;
       if (!d || typeof d !== "object" || d.source !== "nova-site") return;
-      if (d.type === "edit-ready") { clearTimeout(t); t = setTimeout(send, 0); return; }
-      if (d.type === "edit-select-link-result" && d.href === href && typeof d.found === "boolean") setResult(d.found ? "found" : "missing");
+      // Defer until FramedPageEditor has sent edit-init from the same trusted readiness signal.
+      if (d.type === "edit-ready") { clearTimeout(readyTimer); readyTimer = setTimeout(checkReady, 0); return; }
+      if (f !== active || d.type !== "edit-select-link-result" || d.href !== href || d.found !== true) return;
+      finished = true; stop();
+      const count = Number.isSafeInteger(d.count) && d.count > 0 && d.count <= 10000 ? d.count : 1;
+      setResult({ state: "found", count });
     };
     window.addEventListener("message", on);
-    send();
-    return () => { clearTimeout(t); window.removeEventListener("message", on); };
+    const observer = new MutationObserver(checkReady);
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-edit-ready"] });
+    checkReady();
+    return () => { stop(); clearTimeout(readyTimer); observer.disconnect(); window.removeEventListener("message", on); };
   }, [href]);
   return result;
 }

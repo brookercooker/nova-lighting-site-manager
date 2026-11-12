@@ -8,29 +8,80 @@ import { walk } from "../submitWalkthroughStore";
 
 const post = vi.fn();
 const win = { postMessage: post } as unknown as Window;
-const frame = { src: "https://site.example/", contentWindow: win } as unknown as HTMLIFrameElement;
+const attribute = vi.fn(() => "false");
+const frame = { src: "https://site.example/", contentWindow: win, getAttribute: attribute } as unknown as HTMLIFrameElement;
 const msg = (data: unknown, origin = "https://site.example", source: unknown = win) => act(() => {
   const e = new MessageEvent("message", { data, origin }); Object.defineProperty(e, "source", { value: source }); window.dispatchEvent(e);
 });
-beforeEach(() => { vi.clearAllMocks(); walk.reset(); });
-afterEach(cleanup);
+beforeEach(() => { vi.clearAllMocks(); attribute.mockReturnValue("false"); walk.reset(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); });
+const ready = () => {
+  attribute.mockReturnValue("true");
+  msg({ source: "nova-site", type: "edit-ready" });
+  act(() => { vi.advanceTimersByTime(0); });
+};
 
 describe("edit-select-link", () => {
-  it("sends the raw href and again after edit-ready; ignores wrong origin, window or href", async () => {
+  it("waits for editor readiness and ignores wrong origin, window or href", () => {
     vi.useFakeTimers();
     const h = renderHook(() => useEditSelectLink("/contact", () => frame));
+    act(() => { vi.advanceTimersByTime(7000); });
+    expect(post).not.toHaveBeenCalled();
+    msg({ source: "nova-site", type: "edit-ready" });
+    act(() => { vi.advanceTimersByTime(0); });
+    expect(post).not.toHaveBeenCalled(); // edit-init gate is still closed
+    ready();
     expect(post).toHaveBeenCalledWith({ source: "nova-manager", type: "edit-select-link", href: "/contact" }, "https://site.example");
-    msg({ source: "nova-site", type: "edit-ready" }); act(() => { vi.runAllTimers(); });
-    expect(post).toHaveBeenCalledTimes(2);
     msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: true }, "https://evil.example");
     msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: true }, "https://site.example", {});
     msg({ source: "nova-site", type: "edit-select-link-result", href: "/other", found: true });
-    expect(h.result.current).toBe("pending");
+    expect(h.result.current.state).toBe("pending");
     msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: false, count: 0 });
-    expect(h.result.current).toBe("missing");
+    expect(h.result.current.state).toBe("pending");
     msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: true, count: 1 });
-    expect(h.result.current).toBe("found");
-    vi.useRealTimers();
+    expect(h.result.current).toEqual({ state: "found", count: 1 });
+  });
+  it("retries every 500 ms after false replies until a later true reply, retaining the match count", () => {
+    vi.useFakeTimers();
+    const h = renderHook(() => useEditSelectLink("/contact", () => frame));
+    post.mockImplementation(() => msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: post.mock.calls.length >= 4, count: post.mock.calls.length >= 4 ? 3 : 0 }));
+    ready();
+    expect(h.result.current.state).toBe("pending");
+    act(() => { vi.advanceTimersByTime(499); });
+    expect(post).toHaveBeenCalledTimes(1);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(post).toHaveBeenCalledTimes(2);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(h.result.current).toEqual({ state: "found", count: 3 });
+    expect(post).toHaveBeenCalledTimes(4);
+    act(() => { vi.advanceTimersByTime(10000); });
+    expect(post).toHaveBeenCalledTimes(4);
+    expect(h.result.current.state).toBe("found");
+    post.mockReset();
+  });
+  it("only reports missing after six seconds, stops retries, and accepts late success", () => {
+    vi.useFakeTimers();
+    const h = renderHook(() => useEditSelectLink("/contact", () => frame));
+    ready();
+    msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: false, count: 0 });
+    act(() => { vi.advanceTimersByTime(5999); });
+    expect(h.result.current.state).toBe("pending");
+    expect(post).toHaveBeenCalledTimes(12);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(h.result.current.state).toBe("missing");
+    const sends = post.mock.calls.length;
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(post).toHaveBeenCalledTimes(sends);
+    msg({ source: "nova-site", type: "edit-select-link-result", href: "/contact", found: true, count: 3 });
+    expect(h.result.current).toEqual({ state: "found", count: 3 });
+  });
+  it("handles an already-ready editor and cancels retries when change-link mode closes", () => {
+    vi.useFakeTimers(); attribute.mockReturnValue("true");
+    const h = renderHook(() => useEditSelectLink("/contact", () => frame));
+    expect(post).toHaveBeenCalledTimes(1);
+    h.unmount();
+    act(() => { vi.advanceTimersByTime(7000); });
+    expect(post).toHaveBeenCalledTimes(1);
   });
 });
 
