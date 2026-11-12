@@ -799,7 +799,7 @@ export default function VideoTab() {
                 onClick={() => setTimeRange(c.v)}
                 className={`inline-flex min-h-9 items-center text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
                   timeRange === c.v
-                    ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
+                    ? "bg-foreground text-background border-foreground"
                     : "bg-background hover:bg-muted border-border text-muted-foreground"
                 }`}
               >

@@ -123,7 +123,7 @@ export default function VideoPickerDialog({
             <button
               onClick={() => setLabel("")}
               className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                label === "" ? "bg-tag-selected text-tag-selected-foreground border-tag-selected" : "hover:bg-muted text-muted-foreground"
+                label === "" ? "bg-foreground text-background border-foreground" : "hover:bg-muted text-muted-foreground"
               }`}
             >
               All

@@ -89,7 +89,7 @@ export default function FilterBar({
                     }}
                     className={`inline-flex min-h-9 items-center whitespace-nowrap text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
                       active
-                        ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
+                        ? "bg-foreground text-background border-foreground"
                         : "bg-background hover:bg-muted border-border text-muted-foreground"
                     }`}
                   >
@@ -144,7 +144,7 @@ export default function FilterBar({
               }}
               className={`inline-flex min-h-9 items-center whitespace-nowrap text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
                 active
-                  ? "bg-tag-selected text-tag-selected-foreground border-tag-selected"
+                  ? "bg-foreground text-background border-foreground"
                   : "bg-background hover:bg-muted border-border text-muted-foreground"
               }`}
             >
