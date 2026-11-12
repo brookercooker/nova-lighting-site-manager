@@ -78,6 +78,13 @@
       "when": 1794509438457,
       "tag": "0010_trim_admin_audit_log_privileges",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794519888401,
+      "tag": "0011_sanitize_media_display_names",
+      "breakpoints": true
     }
   ]
 }

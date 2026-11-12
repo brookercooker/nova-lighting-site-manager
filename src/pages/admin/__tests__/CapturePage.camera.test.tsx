@@ -59,6 +59,42 @@ async function readyCamera() {
 }
 
 describe("Capture live camera", () => {
+  it("sanitizes an edited name before uploading", async () => {
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><CapturePage /></MemoryRouter></QueryClientProvider>);
+    fireEvent.change(screen.getByLabelText("Choose Photos or Videos"), { target: { files: [new File(["jpeg"], "original.jpg", { type: "image/jpeg" })] } });
+    const input = screen.getByRole("textbox", { name: "Name for original.jpg" });
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.blur(input);
+    expect(input).toHaveValue("original.jpg");
+    fireEvent.change(input, { target: { value: "a/b\\c" } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload 1" }));
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.any(File), expect.objectContaining({ filename: "abc" })));
+  });
+  it("requires confirmation before removing multiple staged items", () => {
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><CapturePage /></MemoryRouter></QueryClientProvider>);
+    fireEvent.change(screen.getByLabelText("Choose Photos or Videos"), { target: { files: [new File(["a"], "one.jpg", { type: "image/jpeg" }), new File(["b"], "two.jpg", { type: "image/jpeg" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByRole("button", { name: "Upload 2", hidden: true })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Upload 2" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove All" }));
+    expect(screen.queryByRole("button", { name: "Upload 2" })).toBeNull();
+  });
+  it("guards leaving and reloads only while unuploaded items remain", () => {
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><CapturePage /></MemoryRouter></QueryClientProvider>);
+    fireEvent.change(screen.getByLabelText("Choose Photos or Videos"), { target: { files: [new File(["a"], "one.jpg", { type: "image/jpeg" })] } });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    fireEvent.click(screen.getByRole("link", { name: /Site Manager/ }));
+    expect(confirm).toHaveBeenCalledOnce();
+    const reload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(reload);
+    expect(reload.defaultPrevented).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    const cleanReload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(cleanReload);
+    expect(cleanReload.defaultPrevented).toBe(false);
+  });
   it("owns the Capture title while mounted and releases title ownership on leaving", () => {
     const view = render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><CapturePage /></MemoryRouter></QueryClientProvider>);
     expect(document.title).toBe("Capture · Site Manager");

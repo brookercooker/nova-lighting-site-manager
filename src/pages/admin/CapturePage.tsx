@@ -19,6 +19,9 @@ import { usePages } from "./useAdminData";
 import { uploadImageFile, uploadVideoFile, attachPageUsages, uniqueName } from "./captureUpload";
 import { formatBytes } from "@/lib/imageOptimize";
 import { useManagerTitle } from "./useManagerTitle";
+import { sanitizeCaptureName } from "./captureName";
+import { useCaptureLeaveGuard } from "./useCaptureLeaveGuard";
+import ConfirmDialog from "./ConfirmDialog";
 
 type Kind = "image" | "video";
 type Status = "staged" | "uploading" | "done" | "error";
@@ -28,6 +31,7 @@ interface Staged {
   file: File;
   kind: Kind;
   name: string;
+  nameHint?: string;
   preview: string;
   tags: string[];
   /** Pages this single item should be linked to (merged with the batch list). */
@@ -162,6 +166,10 @@ export default function CapturePage() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [summary, setSummary] = useState<{ images: number; videos: number; failed: number } | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  useCaptureLeaveGuard(items.some(i => i.status !== "done"));
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -176,7 +184,7 @@ export default function CapturePage() {
   );
 
   // Release object URLs when the page unmounts.
-  useEffect(() => () => { items.forEach((i) => URL.revokeObjectURL(i.preview)); }, []);
+  useEffect(() => () => { itemsRef.current.forEach((i) => URL.revokeObjectURL(i.preview)); }, []);
 
   // App-like scrolling while this tool is open: no browser pull-to-refresh and
   // no rubber-band bounce past the top/bottom of the staged list.
@@ -227,7 +235,7 @@ export default function CapturePage() {
         }
       }
 
-      const name = uniqueName(file.name, taken);
+      const name = uniqueName(sanitizeCaptureName(file.name), taken);
       taken.add(name);
       next.push({
         key: `s${++seq}`,
@@ -254,7 +262,7 @@ export default function CapturePage() {
     if (next.length || attachedTo.size) {
       setSummary(null);
       setItems((prev) => [
-        ...prev.map((i) => (attachedTo.has(i.key) ? { ...i, altFile: attachedTo.get(i.key)! } : i)),
+        ...prev.map((i) => ({ ...i, altFile: attachedTo.get(i.key) ?? i.altFile })),
         ...next,
       ]);
     }
@@ -278,6 +286,7 @@ export default function CapturePage() {
   };
 
   const clearAll = () => {
+    setConfirmClear(false);
     items.forEach((i) => URL.revokeObjectURL(i.preview));
     setItems([]);
     setSummary(null);
@@ -300,15 +309,16 @@ export default function CapturePage() {
     // several full-resolution originals in parallel.
     for (let i = 0; i < pending.length; i++) {
       const item = pending[i];
-      patch(item.key, { status: "uploading", error: undefined });
+      const name = sanitizeCaptureName(item.name, item.file.name);
+      patch(item.key, { name, status: "uploading", error: undefined, ...(name !== item.name ? { nameHint: "Name adjusted for upload." } : {}) });
       try {
         const tags = Array.from(new Set([
           ...(item.kind === "image" ? imageTags : videoTags),
           ...item.tags,
         ]));
         const row = item.kind === "image"
-          ? await uploadImageFile(item.file, { filename: item.name, tags })
-          : await uploadVideoFile(item.file, { filename: item.name, tags, altFile: item.altFile });
+          ? await uploadImageFile(item.file, { filename: name, tags })
+          : await uploadVideoFile(item.file, { filename: name, tags, altFile: item.altFile });
         const pages = Array.from(new Set([...pageIds, ...item.pageIds]));
         if (pages.length) await attachPageUsages(item.kind, row.id, pages);
         patch(item.key, { status: "done" });
@@ -346,6 +356,7 @@ export default function CapturePage() {
 
   return (
     <div className="capture-app min-h-[100dvh] bg-background pb-40">
+      <ConfirmDialog open={confirmClear} onOpenChange={setConfirmClear} title="Remove All Staged Items?" description={`Remove all ${items.length} staged items? ${items.some(i => i.status === "done") ? "Uploaded items will stay in your library." : "Nothing has been uploaded yet."}`} confirmLabel="Remove All" onConfirm={clearAll} />
       <CameraCaptureSheet
         open={cameraOpen} onOpenChange={setCameraOpen} onCapture={(file) => stage([file])}
         onUnavailable={(reason) => {
@@ -370,7 +381,7 @@ export default function CapturePage() {
           </Button>
           <h1 className="text-base font-semibold flex-1 truncate">Capture</h1>
           {items.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearAll} disabled={busy} className="gap-1.5 px-2 text-muted-foreground">
+            <Button variant="ghost" size="sm" onClick={() => items.length >= 2 ? setConfirmClear(true) : clearAll()} disabled={busy} className="gap-1.5 px-2 text-muted-foreground">
               <Trash2 className="w-4 h-4" />
               Clear
             </Button>
@@ -493,6 +504,8 @@ export default function CapturePage() {
                         value={item.name}
                         disabled={busy || item.status === "done"}
                         onChange={(e) => patch(item.key, { name: e.target.value })}
+                        onBlur={() => { const name = sanitizeCaptureName(item.name, item.file.name); patch(item.key, { name, nameHint: name !== item.name ? "Name adjusted: using a safe name of up to 80 characters." : item.nameHint }); }}
+                        aria-describedby={item.nameHint ? `capture-name-${item.key}` : undefined}
                         aria-label={`Name for ${item.name}`}
                         enterKeyHint="done"
                         autoCapitalize="off"
@@ -510,6 +523,7 @@ export default function CapturePage() {
                       </Button>
 
                     </div>
+                    {item.nameHint && <p id={`capture-name-${item.key}`} role="status" className="text-xs text-muted-foreground">{item.nameHint}</p>}
                     <div className="text-xs text-muted-foreground">
                       {item.kind === "image" ? "Photo" : "Video"}
                       {item.kind === "video" && (

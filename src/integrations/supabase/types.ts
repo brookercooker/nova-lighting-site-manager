@@ -1066,6 +1066,10 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_site_user: { Args: never; Returns: boolean }
+      sanitize_media_display_name: {
+        Args: { fallback?: string; value: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "user"

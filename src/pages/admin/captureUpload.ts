@@ -12,6 +12,7 @@ import { optimizeImagePair } from "@/lib/imageOptimize";
 import { extractAndPersistExif } from "./imageExif";
 import { probeVideoFile } from "./videoHelpers";
 import { GATED_BUCKET, VIDEO_GATED_BUCKET, VIDEO_PUBLIC_BUCKET } from "@/lib/assetUrl";
+import { sanitizeCaptureName } from "./captureName";
 
 export const SIGN_EXPIRY = 60 * 60 * 24 * 365 * 10;
 
@@ -84,6 +85,7 @@ export interface UploadOpts {
  * storage never accumulates files the database doesn't know about.
  */
 export async function uploadImageFile(file: File, opts: UploadOpts): Promise<any> {
+  opts = { ...opts, filename: sanitizeCaptureName(opts.filename, file.name) };
   const { blob, fallbackBlob, width, height } = await optimizeImagePair(file, opts.maxSide ?? 1920);
   const stamp = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
@@ -155,6 +157,7 @@ export async function uploadVideoFile(
   file: File,
   opts: UploadOpts & { altFile?: File | null },
 ): Promise<any> {
+  opts = { ...opts, filename: sanitizeCaptureName(opts.filename, file.name) };
   const stamp = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
   const safe = safeName(opts.filename);
