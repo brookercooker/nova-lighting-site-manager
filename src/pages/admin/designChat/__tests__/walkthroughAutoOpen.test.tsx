@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SubmitConfirmDialog, SubmitWalkthroughPanel, WalkthroughCheckBar, LinkCheckWindow } from "../SubmitWalkthrough";
+import { SubmitConfirmDialog, SubmitWalkthroughPanel, WalkthroughCheckBar } from "../SubmitWalkthrough";
 import { walk, useWalk } from "../submitWalkthroughStore";
 import { linkCheckActive, linkText } from "../linkCheck";
 
@@ -23,7 +23,7 @@ afterEach(() => { cleanup(); (window as any).innerWidth = 1280; });
 
 function Host() {
   const s = useWalk();
-  return <><SubmitConfirmDialog open onOpenChange={() => {}} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<WalkthroughCheckBar /><LinkCheckWindow /></>;
+  return <><SubmitConfirmDialog open onOpenChange={() => {}} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<WalkthroughCheckBar /></>;
 }
 const ready = () => { const e = new Event("message") as any; Object.assign(e, { data: { source: "nova-site", type: "link-check-ready", v: 2, enabled: true }, origin: "https://site.example", source: frame.contentWindow }); window.dispatchEvent(e); };
 

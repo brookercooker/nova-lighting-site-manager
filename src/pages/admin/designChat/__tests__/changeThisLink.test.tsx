@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SubmitWalkthroughPanel, LinkCheckWindow, walkProgress, ownLinkPrint } from "../SubmitWalkthrough";
+import { SubmitWalkthroughPanel, walkProgress, ownLinkPrint } from "../SubmitWalkthrough";
 import { walk, useWalk } from "../submitWalkthroughStore";
 import { LINK_BADGE, fixPage, linkCheckList, linkState } from "../linkCheck";
 import { LinkFixBanner, useClearFixOnExit } from "../linkFix";
@@ -20,7 +20,7 @@ function setData(links: any[], extra: any[] = []) {
   m.data = { rows: [{ key: "page:/a", page: { name: "About", path: "/a" }, how: "x" }], pages: [], pagesStatus: "ok",
     links: { status: "ok", groups: [...groups(links), ...extra], unread: 0, partial: false, truncated: false } };
 }
-function Host() { const s = useWalk(); useClearFixOnExit(m.editing); return <>{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<LinkCheckWindow /><LinkFixBanner /></>; }
+function Host() { const s = useWalk(); useClearFixOnExit(m.editing); return <>{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<LinkFixBanner /></>; }
 const toLinks = () => act(() => { walk.open("panel"); walk.update(w => ({ ...w, step: "links", ticked: ["page:/a"], autoOpen: false, checking: null })); });
 
 beforeEach(() => { vi.clearAllMocks(); walk.reset(); m.editing = false; m.state = { busy: false, publish: { ok: true, open: 1 }, review: { enabled: true } }; setData([link("/gallery")]); });
@@ -42,14 +42,6 @@ describe("Edit Link Destination", () => {
     expect(walk.get().reviewEdit?.link.href).toBe("/gallery");
     expect(m.start).not.toHaveBeenCalled();
     expect(walk.get().fix).toBeNull();
-  });
-  it("dialog editing closes it and opens the inline panel without a wrong decision", () => {
-    render(<Host />);
-    act(() => walk.update(w => ({ ...w, linkCheck: { raw: "/gallery", href: "/gallery", kind: "internal", label: null, path: "/a", page: "/a" } })));
-    fireEvent.click(screen.getByRole("button", { name: "Edit Link Destination" }));
-    expect(walk.get().linkCheck).toBeNull();
-    expect(walk.get().reviewEdit?.link.href).toBe("/gallery");
-    expect(m.start).not.toHaveBeenCalled();
   });
   it("resolution fallback opens Manual Edit Mode on the link's page and shows the banner", async () => {
     const h = render(<Host />); toLinks();
@@ -86,7 +78,7 @@ describe("Edit Link Destination", () => {
     expect(screen.getByText(LINK_BADGE.todo)).toBeTruthy();
     expect(screen.getByText("1 of 2 links approved")).toBeTruthy();
     expect((screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getAllByRole("button", { name: "Check This Link" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Open Link to Verify" })).toHaveLength(1);
     const p = walkProgress(m.data, walk.get());
     expect(p.linksLeft).toBe(1);
     act(() => walk.confirmLink("/a|/gallery-new", linkFingerprints(m.data)["/a|/gallery-new"], true));

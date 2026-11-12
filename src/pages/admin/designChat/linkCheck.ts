@@ -41,7 +41,7 @@ function post(frame: HTMLIFrameElement | null, message: Record<string, unknown>)
   catch { return false; } // a frame removed mid-teardown
 }
 export function postLinkCheck(frame: HTMLIFrameElement | null, enabled: boolean, links: LinkCheckEntry[] = []): boolean {
-  return post(frame, enabled ? { type: "link-check", enabled, links: links.slice(0, MAX_LISTED_LINKS) } : { type: "link-check", enabled });
+  return post(frame, enabled ? { type: "link-check", enabled, interceptAll: true, links: links.slice(0, MAX_LISTED_LINKS) } : { type: "link-check", enabled });
 }
 /** Asks the public frame to scroll to and flash a listed link. */
 export function postLinkFocus(frame: HTMLIFrameElement | null, raw: string): boolean {
@@ -62,10 +62,10 @@ export function isLinkCheckReady(event: MessageEvent, frame: HTMLIFrameElement |
 }
 const str = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max && !/[\u0000-\u001f]/.test(v);
 /** A validated v2 link-click whose match is one of the listed links, or null for anything else. */
-export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | null, listed: string[]): LinkClick | null {
+export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | null, listed: string[], allowUnmatched = false): LinkClick | null {
   const d = event.data;
   if (!fromFrame(event, frame) || !d || typeof d !== "object" || d.source !== "nova-site" || d.type !== "link-click" || d.v !== 2) return null;
-  if (typeof d.match !== "string" || !listed.includes(d.match)) return null;
+  if (!(typeof d.match === "string" && listed.includes(d.match)) && !(allowUnmatched && d.match == null)) return null;
   if (!str(d.raw, 2048) || !str(d.href, 2048) || !KINDS.includes(d.kind)) return null;
   if (d.label != null && typeof d.label !== "string") return null;
   if (d.path != null && !(str(d.path, 300) && /^\/(?!\/)/.test(d.path))) return null;
@@ -111,7 +111,7 @@ export function linksNeedChecking(links: ReviewLink[], linkTicked: string[], rep
   const left = links.filter(l => !linkResolved(linkState(l.key, linkTicked, replaced))).length;
   return left ? `${left} of ${links.length} ${links.length === 1 ? "link needs" : "links need"} checking` : "All links confirmed";
 }
-export const LINK_HINT = "Dashed orange outlines on the page mark links to check. Click one to confirm where it goes.";
+export const LINK_HINT = "Dashed orange outlines on the page mark links to check. Click one to jump to its row here.";
 /** Plain suggestions shown on the Pages step and in the Checking Changes bar; never ticked, stored or gating. */
 export const PAGE_SUGGESTIONS = ["How the page looks on a phone", "That the text that changed reads correctly", "That the images and layout look right"];
 /** One item per changed link on the page; each ticks itself when the link is confirmed. Pages without links have none. */
@@ -126,7 +126,7 @@ export function pageChecks(row: ChangedRow, links: ReviewLink[], linkTicked: str
 }
 
 /** The preview link bridge runs only on the Links step, while a link's page is shown in the visible, non-editing preview. */
-export const linkCheckActive = (w: { step: string; checking: unknown }, visible: boolean, editing: boolean) => !!w.checking && w.step === "links" && visible && !editing;
+export const linkCheckActive = (w: { step: string; checking: unknown; open?: boolean }, visible: boolean, editing: boolean) => (!!w.checking || !!w.open) && w.step === "links" && visible && !editing;
 
 /** The page Change This Link edits: the link group's page, else the first changed page (as Show on Page), else "/". */
 export function fixPage(group: LinkGroup, rows: ChangedRow[]): { path: string; name: string } {

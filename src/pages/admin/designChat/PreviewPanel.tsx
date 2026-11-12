@@ -1,4 +1,4 @@
-import { LinkCheckWindow, WalkthroughCheckBar } from "./SubmitWalkthrough";
+import { WalkthroughCheckBar } from "./SubmitWalkthrough";
 import { useWalk } from "./submitWalkthroughStore";
 import { LinkCheckBridge } from "./useLinkCheckBridge";
 import { linkCheckActive } from "./linkCheck";
@@ -66,7 +66,6 @@ export default function PreviewPanel() {
     <section ref={sectionRef} className="flex h-full min-h-0 flex-col" aria-label="Preview">
       <ContentSyncNote previewFailed={previewFailed} />
       <WalkthroughCheckBar />
-      <LinkCheckWindow />
       {linkChecking && <LinkCheckBridge root={sectionRef} frameKey={`${preview.shownId}|${frameAddresses}`} />}
       <div className={cn("shrink-0 overflow-hidden bg-background transition-[height] duration-200 motion-reduce:transition-none", ribbon && !ribbon.fading ? phone ? "h-2" : "h-12" : "h-0")}>
         <StageRibbon progress={ribbon} thin={phone} className={phone ? "pb-0.5" : "px-2 pt-1 pb-3"} />

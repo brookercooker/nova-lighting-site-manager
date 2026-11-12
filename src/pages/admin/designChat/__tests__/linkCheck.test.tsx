@@ -2,12 +2,12 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isLinkCheckReady, linkCheckList, linksNeedChecking, parseLinkClick, pageChecks } from "../linkCheck";
-import { LinkCheckWindow, SubmitWalkthroughPanel, walkProgress } from "../SubmitWalkthrough";
-import { useLinkCheckBridge } from "../useLinkCheckBridge";
+import { SubmitWalkthroughPanel, walkProgress } from "../SubmitWalkthrough";
+import { LinkCheckBridge, useLinkCheckBridge } from "../useLinkCheckBridge";
 import { walk, useWalk } from "../submitWalkthroughStore";
 
-const m = vi.hoisted(() => ({ state: null as any, data: null as any, preview: null as any, show: vi.fn() }));
-vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, preview: m.preview, setReviewOpen: vi.fn(), refreshSoon: vi.fn(), showPreviewPath: m.show, selectPage: vi.fn() }) }));
+const m = vi.hoisted(() => ({ state: null as any, data: null as any, preview: null as any, show: vi.fn(), review: vi.fn() }));
+vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, preview: m.preview, setReviewOpen: m.review, refreshSoon: vi.fn(), showPreviewPath: m.show, selectPage: vi.fn() }) }));
 vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 
@@ -15,6 +15,7 @@ const ORIGIN = "https://site.example";
 const team = { key: "/a|/team", href: "/team", kind: "internal", label: "Team", requestIds: ["r1"], status: null };
 const row = { key: "page:/a", page: { name: "About", path: "/a" }, how: "Changed by the builder", fingerprint: "v1" };
 beforeEach(() => {
+  m.review.mockClear();
   walk.reset();
   m.preview = null;
   m.state = { busy: false, publish: { ok: true, open: 1 }, review: { enabled: true } };
@@ -69,182 +70,57 @@ describe("per-page checks", () => {
 
 function Host() {
   const s = useWalk();
-  return <>{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<LinkCheckWindow /></>;
+  return <>{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}</>;
 }
 const panel = () => within(screen.getByRole("region", { name: "Submit for Review Walkthrough" }));
-const win = () => within(screen.getByRole("dialog", { name: "Check This Link" }));
-const openAbout = () => { act(() => walk.open("panel")); render(<Host />); fireEvent.click(panel().getAllByRole("button", { name: "About" })[0]); act(() => walk.reopen("pages")); };
-const tickThree = () => { expect(panel().queryByRole("checkbox", { name: /phone|text that changed|images and layout/ })).toBeNull(); };
-
-describe("Approve gating and the Check This Link window", () => {
-  it("step 1 has no links and Approve needs only the open page", () => {
-    openAbout();
-    expect(panel().queryByRole("button", { name: "Check This Link" })).toBeNull();
-    expect(panel().queryByText(/Dashed orange outlines/)).toBeNull();
-    expect(panel().queryByText(/Links to Check/)).toBeNull();
-    expect(panel().getByRole("button", { name: "Approve" })).toBeEnabled();
-  });
-  it("step 2: Check This Link confirms the link, updates the count and enables Next", () => {
-    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"], viewed: ["page:/a"] })));
-    render(<Host />);
-    expect(panel().getByText(/Dashed orange outlines/)).toBeInTheDocument();
-    const row = within(document.querySelector("[data-walk-link='/a|/team']") as HTMLElement);
-    expect(row.getAllByRole("button").map(b => b.textContent)).toEqual(["Show on Page", "Check This Link", "Edit Link Destination"]);
-    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
-    fireEvent.click(row.getByRole("button", { name: "Check This Link" }));
-    expect(win().getByText("A page on your site")).toBeInTheDocument();
-    expect(win().getByText("Page found")).toBeInTheDocument();
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
-    expect(win().getByRole("button", { name: "Confirm Link" })).toHaveAttribute("aria-disabled", "true");
-    expect(win().getByRole("button", { name: "Confirm Link" })).toHaveAttribute("aria-describedby", "link-confirm-hint");
-    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
-    fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
-    expect(walk.get().linkTicked).toEqual(["/a|/team"]);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(row.getByText("Confirmed")).toBeInTheDocument();
-    expect(panel().getByText(/1 of 1 link/)).toBeInTheDocument();
-    expect(panel().getByRole("button", { name: "Next" })).toBeEnabled();
-  });
-  it("Edit Link Destination opens in-review editing even before verification", () => {
-    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"], viewed: ["page:/a"] })));
-    render(<Host />);
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
-    fireEvent.click(win().getByRole("button", { name: "Edit Link Destination" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(walk.get().reviewEdit?.link.key).toBe("/a|/team");
-    expect(walk.get().fix).toBeNull();
-  });
-  it("opens external HTTPS destinations directly and requires an actual opening click", () => {
-    render(<LinkCheckWindow />);
-    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "https://other.example/x", href: "https://other.example/x", kind: "external", label: "Partner", path: "/a", page: "/a" } })));
-    expect(win().getByText("A different website")).toBeInTheDocument();
-    expect(win().getByRole("link", { name: "Open Link to Verify" })).toHaveAttribute("rel", "noopener noreferrer");
-    expect(win().getByRole("link", { name: "Open Link to Verify" })).toHaveAttribute("href", "https://other.example/x");
-    expect(win().getByRole("link", { name: "Open Link to Verify" })).toHaveAttribute("target", "_blank");
-    expect(win().getByText("This link wasn't changed in this draft, so checking it here isn't counted.")).toBeInTheDocument();
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
-    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
-    fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
+const openLinks = () => { act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"], autoOpen: false }))); render(<Host />); };
+describe("inline link verification", () => {
+  it("requires opening before ticking and permits unchecking", () => {
+    openLinks();
+    const box = screen.getByRole("checkbox", { name: "Looks right" });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAttribute("aria-describedby");
+    fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
+    expect(box).toBeEnabled();
+    fireEvent.click(box);
+    expect(walk.get().linkTicked).toEqual([team.key]);
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    fireEvent.click(box);
     expect(walk.get().linkTicked).toEqual([]);
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
-  it.each([["mail", "mailto:a@b.co", "a@b.co", "An email address"], ["phone", "tel:+15550100", "+15550100", "A phone number"]])("shows %s addresses without an open-tab or copy button", (kind, raw, address, text) => {
-    render(<LinkCheckWindow />);
-    act(() => walk.update(s => ({ ...s, linkCheck: { raw, href: raw, kind: kind as any, label: null, path: "/a", page: "/a" } })));
-    expect(win().getByText(text)).toBeInTheDocument();
-    expect(win().getAllByText(address).length).toBeGreaterThan(0);
-    expect(win().queryByRole("link", { name: "Open Link to Verify" })).toBeNull();
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
-    expect(win().getByText("Check that this address is correct, then confirm.")).toBeInTheDocument();
-    expect(win().queryByRole("button", { name: "Copy Address" })).toBeNull();
+  it("opening one row never unlocks another", () => {
+    m.data.links.groups[0].links.push({ ...team, key: "other", href: "/other", kind: "external" });
+    openLinks();
+    fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
+    const boxes = screen.getAllByRole("checkbox", { name: "Looks right" });
+    expect(boxes[0]).toBeEnabled(); expect(boxes[1]).toBeDisabled();
   });
-  it("opens internal destinations using the shown draft preview base, preserving its query", () => {
-    m.preview = { shownId: 4, frames: [{ id: 4, url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/a?fixture=draft" }] };
-    render(<LinkCheckWindow />);
-    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team?view=all#people", href: "/team?view=all#people", kind: "internal", label: null, path: "/a", page: "/a" } })));
-    const url = new URL(win().getByRole("link", { name: "Open Link to Verify" }).getAttribute("href") ?? "");
-    expect(url.origin).toBe("https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app");
-    expect(url.pathname + url.hash).toBe("/team#people");
-    expect(url.searchParams.get("fixture")).toBe("draft");
-    expect(url.searchParams.get("view")).toBe("all");
+  it("missing pages cannot approve even with a legacy Keep decision", () => {
+    m.data.pages = []; openLinks();
+    fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
+    act(() => { walk.confirmLink(team.key, "fp", true); walk.update(s => ({ ...s, keptMissing: { [team.key]: "old" } })); });
+    expect(screen.getByRole("checkbox", { name: "Looks right" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
-  it("opens anchors in a new tab at their page", () => {
-    render(<LinkCheckWindow />);
-    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "#faq", href: "#faq", kind: "anchor", label: "FAQ", path: "/a", page: "/a" } })));
-    expect(win().getByText("A section of this page")).toBeInTheDocument();
-    expect(win().getByRole("link", { name: "Open Link to Verify" }).getAttribute("href")).toMatch(/\/a#faq$/);
+  it.each([["mail", "mailto:a@b.co"], ["phone", "tel:+15550100"]])("keeps %s address verification immediate", (kind, href) => {
+    m.data.links.groups[0].links = [{ ...team, kind, href }]; openLinks();
+    expect(screen.queryByRole("link", { name: "Open Link to Verify" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Looks right" })).toBeEnabled();
   });
-  it("Unconfirm returns a confirmed link to Needs Checking and blocks Next", () => {
-    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
-    render(<Host />);
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
-    fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    expect(win().getByText("Confirmed")).toBeInTheDocument();
-    fireEvent.click(win().getByRole("button", { name: "Unconfirm" }));
-    expect(walk.get().linkTicked).toEqual([]);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(panel().getByText("Needs Checking")).toBeInTheDocument();
-    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
-  });
-  it("Close without deciding preserves the unresolved state", () => {
-    render(<LinkCheckWindow />);
-    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team", href: "/team", kind: "internal", label: null, path: "/a", page: "/a" } })));
-    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
-    expect(walk.get().linkTicked).toEqual([]);
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-  it("a missing internal page cannot be confirmed even after opening or with stale approval", () => {
-    m.data.pages = [];
-    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
-    render(<Host />);
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
-    expect(win().getByText("This page doesn't exist. Edit the link destination to fix it.")).toBeInTheDocument();
-    act(() => walk.confirmLink("/a|/team", "fp", true));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
-    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
-    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
-  });
-  it("only explicit Keep after opening resolves a missing page; Confirm remains disabled", () => {
-    m.data.pages = [];
-    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
-    render(<Host />);
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    expect(win().getByRole("button", { name: "Keep This Link" })).toBeDisabled();
-    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
-    expect(walkProgress(m.data).linksLeft).toBe(1);
-    fireEvent.click(win().getByRole("button", { name: "Keep This Link" }));
-    expect(panel().getByRole("button", { name: "Next" })).toBeEnabled();
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
-    fireEvent.click(win().getByRole("button", { name: "Undo Keep" }));
-    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
-  });
-  it("an unnamed unknown destination has a friendly source-page label", () => {
-    render(<LinkCheckWindow />);
-    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/gallery", href: "/gallery", kind: "internal", label: null, page: "/", path: "/" } })));
-    expect(win().getByText("Text link on Homepage")).toBeInTheDocument();
-  });
-  it("never displays draft credentials but retains them only in the opening URL", () => {
+  it("keeps draft tokens only in safe opening URLs", () => {
     m.preview = { shownId: 4, frames: [{ id: 4, url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/a?__lovable_token=test-credential" }] };
-    render(<LinkCheckWindow />);
-    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team", href: "/team", kind: "internal", label: null, page: "/a", path: "/a" } })));
-    const tab = win().getByRole("link", { name: "Open Link to Verify" });
-    expect(tab.getAttribute("href")).toContain("__lovable_token=test-credential");
-    expect(tab).not.toHaveAttribute("title");
-    expect(screen.getByRole("dialog").textContent).not.toContain("test-credential");
+    openLinks();
+    const link = screen.getByRole("link", { name: "Open Link to Verify" });
+    expect(link).toHaveAttribute("target", "_blank"); expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(link.getAttribute("href")).toContain("__lovable_token=test-credential");
+    expect(document.body.textContent).not.toContain("test-credential");
   });
-  it("renders label text as text, never HTML", () => {
-    render(<LinkCheckWindow />);
-    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team", href: "/team", kind: "internal", label: "<img src=x onerror=alert(1)>", path: "/a", page: "/a" } })));
-    expect(win().getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
-    expect(document.querySelector("img[src='x']")).toBeNull();
-  });
-  it("keeps opening permission on reopen but clears it when its fingerprint changes", async () => {
-    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
-    render(<Host />);
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
-    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
-    const { ownLinkPrint } = await import("../SubmitWalkthrough");
-    expect(walk.get().verificationOpened[team.key]).toBe(ownLinkPrint(team as any));
-    act(() => walk.reconcile({}, undefined, { [team.key]: "changed" }));
-    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
-  });
-  it("a replacement clears opening memory for old and new links", () => {
-    walk.openedVerification(team.key, "old");
-    walk.openedVerification("/a|/gallery", "prior");
-    walk.editLink({ link: team as any, group: m.data.links.groups[0], rows: [], fingerprint: "old" });
-    walk.savedLink("/a", { ...team, key: "/a|/gallery", href: "/gallery" } as any);
-    expect(walk.get().verificationOpened).toEqual({});
+  it("clears opening permission when a link fingerprint changes", () => {
+    openLinks(); fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
+    act(() => walk.reconcile({}, undefined, { [team.key]: "new" }));
+    expect(screen.getByRole("checkbox", { name: "Looks right" })).toBeDisabled();
   });
 });
 
@@ -254,41 +130,48 @@ function Bridge({ active, links = [] }: { active: boolean; links?: any[] }) {
   return null;
 }
 const ready = (v = 2) => ({ source: "nova-site", type: "link-check-ready", v, enabled: true });
-describe("frame bridge", () => {
-  const Wired = () => { const s = useWalk(); const links = linkCheckList(m.data.links.groups, s.linkTicked, s.linkReplaced); return <Bridge active={s.checking?.kind === "page"} links={links} />; };
-  it("sends the list on enable, re-sends on state change, opens only listed v2 clicks, and switches off on Keep Editing", () => {
+describe("frame bridge row selection", () => {
+  it("reopens the phone review panel through the real bridge without navigating the preview", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     const f = frameWith();
-    const post = vi.spyOn(f.contentWindow!, "postMessage");
-    render(<><Wired /><LinkCheckWindow /></>);
-    act(() => walk.update(s => ({ ...s, checking: { key: "page:/a", kind: "page", name: "About" } })));
-    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "todo" }] }, ORIGIN);
-    const send = (data: any, origin = ORIGIN) => act(() => { window.dispatchEvent(new MessageEvent("message", { data, origin, source: f.contentWindow })); });
-    send(click());
-    expect(screen.queryByRole("dialog")).toBeNull(); // no v2 ready yet
-    send(ready());
-    send(click(), "https://evil.example");
-    send(click({ match: "/other" }));
-    send(click({ match: undefined }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    send(click());
-    expect(win().getByText("Is this the correct destination?")).toBeInTheDocument();
-    act(() => walk.confirmLink("/a|/team", "fp", true));
-    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "done" }] }, ORIGIN);
-    act(() => walk.confirmLink("/a|/team", "fp", false));
-    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "todo" }] }, ORIGIN);
-    act(() => walk.keepEditing());
-    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: false }, ORIGIN);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    f.remove();
+    const ref = { current: document.body };
+    m.show.mockClear();
+    act(() => walk.update(s => ({ ...s, step: "links", checking: { key: team.key, kind: "link", name: "Team" } })));
+    render(<><LinkCheckBridge root={ref} frameKey="phone" /><Host /></>);
+    for (const data of [ready(), click()]) act(() => { window.dispatchEvent(new MessageEvent("message", { data, origin: ORIGIN, source: f.contentWindow })); });
+    expect(m.review).toHaveBeenCalledWith(true);
+    expect(walk.get().open).toBe(true);
+    expect(screen.getByRole("link", { name: "Open Link to Verify" })).toHaveFocus();
+    expect(m.show).not.toHaveBeenCalled();
+    expect(f.src).toBe(ORIGIN + "/a");
+    f.remove(); Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
   });
-  it("treats a v1 ready reply as unsupported", () => {
+  it.each([1280, 390])("selects and scrolls the matching row and opens review at width %s", width => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    const scroll = vi.fn(); HTMLElement.prototype.scrollIntoView = scroll;
     const f = frameWith();
-    render(<><Wired /><LinkCheckWindow /></>);
-    act(() => walk.update(s => ({ ...s, checking: { key: "page:/a", kind: "page", name: "About" } })));
-    expect(isLinkCheckReady(new MessageEvent("message", { data: ready(1), origin: ORIGIN, source: f.contentWindow }), f)).toBe(false);
-    act(() => { window.dispatchEvent(new MessageEvent("message", { data: ready(1), origin: ORIGIN, source: f.contentWindow })); });
-    act(() => { window.dispatchEvent(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow })); });
+    const post = vi.spyOn(f.contentWindow as Window, "postMessage");
+    const root = { current: document.body };
+    const send = (data: any) => act(() => { window.dispatchEvent(new MessageEvent("message", { data, origin: ORIGIN, source: f.contentWindow })); });
+    function Wired() { useLinkCheckBridge(root, true, "k", [{ raw: "/team", state: "todo" }], () => walk.selectLink(team.key)); return <Host />; }
+    render(<Wired />);
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ interceptAll: true }), ORIGIN);
+    send(ready()); send(click());
+    expect(walk.get().open).toBe(true);
+    expect(walk.get().step).toBe("links");
+    expect(walk.get().selectedLink?.key).toBe(team.key);
+    expect(scroll).toHaveBeenCalledWith({ block: "nearest" });
+    expect(screen.getByRole("link", { name: "Open Link to Verify" })).toHaveFocus();
     expect(screen.queryByRole("dialog")).toBeNull();
+    f.remove(); Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
+  });
+  it("shows an inline note for an unchanged click and ignores forged origins", () => {
+    const f = frameWith(); render(<><Bridge active links={[{ raw: "/team", state: "todo" }]} /><Host /></>);
+    const send = (data: any, origin = ORIGIN) => act(() => { window.dispatchEvent(new MessageEvent("message", { data, origin, source: f.contentWindow })); });
+    send(ready()); send(click(), "https://evil.example");
+    expect(walk.get().selectedLink).toBeNull();
+    send(click({ raw: "/unchanged", href: ORIGIN + "/unchanged", match: null }));
+    expect(screen.getByRole("status")).toHaveTextContent("This link wasn't changed, so it doesn't need checking.");
     f.remove();
   });
 });

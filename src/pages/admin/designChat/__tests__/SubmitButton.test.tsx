@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmitButton, SubmitConfirmDialog } from "../PreviewTools";
-import { LinkCheckWindow, SubmitWalkthroughPanel } from "../SubmitWalkthrough";
+import { SubmitWalkthroughPanel } from "../SubmitWalkthrough";
 import { walk, useWalk } from "../submitWalkthroughStore";
 
 const m = vi.hoisted(() => ({ state: null as any, post: vi.fn(), refresh: vi.fn(), show: vi.fn(), review: vi.fn(), data: null as any }));
@@ -20,7 +20,7 @@ afterEach(cleanup);
 
 function PanelHost({ open = true, onOpenChange = () => {} }: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const s = useWalk();
-  return <><SubmitConfirmDialog open={open} onOpenChange={onOpenChange} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => { walk.keepEditing(); onOpenChange(false); }} />}<LinkCheckWindow /></>;
+  return <><SubmitConfirmDialog open={open} onOpenChange={onOpenChange} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => { walk.keepEditing(); onOpenChange(false); }} />}</>;
 }
 const dialog = () => screen.getByRole("region", { name: "Submit for Review Walkthrough" });
 const viewAndTick = (name = "About") => {
@@ -29,14 +29,14 @@ const viewAndTick = (name = "About") => {
   act(() => walk.reopen("pages"));
   fireEvent.click(within(screen.getByRole("button", { name }).closest("li")!).getByRole("button", { name: "Approve" }));
 };
-/** Confirms every changed link on the Links step through the Check This Link window. */
+/** Approves each inline link row after opening web destinations. */
 const confirmLinks = () => {
-  while (within(dialog()).queryAllByRole("button", { name: "Check This Link" }).filter(b => !b.querySelector("svg")).length) {
-    fireEvent.click(within(dialog()).getAllByRole("button", { name: "Check This Link" }).filter(b => !b.querySelector("svg"))[0]);
-    const win = within(screen.getByRole("dialog", { name: "Check This Link" }));
-    const open = win.queryByRole("link", { name: "Open Link to Verify" });
+  for (const row of document.querySelectorAll<HTMLElement>("[data-walk-link]")) {
+    const controls = within(row);
+    const open = controls.queryByRole("link", { name: "Open Link to Verify" });
     if (open) fireEvent.click(open);
-    fireEvent.click(win.getByRole("button", { name: "Confirm Link" }));
+    const box = controls.queryByRole("checkbox", { name: "Looks right" });
+    if (box) fireEvent.click(box);
   }
 };
 const tickManual = () => {

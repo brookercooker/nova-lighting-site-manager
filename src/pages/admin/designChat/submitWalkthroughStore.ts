@@ -1,5 +1,4 @@
 import { useSyncExternalStore } from "react";
-import type { LinkClick } from "./linkCheck";
 import { normPath, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 
 /** How long after Change This Link a refetched page keeps its approvals (re-pinned to the new fingerprint). */
@@ -21,8 +20,8 @@ export type WalkState = {
   viewed: string[]; ticked: string[]; linkOpened: string[]; linkTicked: string[]; checks: string[];
   checking: Checking;
   approvals: Record<string, string>; linkApprovals: Record<string, string>; changed: string[];
-  /** The Check This Link window, with the page it was clicked on. */
-  linkCheck: (LinkClick & { page: string | null }) | null;
+  selectedLink: { key: string; sequence: number } | null;
+  linkNote: string | null;
   /** Set by each Submit opening; consumed by the one automatic open of the first changed page. */
   autoOpen: boolean;
   /** Wrong links the reviewer replaced by hand in Manual Edit Mode, with the link fingerprint at the time. */
@@ -32,7 +31,7 @@ export type WalkState = {
   /** The page just saved through Change This Link: its approval and confirmed links follow the hand save instead of resetting. */
   repin: { path: string; until: number } | null;
 };
-const initial = (): WalkState => ({ keptMissing: {}, verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
+const initial = (): WalkState => ({ keptMissing: {}, verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], selectedLink: null, linkNote: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
 export const WALK_SESSION_KEY = "nova-review-progress-v1";
 const progressFields = ["approvals", "linkApprovals", "verificationOpened", "linkReplaced", "keptMissing"] as const;
 function readProgress(): WalkState {
@@ -61,8 +60,9 @@ export const walk = {
   mount(id: string, fallback: boolean) { hosts.set(id, fallback); return () => { hosts.delete(id); }; },
   open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null, autoOpen: true })); },
   close() { walk.update((s) => ({ ...s, open: false })); },
-  keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", linkCheck: null, fix: null, reviewEdit: null })); },
-  editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, linkCheck: null, step: "links" })); },
+  keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", selectedLink: null, linkNote: null, fix: null, reviewEdit: null })); },
+  editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, selectedLink: null, linkNote: null, step: "links" })); },
+  selectLink(key: string | null) { walk.update(s => ({ ...s, open: true, step: "links", selectedLink: key ? { key, sequence: (s.selectedLink?.sequence ?? 0) + 1 } : null, linkNote: key ? null : "This link wasn't changed, so it doesn't need checking." })); },
   openedVerification(key: string, fingerprint: string) { walk.update(s => ({ ...s, verificationOpened: { ...s.verificationOpened, [key]: fingerprint } })); },
   keepMissing(key: string, own: string, fingerprint: string) {
     if (state.verificationOpened[key] !== own) return;
@@ -81,7 +81,7 @@ export const walk = {
       savedReviewLinks: [...s.savedReviewLinks.filter(x => x.link.key !== link.key), { path, link }] }));
   },
   /** Change This Link: remember the return point (step "links", which link) and close the walkthrough. */
-  startFix(fix: Omit<LinkFix, "saved" | "returning">) { walk.update(s => ({ ...s, open: false, checking: null, linkCheck: null, step: "links", fix: { ...fix, saved: false } })); },
+  startFix(fix: Omit<LinkFix, "saved" | "returning">) { walk.update(s => ({ ...s, open: false, checking: null, selectedLink: null, linkNote: null, step: "links", fix: { ...fix, saved: false } })); },
   fixSaved() { if (state.fix && !state.fix.saved) walk.update(s => s.fix ? { ...s, fix: { ...s.fix, saved: true } } : s); },
   fixReturning(on: boolean) { if (state.fix) walk.update(s => s.fix ? { ...s, fix: { ...s.fix, returning: on } } : s); },
   /** Leaving Manual Edit Mode some other way (or cancelled entry): forget the return point, change nothing else. */
@@ -96,7 +96,7 @@ export const walk = {
     });
     walk.reopen("links");
   },
-  /** Confirm (or unconfirm) a changed link from the Check This Link window; counts like the Links step's approval. */
+  /** Tick or untick a changed link in its review row. */
   confirmLink(key: string, fingerprint: string, on: boolean) {
     walk.update(s => {
       const linkApprovals = { ...s.linkApprovals }; if (on) linkApprovals[key] = fingerprint; else delete linkApprovals[key];
