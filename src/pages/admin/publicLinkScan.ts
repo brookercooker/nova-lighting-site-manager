@@ -82,7 +82,13 @@ export async function scanPublicPages(base: string, paths: string[], onProgress?
   const worker = async () => {
     while (next < paths.length) {
       const i = next++;
-      results[i] = await scanPublicPage(base, paths[i], timeoutMs);
+      const firstTimeout = timeoutMs ?? PAGE_SCAN_TIMEOUT_MS;
+      let result = await scanPublicPage(base, paths[i], firstTimeout);
+      // A slow draft may still be loading its assets; retry with fresh frames and more time.
+      for (let attempt = 1; result.status === "unreachable" && attempt <= 2; attempt++) {
+        result = await scanPublicPage(base, paths[i], firstTimeout * (attempt + 1));
+      }
+      results[i] = result;
       onProgress?.(++finished, paths.length);
     }
   };

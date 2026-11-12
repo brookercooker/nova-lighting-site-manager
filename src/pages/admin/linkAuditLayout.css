@@ -1,0 +1,18 @@
+.nova-link-audit { container: nova-audit / inline-size; min-width: 0; width: 100%; }
+.nova-audit-results { container: nova-audit-results / inline-size; width: 100%; min-width: 0; }
+.nova-audit-cards { display: block; }
+.nova-audit-table { display: none; }
+.nova-audit-cards p, .nova-audit-cards dd { overflow-wrap: anywhere; }
+.nova-audit-filters select { max-width: 100%; min-width: 0; }
+.nova-audit-filters > div { min-width: 0; }
+@container nova-audit (max-width: 999px) {
+  .nova-audit-layout { flex-direction: column; align-items: stretch; }
+  .nova-audit-labels { width: 100%; display: block; }
+  .nova-audit-labels > aside { position: static; width: 100%; max-height: 224px; overflow-y: auto; }
+  .nova-audit-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nova-audit-filters > div { width: 100%; flex-basis: 100%; }
+}
+@container nova-audit-results (min-width: 1000px) {
+  .nova-audit-cards { display: none; }
+  .nova-audit-table { display: block; }
+}

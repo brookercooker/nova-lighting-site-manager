@@ -20,7 +20,7 @@ export function dropRevertedHandEdits(rows: ChangedRow[], pages: ManagerPage[]):
 }
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
 export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirmed"; detail?: string } | null;
-export type ReviewLink = { key: string; href: string; kind: LinkKind; label: string | null; requestIds: string[]; status: RelayLinkStatus };
+export type ReviewLink = { key: string; href: string; kind: LinkKind; label: string | null; ariaLabel?: string; requestIds: string[]; status: RelayLinkStatus };
 export type LinkGroup = { page: PageRef | null; label: string; links: ReviewLink[] };
 export type ReviewLinks = { groups: LinkGroup[]; unread: number; partial: boolean; truncated: boolean };
 /** Stable value fingerprint; object key order is not a change. */
@@ -125,6 +125,7 @@ export function parseReviewLinks(d: any): ReviewLinks | null {
       const st = l.status && typeof l.status === "object" && STATES.includes(l.status.state)
         ? { state: l.status.state, detail: typeof l.status.detail === "string" ? l.status.detail : undefined } : null;
       links.push({ key: `${page?.path ?? ""}|${l.href}`, href: l.href, kind: l.kind, label: typeof l.label === "string" && l.label.trim() ? l.label : null,
+        ...(typeof l.ariaLabel === "string" && l.ariaLabel.trim() ? { ariaLabel: l.ariaLabel.trim().slice(0, 300) } : {}),
         requestIds: Array.isArray(l.requestIds) ? l.requestIds.filter((x: unknown) => typeof x === "string") : [], status: st });
     }
     if (links.length) groups.push({ page, label: typeof g.label === "string" && g.label ? g.label : page?.name ?? "Other Links", links });

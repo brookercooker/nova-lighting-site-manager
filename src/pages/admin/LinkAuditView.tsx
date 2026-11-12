@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import "./linkAuditLayout.css";
+import ListPager, { usePager } from "./ListPager";
 import { matchesLabelFilter } from "./labelPath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +56,7 @@ const STATUS_ORDER: LinkStatus[] = ["Registered", "Pending", "Broken", "External
 const PROBLEM_TEXT: Record<PageProblem["problem"], string> = {
   "not-found": "Page not found on the public site",
   "coming-soon": "Shows the Coming Soon placeholder",
-  unreachable: "Didn't load in time, so its links weren't checked",
+  unreachable: "Couldn't check (timed out)",
 };
 
 export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
@@ -270,6 +272,8 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
   }, [rows, q, statusFilter, typeFilter, locationFilter, tagFilters]);
 
   const items = useMemo(() => groupLinkRows(filtered), [filtered]);
+  const pager = usePager(items.length);
+  const visibleItems = items.slice(pager.start, pager.end);
   type GroupItem = Extract<LinkItem<Row>, { kind: "group" }>;
   const groupChecked = (g: GroupItem) => g.rows.every((r) => selectedIds.includes(r.id));
   const toggleGroup = (g: GroupItem, v: boolean) => {
@@ -328,9 +332,9 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
     setTagFilters((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]);
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+    <div className="nova-link-audit"><div className="nova-audit-layout flex flex-col gap-4 sm:flex-row sm:items-start">
       {/* Phones: labels stack above the results in a bounded, scrollable panel; desktop keeps the sidebar unchanged. */}
-      <div className="w-full sm:contents max-sm:[&>aside]:static max-sm:[&>aside]:w-full max-sm:[&>aside]:max-h-56 max-sm:[&>aside]:overflow-y-auto max-sm:[&_button]:min-h-9 max-sm:[&_input]:h-9">
+      <div className="nova-audit-labels w-full sm:contents max-sm:[&>aside]:static max-sm:[&>aside]:w-full max-sm:[&>aside]:max-h-56 max-sm:[&>aside]:overflow-y-auto max-sm:[&_button]:min-h-9 max-sm:[&_input]:h-9">
       <TagsPanel
         scope="links"
         usageCounts={tagUsageCounts}
@@ -347,7 +351,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
       </div>
 
 
-      <div className="flex-1 min-w-0 space-y-4">
+      <div className="nova-audit-results flex-1 min-w-0 space-y-4">
       <div className="flex items-center gap-3 flex-wrap p-4 border rounded-lg bg-muted/20">
         <Button onClick={runScan} disabled={scanning} className="gap-2 max-sm:w-full max-sm:whitespace-normal max-sm:h-auto max-sm:min-h-10">
           {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
@@ -361,11 +365,11 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
 
       {problems.length > 0 && (
         <section className="space-y-2" aria-labelledby="audit-problems">
-          <h3 id="audit-problems" className="flex items-center gap-1.5 text-sm font-medium"><AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />Pages That Didn't Load ({problems.length})</h3>
+          <h3 id="audit-problems" className="flex items-center gap-1.5 text-sm font-medium"><AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />Pages Needing Attention ({problems.length})</h3>
           <div className="border rounded-lg divide-y">
             {problems.map((p) => (
               <div key={p.path} className="p-3 flex items-center gap-3 flex-wrap text-sm">
-                <span className="font-mono text-xs">{p.path}</span>
+                <span className="break-all font-mono text-xs">{p.path}</span>
                 <span className="text-muted-foreground text-xs">{PROBLEM_TEXT[p.problem] ?? p.problem}</span>
               </div>
             ))}
@@ -375,9 +379,9 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
 
       {rows.length > 0 && (
         <>
-          <div className={`grid grid-cols-2 gap-3 ${counts.Unchecked ? "md:grid-cols-6" : "md:grid-cols-5"}`}>
-            <SummaryCard label="Working" value={counts.Registered} />
-            <SummaryCard label="Broken" value={counts.Broken} tone={counts.Broken ? "bad" : undefined} />
+          <div className={`nova-audit-summary grid grid-cols-2 gap-3 ${counts.Unchecked ? "md:grid-cols-6" : "md:grid-cols-5"}`}>
+            <SummaryCard label="Link Works" value={counts.Registered} />
+            <SummaryCard label="Page Not Found" value={counts.Broken} tone={counts.Broken ? "bad" : undefined} />
             <SummaryCard label="Coming Soon" value={counts.Pending} />
             <SummaryCard label="Other Sites" value={counts.External} />
             <SummaryCard label="Same Page" value={counts.SelfRef} />
@@ -385,7 +389,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
           </div>
           <p className="-mt-2 text-xs text-muted-foreground">Counts are individual links; repeated links are grouped below.</p>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="nova-audit-filters flex items-center gap-2 flex-wrap">
             <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[240px] max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter results…" className="pl-9" />
@@ -416,8 +420,8 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
           />
 
 
-          <ul className="space-y-2 sm:hidden" aria-label="Link Results">
-            {items.map((item) => {
+          <ul className="nova-audit-cards space-y-2" aria-label="Link Results">
+            {visibleItems.map((item) => {
               if (item.kind === "group") {
                 const g = item, checked = groupChecked(g), deleted = !!g.rows[0].is_deleted;
                 return (
@@ -426,13 +430,14 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
                       <label className="-m-2 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center">
                         <Checkbox checked={checked} aria-label="Select Links in Group" onCheckedChange={(v) => toggleGroup(g, !!v)} />
                       </label>
-                      <div className="min-w-0 flex-1 font-medium break-words">{g.rows.length} links to <span className="font-mono text-[11px]">{g.destination}</span></div>
-                      <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-medium ${STATUS_COLORS[g.status] ?? STATUS_COLORS.Unchecked}`}>{statusLabel(g.status as LinkStatus)}</span>
+                      <div className="min-w-0 flex-1 font-medium">{g.rows.length} links</div>
                     </div>
+                    <p className="mt-2 break-words font-mono text-xs">{g.destination}</p>
                     <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
                       <dt className="text-muted-foreground">Found On</dt>
                       <dd className="min-w-0 break-all font-mono text-[11px]">{g.location || "—"}</dd>
                     </dl>
+                    <div className="mt-2 flex flex-wrap gap-1"><span className={`rounded border px-2 py-0.5 ${STATUS_COLORS[g.status] ?? STATUS_COLORS.Unchecked}`}>{statusLabel(g.status)}</span><span className="rounded border px-2 py-0.5">{[...new Set(g.rows.map(r => r.type))].join(", ")}</span>{deleted && <span className="text-destructive">Link Removed</span>}</div>
                     <GroupLinkTexts rows={g.rows} />
                     <div className="mt-2 flex items-center justify-between gap-2 [&_button]:min-h-9">
                       <LabelPicker scope="links" value={groupTags(g)} onChange={(next) => setGroupTags(g, next)} triggerLabel="Add" compact />
@@ -451,20 +456,16 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
                         onCheckedChange={(v) => setSelectedIds((cur) => v ? [...cur, r.id] : cur.filter((id) => id !== r.id))} />
                     </label>
                     <div className="min-w-0 flex-1 font-medium break-words">{r.link_text || <span className="italic opacity-60">No wording</span>}</div>
-                    <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-medium ${STATUS_COLORS[r.status] ?? STATUS_COLORS.Unchecked}`}>{statusLabel(r.status)}</span>
                   </div>
+                  <p className="mt-2 break-words font-mono text-xs">{r.destination || "—"}</p>
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
                     <dt className="text-muted-foreground">Found On</dt>
                     <dd className="min-w-0 break-all">{r.is_chrome ? <>{r.location === LEGACY_HEADER ? HEADER_LOCATION : r.location} <span className="text-muted-foreground">(every page)</span></> : r.location ? <span className="font-mono text-[11px]">{r.location}</span> : "—"}</dd>
-                    <dt className="text-muted-foreground">Destination</dt>
-                    <dd className="min-w-0 break-all font-mono text-[11px]">{r.destination || "—"}</dd>
-                    <dt className="text-muted-foreground">Type</dt>
-                    <dd>{r.type}</dd>
                   </dl>
+                  <div className="mt-2 flex flex-wrap gap-1"><span className={`rounded border px-2 py-0.5 ${STATUS_COLORS[r.status] ?? STATUS_COLORS.Unchecked}`}>{statusLabel(r.status)}</span><span className="rounded border px-2 py-0.5">{r.type}</span>{r.is_deleted && <span className="text-destructive">Link Removed</span>}</div>
                   <div className="mt-2 flex items-center justify-between gap-2 [&_button]:min-h-9">
                     <LabelPicker scope="links" value={r.tags} onChange={(next) => updateTags(r, next)} triggerLabel="Add" compact />
                     {r.is_deleted && <Button type="button" variant="outline" size="sm" className="h-9 gap-1" onClick={() => dismissRow(r)}><Trash2 className="w-3.5 h-3.5" />Dismiss</Button>}
-                    {r.is_deleted && <span className="text-[10px] text-destructive">Deleted</span>}
                   </div>
                 </li>
               );
@@ -472,7 +473,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
             {filtered.length === 0 && <li className="py-8 text-center text-muted-foreground">No matching links.</li>}
           </ul>
 
-          <div className="hidden sm:block border rounded-lg overflow-hidden">
+          <div className="nova-audit-table border rounded-lg overflow-hidden">
             <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col style={{ width: "36px" }} />
@@ -512,7 +513,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => {
+                {visibleItems.map((item) => {
                   if (item.kind === "group") {
                     const g = item, checked = groupChecked(g), deleted = !!g.rows[0].is_deleted;
                     return (
@@ -552,7 +553,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
                       <div className="truncate" title={r.link_text}>{r.link_text || <span className="italic opacity-60">No wording</span>}</div>
                       {r.is_deleted && (
                         <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded border border-destructive/40 text-destructive bg-destructive/10">
-                          Deleted
+                          Link Removed
                         </span>
                       )}
                     </td>
@@ -600,11 +601,11 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
               </tbody>
             </table>
           </div>
-
+          <ListPager {...pager} total={items.length} />
 
           {deletedRows.length > 0 && (
             <div className="text-xs text-muted-foreground">
-              {deletedRows.length} link{deletedRows.length === 1 ? "" : "s"} marked <strong>Deleted</strong>: found by an earlier scan but no longer on the site (not counted above).
+              {deletedRows.length} link{deletedRows.length === 1 ? "" : "s"} marked <strong>Link Removed</strong>: found by an earlier scan but no longer on the site (not counted above).
             </div>
           )}
 
@@ -646,7 +647,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
         initialName={prefill ?? ""}
       />
       </div>
-    </div>
+    </div></div>
   );
 }
 

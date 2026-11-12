@@ -19,12 +19,12 @@ export type LinkType = "Page" | "Landing Page" | "Coming Soon" | "Missing Page" 
 
 /** What people see for each stored status. */
 export const STATUS_LABEL: Record<string, string> = {
-  Registered: "Working",
+  Registered: "Link Works",
   Pending: "Coming Soon",
-  Broken: "Broken",
+  Broken: "Page Not Found",
   External: "Other Site",
   "Self-Referencing": "Same Page",
-  Unchecked: "Couldn't Check",
+  Unchecked: "Couldn't Check (Timed Out)",
 };
 export const statusLabel = (status: string) => STATUS_LABEL[status] ?? status;
 

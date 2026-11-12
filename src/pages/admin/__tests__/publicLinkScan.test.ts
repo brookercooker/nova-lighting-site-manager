@@ -80,9 +80,41 @@ describe("scanning one public page", () => {
     const progress = vi.fn();
     const all = scanPublicPages(BASE, ["/a", "/b", "/c", "/d"], progress, 2, 1000);
     expect(document.querySelectorAll("iframe[data-link-scan]")).toHaveLength(2);
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(12000);
     const results = await all;
     expect(results.map((r) => r.path)).toEqual(["/a", "/b", "/c", "/d"]);
     expect(progress).toHaveBeenLastCalledWith(4, 4);
+  });
+  it("retries a timed-out gallery with a longer timeout and accepts its later report", async () => {
+    const progress = vi.fn();
+    const all = scanPublicPages(BASE, ["/inspiration-gallery"], progress, 1, 1000);
+    const first = frameFor("/inspiration-gallery");
+    await vi.advanceTimersByTimeAsync(1000);
+    const second = frameFor("/inspiration-gallery");
+    expect(second).not.toBe(first);
+    expect(progress).not.toHaveBeenCalled();
+    const post = vi.spyOn(second.contentWindow!, "postMessage").mockImplementation(() => {});
+    second.dispatchEvent(new Event("load"));
+    const id = (post.mock.calls[0][0] as any).id;
+    reply(second, { source: "nova-site", type: "link-report", id, path: "/inspiration-gallery", status: "ok", links: [] });
+    expect((await all)[0].status).toBe("ok");
+    expect(progress).toHaveBeenCalledExactlyOnceWith(1, 1);
+  });
+  it("uses two retries then reports a timeout, never a missing page", async () => {
+    const all = scanPublicPages(BASE, ["/slow"], undefined, 1, 1000);
+    await vi.advanceTimersByTimeAsync(5999);
+    expect(document.querySelectorAll("iframe[data-link-scan]")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await all).toEqual([{ path: "/slow", status: "unreachable" }]);
+    expect(document.querySelector("iframe[data-link-scan]")).toBeNull();
+  });
+  it.each(["not-found", "coming-soon"])("never retries a real %s report", async status => {
+    const all = scanPublicPages(BASE, ["/gone"], undefined, 1, 1000);
+    const frame = frameFor("/gone");
+    const post = vi.spyOn(frame.contentWindow!, "postMessage").mockImplementation(() => {});
+    frame.dispatchEvent(new Event("load"));
+    reply(frame, { source: "nova-site", type: "link-report", id: (post.mock.calls[0][0] as any).id, path: "/gone", status, links: [] });
+    expect((await all)[0].status).toBe(status);
+    expect(document.querySelector("iframe[data-link-scan]")).toBeNull();
   });
 });

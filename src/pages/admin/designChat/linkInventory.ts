@@ -2,7 +2,7 @@ import { normPath, type LinkGroup, type LinkKind, type ManagerPage, type ReviewL
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 
 /** Link inventory (Public companion, v1): the links a rendered page really has, used for a true draft-vs-live Links step. */
-export type InventoryLink = { key: string; scope: string; href: string; label: string | null; target?: "_blank" | null; originalHref?: string; fingerprint?: string };
+export type InventoryLink = { key: string; scope: string; href: string; label: string | null; ariaLabel?: string; target?: "_blank" | null; originalHref?: string; fingerprint?: string };
 export type Inventory = { path: string; links: InventoryLink[] };
 export const MAX_INVENTORY = 500;
 export const INVENTORY_TIMEOUT_MS = 3000;
@@ -15,6 +15,7 @@ export function parseInventory(d: any): Inventory | null {
   for (const l of d.links.slice(0, MAX_INVENTORY)) {
     if (!l || typeof l.key !== "string" || l.key.length > 300 || !ok(l.scope, 300) || !ok(l.href, 2048)) continue;
     links.push({ key: l.key, scope: l.scope, href: l.href, label: typeof l.label === "string" && l.label.trim() ? l.label.trim().slice(0, 300) : null,
+      ...(typeof l.ariaLabel === "string" && l.ariaLabel.trim() ? { ariaLabel: l.ariaLabel.trim().slice(0, 300) } : {}),
       ...(l.target === null || l.target === "_blank" ? { target: l.target } : {}),
       ...(ok(l.originalHref, 2048) ? { originalHref: l.originalHref } : {}),
       ...(typeof l.fingerprint === "string" && l.fingerprint.length <= 2048 ? { fingerprint: l.fingerprint } : {}) });
@@ -79,7 +80,7 @@ function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): Revi
     const key = `${path}|${l.href}`;
     if (out.some(x => x.key === key)) continue;
     const was = prior.find(x => x.key === key);
-    out.push(was ?? { key, href: l.href, kind: kindOf(l.href), label: l.label, requestIds: [], status: null });
+    out.push({ ...(was ?? { key, href: l.href, kind: kindOf(l.href), requestIds: [], status: null }), label: l.label, ...(l.ariaLabel ? { ariaLabel: l.ariaLabel } : {}) });
   }
   return out;
 }

@@ -1,4 +1,5 @@
 # Site Manager (src/pages/admin) rules
+- Link Audit uses container-sized cards below the table's usable width, never viewport-only switches; shared pagination/filter state serves both layouts. Link Removed describes historical row removal (not target-page deletion), while Link Works/Page Not Found/Couldn't Check (Timed Out) describe scan results. Timed-out scans retry twice with 2x/3x timeouts before reporting, never retry actual Coming Soon/not-found replies.
 - Text origin metadata is transport-only outside the verbatim core: retain first reported coded wording with its edit, remove orphan metadata, and handle trusted stale/restore messages through existing history/save paths.
 - Libraries release distant media-card contents with reserved geometry; mini previews are inert with observed tab-stop removal. Pages refetch on focus/mutations and discard superseded reads, so stale responses cannot resurrect deleted rows.
 - Use only bun.lock; keep compatible patched dependency overrides and handle Zod's major migration separately. Storage transforms are unavailable here, so thumbnail signing uses existing web assets without render requests.

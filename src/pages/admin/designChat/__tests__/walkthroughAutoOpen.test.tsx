@@ -55,11 +55,17 @@ describe("walkthrough auto-open and link lines", () => {
     expect(m.show).not.toHaveBeenCalled();
     expect(walk.get().autoOpen).toBe(false);
   });
-  it("does not open on phones", () => {
+  it("opens the first page on phones and collapses review with Back to Review available", () => {
     (window as any).innerWidth = 390;
     render(<Host />);
-    expect(m.show).not.toHaveBeenCalled();
-    expect(walk.get().checking).toBeNull();
+    expect(m.show).toHaveBeenCalledWith("/a");
+    expect(walk.get().checking?.key).toBe("page:/a");
+    expect(walk.get().open).toBe(false);
+    expect(walk.get().viewed).toContain("page:/a");
+    fireEvent.click(screen.getByRole("button", { name: "Back to Review" }));
+    expect(walk.get().open).toBe(true);
+    expect(screen.getAllByRole("button", { name: "Approve" })[1]).toBeEnabled();
+    expect(m.show).toHaveBeenCalledTimes(1);
   });
   it("step 1 Approve needs only the open page, with no link content", () => {
     render(<Host />);
@@ -100,6 +106,12 @@ describe("walkthrough auto-open and link lines", () => {
     act(() => walk.reopen("links"));
     render(<Host />);
     expect(screen.getAllByText("Link to Inspiration Gallery").length).toBeGreaterThan(0);
+  });
+  it("shortens card labels and treats an address-only label as unnamed", () => {
+    expect(linkText({ href: "/gallery", kind: "internal", label: "/gallery" }, m.data.pages)).toBe("Link to Inspiration Gallery");
+    expect(linkText({ href: "/contact", kind: "internal", label: "Lighting Design Services Work one-on-one with our expert designers to create a custom lighting plan tailored to your home — complimentary with any project. BOOK A CONSULTATION" })).toBe("Book a Consultation");
+    expect(linkText({ href: "/contact", kind: "internal", label: "Long card wording that contains several sentences without a short call to action at the end." }).length).toBeLessThanOrEqual(51);
+    expect(linkText({ href: "/contact", kind: "internal", label: "Lots of card wording", ariaLabel: "Book a Consultation" })).toBe("Book a Consultation");
   });
   it("shows the suggestions as plain bullets on the step and in the bar", () => {
     render(<Host />);

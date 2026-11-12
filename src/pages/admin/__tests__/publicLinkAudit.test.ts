@@ -45,7 +45,7 @@ describe("whether it works", () => {
   });
   it("shows plain labels", () => {
     expect(["Registered", "Pending", "Broken", "External", "Self-Referencing", "Unchecked"].map(statusLabel))
-      .toEqual(["Working", "Coming Soon", "Broken", "Other Site", "Same Page", "Couldn't Check"]);
+      .toEqual(["Link Works", "Coming Soon", "Page Not Found", "Other Site", "Same Page", "Couldn't Check (Timed Out)"]);
     expect(statusLabel("Something Old")).toBe("Something Old");
   });
 });

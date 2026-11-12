@@ -116,10 +116,10 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
     if (showPreviewPath) showPreviewPath(path); else selectPage?.({ name: checking.name, path });
     goToPreview();
   };
-  // Open the first changed page once per Submit opening, as if its name were clicked (not on phones).
+  // Open once per Submit; phone openPage collapses the review so the page is visible.
   useEffect(() => {
     if (!s.autoOpen) return;
-    if (phone || s.checking || p.step !== "pages") { walk.update(w => ({ ...w, autoOpen: false })); return; }
+    if (s.checking || p.step !== "pages") { walk.update(w => ({ ...w, autoOpen: false })); return; }
     if (data.pagesStatus !== "ok") return;
     const r = p.pageRows.find(x => x.page);
     walk.update(w => ({ ...w, autoOpen: false }));
@@ -395,7 +395,7 @@ function LinkCheckDialog() {
   const confirmHint = manual ? "Check that this address is correct, then confirm." : !opened && !ticked ? "Open the link first, then confirm it goes to the right place." : "Confirm that the link goes to the right place.";
   const close = () => walk.update(w => ({ ...w, linkCheck: null }));
   const confirm = (on: boolean) => { if (on && !canConfirm) return; if (match) walk.confirmLink(match.key, fp, on); close(); };
-  const name = lc.label ?? (internal ? linkText({ href: dest ?? lc.href, kind: "internal", label: null }, data.pages) : address);
+  const name = linkText({ href: dest ?? lc.raw, kind: lc.kind, label: lc.label ?? match?.label, ariaLabel: match?.ariaLabel }, data.pages);
   return (
     <Dialog open onOpenChange={o => { if (!o) close(); }}>
       <DialogContent data-link-check className="flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
