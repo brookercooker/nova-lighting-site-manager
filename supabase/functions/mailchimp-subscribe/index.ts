@@ -1,6 +1,7 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createHash } from 'node:crypto';
 import { allowedTags, buildMergeFields, isMemberExists } from './rules.ts';
+import { addTagsSafely, fillRequiredFields } from './requiredFields.ts';
 
 interface SubscribeBody {
   email: string;
@@ -48,7 +49,7 @@ Deno.serve(async (req) => {
 
     // Audience is fixed server-side; request audienceId/mergeFields are ignored.
     const audienceId = DEFAULT_AUDIENCE_ID;
-    const merge_fields = buildMergeFields(body as unknown as Record<string, unknown>);
+    let merge_fields = buildMergeFields(body as unknown as Record<string, unknown>);
     const tags = allowedTags(body.tags);
 
     const subscriberHash = createHash('md5').update(email).digest('hex');
@@ -65,20 +66,9 @@ Deno.serve(async (req) => {
       );
       if (mfRes.ok) {
         const mfData = await mfRes.json();
-        for (const f of mfData.merge_fields || []) {
-          if (!f.required) continue;
-          if (merge_fields[f.tag] !== undefined && merge_fields[f.tag] !== '') continue;
-          if (f.type === 'dropdown' || f.type === 'radio') {
-            const first = f.options?.choices?.[0];
-            if (first) merge_fields[f.tag] = first;
-          } else if (f.type === 'number') {
-            merge_fields[f.tag] = 0;
-          } else if (f.type === 'address') {
-            merge_fields[f.tag] = { addr1: 'N/A', city: '-', state: '-', zip: '-', country: 'US' };
-          } else {
-            merge_fields[f.tag] = 'N/A';
-          }
-        }
+        merge_fields = fillRequiredFields(mfData?.merge_fields, merge_fields);
+      } else {
+        console.warn('Failed to fetch merge fields; proceeding without auto-fill', mfRes.status);
       }
     } catch (e) {
       console.warn('Failed to fetch merge fields; proceeding without auto-fill', e);
@@ -100,15 +90,14 @@ Deno.serve(async (req) => {
     }
 
     if (tags.length > 0) {
-      const tagsRes = await fetch(`${url}/tags`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
-        body: JSON.stringify({ tags: tags.map((name) => ({ name, status: 'active' })) }),
-      });
-      if (!tagsRes.ok) {
-        const tagsErr = await tagsRes.json().catch(() => ({}));
-        console.error('Mailchimp tag error', tagsRes.status, tagsErr);
-      }
+      // Member already created: a tag failure is logged, never returned as an error.
+      await addTagsSafely(() =>
+        fetch(`${url}/tags`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+          body: JSON.stringify({ tags: tags.map((name) => ({ name, status: 'active' })) }),
+        }),
+      );
     }
 
     return json({ success: true });

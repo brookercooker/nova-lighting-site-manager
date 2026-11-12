@@ -71,6 +71,13 @@
       "when": 1794508456888,
       "tag": "0009_admin_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794509438457,
+      "tag": "0010_trim_admin_audit_log_privileges",
+      "breakpoints": true
     }
   ]
 }
