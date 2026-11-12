@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useManagerTitle } from "./useManagerTitle";
 import { Link, Navigate } from "react-router-dom";
 import { supabase } from "@/prototype/client";
 import { callAdminUsers } from "./adminUsers";
@@ -39,6 +40,8 @@ export default function UsersPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const loadedRef = useRef(false);
+  useManagerTitle("Users");
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data, error }) => {
@@ -69,7 +72,11 @@ export default function UsersPage() {
     }
   };
 
-  useEffect(() => { if (isAdmin) load(); }, [isAdmin]);
+  useEffect(() => {
+    if (!isAdmin || loadedRef.current) return;
+    loadedRef.current = true;
+    load();
+  }, [isAdmin]);
 
   const setAdmin = async (u: AdminUser, next: boolean) => {
     setBusyId(u.id);
@@ -77,6 +84,19 @@ export default function UsersPage() {
       await callAdminUsers({ action: "set_admin", user_id: u.id, is_admin: next });
       toast.success(next ? `${u.email} is now an Admin` : `${u.email} is now a User`);
       setUsers((cur) => cur.map((x) => (x.id === u.id ? { ...x, is_admin: next, is_user: true } : x)));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const setAccess = async (u: AdminUser, next: boolean) => {
+    setBusyId(u.id);
+    try {
+      await callAdminUsers({ action: "set_user", user_id: u.id, is_user: next });
+      toast.success(next ? `${u.email} now has access` : `${u.email} no longer has access`);
+      setUsers((cur) => cur.map((x) => (x.id === u.id ? { ...x, is_user: next, is_admin: next ? x.is_admin : false } : x)));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
     } finally {
@@ -274,7 +294,14 @@ export default function UsersPage() {
                           </span>
                         )}
                         {!u.is_admin && !u.is_user && (
-                          <span className="text-xs text-muted-foreground">—</span>
+                          <>
+                            <span className="inline-flex items-center text-xs px-2 py-0.5 rounded border text-muted-foreground">No Access</span>
+                            {u.id !== currentUserId && (
+                              <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={busyId === u.id} onClick={() => setAccess(u, true)}>
+                                Give Access
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
@@ -296,6 +323,14 @@ export default function UsersPage() {
                           <DropdownMenuItem onClick={() => { setPwUser(u); setPwValue(""); }}>
                             <KeyRound className="w-4 h-4 mr-2" /> Set Password
                           </DropdownMenuItem>
+                          {(u.is_user || u.is_admin) && u.id !== currentUserId && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => setAccess(u, false)}>
+                                <UserIcon className="w-4 h-4 mr-2" /> Remove Access
+                              </DropdownMenuItem>
+                            </>
+                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"

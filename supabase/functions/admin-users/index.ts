@@ -3,6 +3,7 @@ import { managerCors, managerOrigins } from "../_shared/managerSecurity.ts";
 // Actions:
 //   GET / (default): list users with their roles
 //   POST { action: "set_admin", user_id, is_admin }: add/remove admin role
+//   POST { action: "set_user", user_id, is_user }: grant access / remove all roles
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 
@@ -69,6 +70,20 @@ Deno.serve(async (req) => {
 
     if (!hasAdmin) return json({ error: "forbidden" }, 403);
 
+    // Best-effort audit trail; a failed insert never fails the action.
+    const audit = async (action: string, targetId: string | null, targetEmail: string | null, detail: Record<string, unknown> | null = null) => {
+      try {
+        const { error } = await admin.from("admin_audit_log").insert({
+          actor_id: callerId, actor_email: callerEmail || null, action,
+          target_id: targetId, target_email: targetEmail, detail,
+        });
+        if (error) console.error("admin audit insert failed", error.message);
+      } catch (e) { console.error("admin audit insert failed", e); }
+    };
+    const emailOf = async (id: string) => {
+      try { const { data } = await admin.auth.admin.getUserById(id); return data?.user?.email ?? null; } catch { return null; }
+    };
+
     if (req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       const { action } = body ?? {};
@@ -99,6 +114,7 @@ Deno.serve(async (req) => {
           .from("user_roles")
           .upsert(rolesToInsert, { onConflict: "user_id,role", ignoreDuplicates: true });
         if (roleErr) return json({ error: roleErr.message }, 500);
+        await audit("create_user", created.user.id, created.user.email ?? email, { role });
         return json({ ok: true, user_id: created.user.id, email: created.user.email });
       }
 
@@ -108,10 +124,11 @@ Deno.serve(async (req) => {
         if (user_id === userData.user.id) {
           return json({ error: "You cannot delete your own account." }, 400);
         }
-        const { error: delRolesErr } = await admin.from("user_roles").delete().eq("user_id", user_id);
-        if (delRolesErr) return json({ error: delRolesErr.message }, 500);
+        const targetEmail = await emailOf(user_id);
+        // Delete the account first; user_roles rows go with it (ON DELETE CASCADE).
         const { error: delUserErr } = await admin.auth.admin.deleteUser(user_id);
         if (delUserErr) return json({ error: delUserErr.message }, 500);
+        await audit("delete_user", user_id, targetEmail);
         return json({ ok: true });
       }
       if (action === "set_password") {
@@ -122,6 +139,26 @@ Deno.serve(async (req) => {
         }
         const { error: pwErr } = await admin.auth.admin.updateUserById(user_id, { password });
         if (pwErr) return json({ error: pwErr.message }, 500);
+        await audit("set_password", user_id, await emailOf(user_id), { password_changed: true });
+        return json({ ok: true });
+      }
+
+      if (action === "set_user") {
+        const { user_id, is_user } = body ?? {};
+        if (typeof user_id !== "string" || typeof is_user !== "boolean") return json({ error: "bad request" }, 400);
+        if (user_id === userData.user.id) {
+          return json({ error: "You cannot change access for your own account." }, 400);
+        }
+        if (is_user) {
+          const { error } = await admin.from("user_roles")
+            .upsert([{ user_id, role: "user" }], { onConflict: "user_id,role", ignoreDuplicates: true });
+          if (error) return json({ error: error.message }, 500);
+        } else {
+          const { error } = await admin.from("user_roles").delete()
+            .eq("user_id", user_id).in("role", ["user", "admin"]);
+          if (error) return json({ error: error.message }, 500);
+        }
+        await audit("set_user", user_id, await emailOf(user_id), { is_user });
         return json({ ok: true });
       }
 
@@ -149,6 +186,7 @@ Deno.serve(async (req) => {
           .eq("role", "admin");
         if (error) return json({ error: error.message }, 500);
       }
+      await audit("set_admin", user_id, await emailOf(user_id), { is_admin: !!is_admin });
       return json({ ok: true });
     }
 
@@ -174,7 +212,7 @@ Deno.serve(async (req) => {
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at ?? null,
       is_admin: roleMap.get(u.id)?.has("admin") ?? false,
-      is_user: true,
+      is_user: roleMap.get(u.id)?.has("user") ?? false,
     }));
 
     return json({ users });

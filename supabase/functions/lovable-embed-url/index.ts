@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { relaySecretMatches } from "./relaySecret.ts";
 import { isAllowedOrigin, normalizeOrigin, parseAllowedOrigins } from "../_shared/embed.ts";
 
 const EMBED_API = "https://api.lovable.dev/v1/projects";
@@ -25,7 +26,8 @@ Deno.serve(async (req) => {
   const projectId = Deno.env.get("EMBED_PROJECT_ID");
   if (!apiKey || !projectId || allowed.length === 0) return json({ error: "Server configuration error" }, 500);
 
-  if (Deno.env.get("EMBED_ALLOW_UNAUTHENTICATED") !== "1") {
+  const relayOk = relaySecretMatches(Deno.env.get("RELAY_EMBED_SECRET"), req.headers.get("x-relay-secret"));
+  if (!relayOk && Deno.env.get("EMBED_ALLOW_UNAUTHENTICATED") !== "1") {
     const url = Deno.env.get("SUPABASE_URL");
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!url || !service) return json({ error: "Server configuration error" }, 500);

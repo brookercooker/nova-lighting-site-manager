@@ -57,6 +57,20 @@
       "when": 1794351903807,
       "tag": "0007_normalize_admin_email_and_revoke_anon_privileges",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794508450521,
+      "tag": "0008_user_delete_set_null_created_by",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794508456888,
+      "tag": "0009_admin_audit_log",
+      "breakpoints": true
     }
   ]
 }

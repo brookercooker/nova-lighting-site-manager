@@ -8,6 +8,7 @@ import { managerCors, managerOrigins } from "../_shared/managerSecurity.ts";
 // The object key is preserved across the move, so a URL only ever changes
 // bucket segment. That lets page code keep a single stable reference while the
 // file's reachability follows the publish state.
+import { moveKey, parseIds, type StorageApi } from "./move.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
 
 
@@ -39,15 +40,16 @@ Deno.serve(async (req) => {
     .from("user_roles").select("role").eq("user_id", userId);
   if (!roles?.length) return json({ error: "forbidden" }, 403);
 
-  let body: { ids?: string[]; action?: "publish" | "gate"; kind?: "image" | "video" };
+  let body: { ids?: unknown; action?: "publish" | "gate"; kind?: "image" | "video" };
   try {
     body = await req.json();
   } catch {
     return json({ error: "invalid_json" }, 400);
   }
-  const ids = body.ids ?? [];
+  const parsed = parseIds(body.ids);
+  if ("error" in parsed) return json({ error: parsed.error }, 400);
+  const ids = parsed.ids;
   const action = body.action === "gate" ? "gate" : "publish";
-  if (!ids.length) return json({ error: "no_ids" }, 400);
 
   const kind = body.kind === "video" ? "video" : "image";
   const pair = BUCKETS[kind];
@@ -78,26 +80,8 @@ Deno.serve(async (req) => {
     let note = "";
 
     for (const key of keys) {
-      // Already at the destination? Nothing to move.
-      const { data: existing } = await admin.storage.from(to).download(key);
-      if (existing) continue;
-
-      const dl = await admin.storage.from(from).download(key);
-      if (dl.error || !dl.data) {
-        moved = false;
-        note = dl.error?.message ?? "source object missing";
-        continue;
-      }
-      const up = await admin.storage.from(to).upload(key, dl.data, {
-        contentType: dl.data.type || undefined,
-        upsert: true,
-      });
-      if (up.error) {
-        moved = false;
-        note = up.error.message;
-        continue;
-      }
-      await admin.storage.from(from).remove([key]);
+      const err = await moveKey(admin.storage as unknown as StorageApi, key, from, to, pair.public, action === "gate");
+      if (err) { moved = false; note = err; break; }
     }
 
     if (!moved) {

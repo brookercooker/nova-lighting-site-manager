@@ -3,7 +3,8 @@
 // Returns { place_name, details } on success. Degrades to 200 with
 // { place_name: null } on any provider failure so the caller can still store
 // the raw GPS.
-import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { managerCors, managerOrigins } from "../_shared/managerSecurity.ts";
 
 const GOOGLE_KEY = Deno.env.get("GOOGLE_PLACES_API_KEY");
 
@@ -30,7 +31,25 @@ function buildPlaceName(components: any[]): string | null {
 }
 
 Deno.serve(async (req) => {
+  const allowed = managerOrigins(Deno.env.get("EMBED_PARENT_ORIGINS"), Deno.env.get("SITE_MANAGER_ORIGINS"));
+  const corsHeaders = managerCors(req, allowed);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const deny = (error: string, status: number) =>
+    new Response(JSON.stringify({ error }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  // Caller must be a signed-in Site Manager user (any role).
+  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (!token) return deny("unauthorized", 401);
+  const url = Deno.env.get("SUPABASE_URL");
+  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !service) return deny("Server configuration error", 500);
+  const admin = createClient(url, service);
+  const { data: userData } = await admin.auth.getUser(token);
+  const userId = userData?.user?.id;
+  if (!userId) return deny("unauthorized", 401);
+  const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", userId);
+  if (!roles?.length) return deny("forbidden", 403);
+
   try {
     const body = (await req.json()) as Partial<LatLng>;
     const lat = Number(body.lat);

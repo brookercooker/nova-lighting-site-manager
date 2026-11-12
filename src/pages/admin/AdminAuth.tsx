@@ -41,7 +41,8 @@ export default function AdminAuth() {
         <div className="space-y-3">
           <Input
             type="email"
-            autoComplete="email"
+            aria-label="Email"
+            autoComplete="username"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -49,6 +50,7 @@ export default function AdminAuth() {
           />
           <Input
             type="password"
+            aria-label="Password"
             autoComplete="current-password"
             placeholder="Password"
             value={password}
@@ -58,7 +60,7 @@ export default function AdminAuth() {
           />
         </div>
         <Button type="submit" className="w-full" disabled={busy}>
-          {busy ? "…" : "Sign In"}
+          {busy ? "Signing in…" : "Sign In"}
         </Button>
       </form>
     </div>

@@ -1,5 +1,6 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 import { createHash } from 'node:crypto';
+import { allowedTags, buildMergeFields, isMemberExists } from './rules.ts';
 
 interface SubscribeBody {
   email: string;
@@ -13,6 +14,7 @@ interface SubscribeBody {
 }
 
 const DEFAULT_AUDIENCE_ID = '710b75abb6';
+const GENERIC_ERROR = 'Could not subscribe right now.';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -22,11 +24,13 @@ Deno.serve(async (req) => {
   try {
     const apiKey = Deno.env.get('MAILCHIMP_API_KEY');
     if (!apiKey) {
-      return json({ error: 'MAILCHIMP_API_KEY is not configured' }, 500);
+      console.error('MAILCHIMP_API_KEY is not configured');
+      return json({ error: GENERIC_ERROR }, 502);
     }
     const dashIdx = apiKey.lastIndexOf('-');
     if (dashIdx === -1) {
-      return json({ error: 'Invalid Mailchimp API key format (missing server prefix)' }, 500);
+      console.error('Invalid Mailchimp API key format');
+      return json({ error: GENERIC_ERROR }, 502);
     }
     const serverPrefix = apiKey.slice(dashIdx + 1);
 
@@ -42,26 +46,10 @@ Deno.serve(async (req) => {
       return json({ error: 'A valid email is required' }, 400);
     }
 
-    const audienceId = (body.audienceId || DEFAULT_AUDIENCE_ID).trim();
-    if (!/^[a-zA-Z0-9]{6,20}$/.test(audienceId)) {
-      return json({ error: 'Invalid audienceId' }, 400);
-    }
-
-    const merge_fields: Record<string, unknown> = { ...(body.mergeFields || {}) };
-    if (body.firstName) merge_fields.FNAME = String(body.firstName).slice(0, 100);
-    if (body.lastName) merge_fields.LNAME = String(body.lastName).slice(0, 100);
-    if (body.phone) merge_fields.PHONE = String(body.phone).slice(0, 40);
-    if (body.address) {
-      // Mailchimp default ADDRESS merge tag is structured; send addr1 with placeholders
-      // for the required sub-fields so partial addresses are accepted.
-      merge_fields.ADDRESS = {
-        addr1: String(body.address).slice(0, 200),
-        city: '-',
-        state: '-',
-        zip: '-',
-        country: 'US',
-      };
-    }
+    // Audience is fixed server-side; request audienceId/mergeFields are ignored.
+    const audienceId = DEFAULT_AUDIENCE_ID;
+    const merge_fields = buildMergeFields(body as unknown as Record<string, unknown>);
+    const tags = allowedTags(body.tags);
 
     const subscriberHash = createHash('md5').update(email).digest('hex');
     const authHeader = `Basic ${btoa(`anystring:${apiKey}`)}`;
@@ -96,56 +84,37 @@ Deno.serve(async (req) => {
       console.warn('Failed to fetch merge fields; proceeding without auto-fill', e);
     }
 
-    // PUT upserts: creates or updates the member. status_if_new = "subscribed" opts in on first add.
-    const mcRes = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: authHeader,
-      },
-      body: JSON.stringify({
-        email_address: email,
-        status_if_new: 'subscribed',
-        merge_fields,
-      }),
+    // POST adds brand-new people only, as pending (double opt-in).
+    const mcRes = await fetch(`${listUrl}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      body: JSON.stringify({ email_address: email, status: 'pending', merge_fields }),
     });
-
     const mcData = await mcRes.json().catch(() => ({}));
 
     if (!mcRes.ok) {
+      // Existing members are left untouched (no field or tag changes).
+      if (isMemberExists(mcRes.status, mcData)) return json({ success: true });
       console.error('Mailchimp error', mcRes.status, mcData);
-      return json(
-        {
-          error: mcData?.title || 'Mailchimp request failed',
-          detail: mcData?.detail || null,
-          status: mcRes.status,
-        },
-        mcRes.status,
-      );
+      return json({ error: GENERIC_ERROR }, 502);
     }
 
-    // Optional: add tags
-    if (body.tags && body.tags.length > 0) {
+    if (tags.length > 0) {
       const tagsRes = await fetch(`${url}/tags`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Basic ${btoa(`anystring:${apiKey}`)}`,
-        },
-        body: JSON.stringify({
-          tags: body.tags.slice(0, 20).map((name) => ({ name: String(name).slice(0, 100), status: 'active' })),
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+        body: JSON.stringify({ tags: tags.map((name) => ({ name, status: 'active' })) }),
       });
       if (!tagsRes.ok) {
         const tagsErr = await tagsRes.json().catch(() => ({}));
-        console.warn('Mailchimp tag error', tagsRes.status, tagsErr);
+        console.error('Mailchimp tag error', tagsRes.status, tagsErr);
       }
     }
 
-    return json({ success: true, id: mcData.id, status: mcData.status });
+    return json({ success: true });
   } catch (err) {
     console.error('mailchimp-subscribe unexpected error', err);
-    return json({ error: 'Unexpected server error' }, 500);
+    return json({ error: GENERIC_ERROR }, 502);
   }
 });
 

@@ -33,7 +33,7 @@ export default function MailchimpForm({ tags = ["Newsletter"] }: { tags?: string
         toast({ title: "Submission failed", description: msg, variant: "destructive" });
         return;
       }
-      toast({ title: "Thanks!", description: "You're on the list." });
+      toast({ title: "Thanks! Check your email to confirm your subscription." });
       setFirstName(""); setLastName(""); setPhone(""); setAddress(""); setEmail("");
     } catch (err) {
       toast({
