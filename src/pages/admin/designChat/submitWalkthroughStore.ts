@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { LinkClick } from "./linkCheck";
-import { normPath } from "./submitWalkthrough";
+import { normPath, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 
 /** How long after Change This Link a refetched page keeps its approvals (re-pinned to the new fingerprint). */
 export const REPIN_MS = 120_000;
@@ -11,6 +11,8 @@ export type LinkFix = { key: string; fingerprint: string; href?: string; path: s
 export type WalkStep = "pages" | "links" | "checklist";
 export type Checking = { key: string; kind: "page" | "link"; name: string } | null;
 export type WalkState = {
+  reviewEdit: { link: ReviewLink; group: LinkGroup; rows: ChangedRow[]; fingerprint: string } | null;
+  savedReviewLinks: { path: string; link: ReviewLink }[];
   open: boolean; host: string | null; step: WalkStep;
   viewed: string[]; ticked: string[]; linkOpened: string[]; linkTicked: string[]; checks: string[];
   checking: Checking;
@@ -28,7 +30,7 @@ export type WalkState = {
   /** The page just saved through Change This Link: its approval and confirmed links follow the hand save instead of resetting. */
   repin: { path: string; until: number } | null;
 };
-const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkWrong: {}, linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
+const initial = (): WalkState => ({ reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkWrong: {}, linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
 let state = initial();
 const listeners = new Set<() => void>();
 const hosts = new Map<string, boolean>();
@@ -41,7 +43,17 @@ export const walk = {
   mount(id: string, fallback: boolean) { hosts.set(id, fallback); return () => { hosts.delete(id); }; },
   open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null, autoOpen: true })); },
   close() { walk.update((s) => ({ ...s, open: false })); },
-  keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", linkCheck: null, fix: null })); },
+  keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", linkCheck: null, fix: null, reviewEdit: null })); },
+  editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, linkCheck: null, step: "links" })); },
+  savedLink(path: string, link: ReviewLink) {
+    const edit = state.reviewEdit;
+    if (!edit) return;
+    walk.update(s => ({ ...s, reviewEdit: null, repin: { path: normPath(path), until: Date.now() + REPIN_MS },
+      linkWrong: Object.fromEntries(Object.entries(s.linkWrong).filter(([k]) => k !== edit.link.key)),
+      linkTicked: s.linkTicked.filter(k => k !== edit.link.key),
+      linkReplaced: { ...s.linkReplaced, [edit.link.key]: edit.fingerprint },
+      savedReviewLinks: [...s.savedReviewLinks.filter(x => x.link.key !== link.key), { path, link }] }));
+  },
   /** Change This Link: remember the return point (step "links", which link) and close the walkthrough. */
   startFix(fix: Omit<LinkFix, "saved" | "returning">) { walk.update(s => ({ ...s, open: false, checking: null, linkCheck: null, step: "links", fix: { ...fix, saved: false } })); },
   fixSaved() { if (state.fix && !state.fix.saved) walk.update(s => s.fix ? { ...s, fix: { ...s.fix, saved: true } } : s); },

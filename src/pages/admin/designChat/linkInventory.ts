@@ -2,7 +2,7 @@ import { normPath, type LinkGroup, type LinkKind, type ManagerPage, type ReviewL
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 
 /** Link inventory (Public companion, v1): the links a rendered page really has, used for a true draft-vs-live Links step. */
-export type InventoryLink = { key: string; scope: string; href: string; label: string | null };
+export type InventoryLink = { key: string; scope: string; href: string; label: string | null; target?: "_blank" | null; originalHref?: string; fingerprint?: string };
 export type Inventory = { path: string; links: InventoryLink[] };
 export const MAX_INVENTORY = 500;
 export const INVENTORY_TIMEOUT_MS = 3000;
@@ -14,7 +14,10 @@ export function parseInventory(d: any): Inventory | null {
   const links: InventoryLink[] = [];
   for (const l of d.links.slice(0, MAX_INVENTORY)) {
     if (!l || typeof l.key !== "string" || l.key.length > 300 || !ok(l.scope, 300) || !ok(l.href, 2048)) continue;
-    links.push({ key: l.key, scope: l.scope, href: l.href, label: typeof l.label === "string" && l.label.trim() ? l.label.trim().slice(0, 300) : null });
+    links.push({ key: l.key, scope: l.scope, href: l.href, label: typeof l.label === "string" && l.label.trim() ? l.label.trim().slice(0, 300) : null,
+      ...(l.target === null || l.target === "_blank" ? { target: l.target } : {}),
+      ...(ok(l.originalHref, 2048) ? { originalHref: l.originalHref } : {}),
+      ...(typeof l.fingerprint === "string" && l.fingerprint.length <= 2048 ? { fingerprint: l.fingerprint } : {}) });
   }
   return { path: d.path, links };
 }
@@ -39,7 +42,7 @@ export function requestInventory(url: string, timeoutMs = INVENTORY_TIMEOUT_MS, 
     const on = (e: MessageEvent) => {
       if (e.origin !== origin || e.source !== frame.contentWindow) return;
       if (e.data?.source === "nova-site" && e.data?.type === "preview-ready") { ask(); return; }
-      const inv = parseInventory(e.data); if (inv) finish(inv);
+      const inv = parseInventory(e.data); if (inv && normPath(inv.path) === normPath(new URL(url).pathname)) finish(inv);
     };
     window.addEventListener("message", on);
     frame.addEventListener("load", ask);

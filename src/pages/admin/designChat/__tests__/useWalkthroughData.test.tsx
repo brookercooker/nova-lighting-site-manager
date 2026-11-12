@@ -1,7 +1,7 @@
 import { renderHook, waitFor, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchReviewPages, useWalkthroughData } from "../useWalkthroughData";
+import { fetchReviewPages, useWalkthroughData, mergeSavedReviewLinks } from "../useWalkthroughData";
 import type { ReactNode } from "react";
 
 const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn() }));
@@ -19,6 +19,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("adds the saved destination while relay rows lag, but respects a current empty net inventory", () => {
+    const old = { key: "/|/contact", href: "/contact", kind: "internal" as const, label: null, requestIds: [], status: null };
+    const next = { ...old, key: "/|/gallery", href: "/gallery" };
+    const base = { groups: [{ page: { name: "Homepage", path: "/" }, label: "Homepage", links: [old] }], unread: 0, partial: false, truncated: false };
+    expect(mergeSavedReviewLinks(base, [{ path: "/", link: next }], [], {}).groups[0].links.map(l => l.href)).toEqual(["/contact", "/gallery"]);
+    expect(mergeSavedReviewLinks({ ...base, groups: [] }, [{ path: "/", link: next }], [], { "/": [] }).groups).toEqual([]);
+  });
   it("changes the page fingerprint after saved hand-edit values change even with the same relay request", async () => {
     let inline = { heading: "First hand edit" };
     m.from.mockImplementation((table: string) => {

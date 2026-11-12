@@ -19,7 +19,7 @@ import { changeFingerprint, OTHER_KEY, checklistItems, internalLinkChip, itemTic
 import { add, toggle, useWalk, walk, type WalkState, type WalkStep } from "./submitWalkthroughStore";
 import { KIND_TEXT, LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, linkState, focusWhenReady, linkAddress, linkText, linksNeedChecking, linkResolved, matchChangedLink, pageChecks, pageLinks, postLinkFocus, type PageCheck } from "./linkCheck";
 import { shownPreviewFrame } from "./previewNavigate";
-import { useChangeLink } from "./linkFix";
+import { ReviewLinkEditor } from "./ReviewLinkEditor";
 
 /** Navigation that also works when the dialog is rendered outside a router (tests). */
 function useGoToPreview(): () => void {
@@ -92,7 +92,6 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
   const data = useWalkthroughData(state, true);
   const p = walkProgress(data, s);
   const goToPreview = useGoToPreview();
-  const changeLink = useChangeLink();
   const [sending, setSending] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
@@ -159,7 +158,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
           const already = walk.get().checking?.key === l.key;
           if (!already) openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
           if (already) postLinkFocus(shownPreviewFrame(document), l.href); else focusWhenReady(() => shownPreviewFrame(document), l.href);
-        }} onChange={(l, g) => void changeLink(l, g, p.pageRows, ownLinkPrint(l))} />}
+        }} onChange={(l, g) => walk.editLink({ link: l, group: g, rows: p.pageRows, fingerprint: ownLinkPrint(l) })} />}
         {p.step === "checklist" && (
           <ul className="space-y-3" aria-label="Submission Checklist">
             {p.items.map((item) => {
@@ -292,6 +291,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                     {!manual && <Button type="button" variant="outline" className="h-11" onClick={() => onShow(l, g)}><Eye className="h-4 w-4" aria-hidden />Show on Page</Button>}
                     <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11" onClick={() => { const t = linkText(l, data.pages); openLinkCheck(l.href, l.kind, l.label ?? (t !== linkAddress(l) ? t : null), g.page?.path ?? null); }}>{st === "done" ? <Check className="h-4 w-4" aria-hidden /> : null}Check This Link</Button>
                   </div>}
+                  {s.reviewEdit?.link.key === l.key && <ReviewLinkEditor pages={data.pages} />}
                 </li>
               );
             })}
@@ -375,7 +375,6 @@ function LinkCheckDialog() {
   const { state, preview } = useDesignChat();
   const s = useWalk();
   const lc = s.linkCheck;
-  const changeLink = useChangeLink();
   const data = useWalkthroughData(state, true);
   if (!lc) return null;
   const groups = data.links.status === "ok" ? data.links.groups : [];
@@ -411,7 +410,7 @@ function LinkCheckDialog() {
         <div className="shrink-0 space-y-2 border-t px-4 py-3">
           {ticked && <Badge variant="secondary" aria-live="polite">Confirmed</Badge>}
           {wrong && <div className="flex flex-wrap items-center gap-2"><p role="status" className="text-xs text-destructive">Marked as wrong</p>
-            {match && <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { const g = groups.find(x => x.links.some(y => y.key === match.key)); if (g) void changeLink(match, g, data.rows, ownLinkPrint(match)); }}><Pencil className="h-4 w-4" aria-hidden />Change This Link</Button>}</div>}
+            {match && <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { const g = groups.find(x => x.links.some(y => y.key === match.key)); if (g) { walk.editLink({ link: match, group: g, rows: data.rows, fingerprint: ownLinkPrint(match) }); walk.reopen("links"); } }}><Pencil className="h-4 w-4" aria-hidden />Change This Link</Button>}</div>}
           <div className="flex flex-col gap-2">
             <Button type="button" variant={ticked ? "secondary" : "default"} className="h-11 w-full" onClick={() => confirm(!ticked)}>{ticked ? <Undo2 className="h-4 w-4" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}{ticked ? "Unconfirm" : "Confirm Link"}</Button>
             <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { if (match) walk.markWrong(match.key, fp); close(); }}>This Isn't Right</Button>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
+import { useWalk } from "./submitWalkthroughStore";
 import { liveSiteBase, loadNetLinks, netReviewLinks } from "./linkInventory";
 import { supabase } from "@/prototype/client";
 import { codePagePaths, loadSiteManifest } from "../siteManifest";
@@ -64,6 +65,7 @@ export async function fetchReviewPages(): Promise<ReviewPages | null> {
 
 /** Everything the walkthrough lists; re-reads when the draft's requests change. */
 export function useWalkthroughData(state: RelayState | null, enabled: boolean): WalkthroughData {
+  const walkState = useWalk();
   const requests = state?.draft?.requests;
   const sig = changeFingerprint(requests ?? []) + ":" + (state?.previewVersion ?? 0);
   const reviewPages = useQuery({ queryKey: ["walkthrough", "review-pages", sig], queryFn: fetchReviewPages, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
@@ -103,5 +105,18 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     const shared = names.map(name => ({ name, changes: (objects.data?.[name] ?? []).filter(p => path && normPath(p.path) === normPath(path)).map(p => p.sharedChange) })).filter(p => p.changes.length);
     return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, at: r.at, sha: r.sha, builtAt: r.builtAt, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: page?.inlineEdits, content: page?.content, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
   });
-  return { rows: fingerprintedRows, pages: pages.data ?? [], links: linkResult, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
+  const withSaved: LinksResult = linkResult.status === "ok" ? { ...mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), status: "ok" } : linkResult;
+  return { rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
+}
+
+/** Saved rows bridge relay lag only; an authoritative net inventory wins, including an empty net result. */
+export function mergeSavedReviewLinks(base: ReviewLinks, saved: { path: string; link: import("./submitWalkthrough").ReviewLink }[], pages: ManagerPage[], nets: Record<string, unknown>) {
+  const groups = base.groups.map(g => ({ ...g, links: [...g.links] }));
+  for (const x of saved) {
+    if (normPath(x.path) in nets) continue;
+    let g = groups.find(g => g.links.some(l => l.key === x.link.key) || (x.link.key.startsWith("|") ? !g.page : g.page && normPath(g.page.path) === normPath(x.path)));
+    if (!g) { const page = pages.find(p => normPath(p.path) === normPath(x.path)); g = { page: { path: x.path, name: page?.name ?? x.path }, label: page?.name ?? x.path, links: [] }; groups.push(g); }
+    if (!g.links.some(l => l.key === x.link.key)) g.links.push(x.link);
+  }
+  return { ...base, groups };
 }

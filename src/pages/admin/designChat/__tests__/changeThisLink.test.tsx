@@ -9,6 +9,7 @@ import { CONTENT_SAVED } from "../contentSavedEvent";
 const m = vi.hoisted(() => ({ state: null as any, data: null as any, editing: false, select: vi.fn(), start: vi.fn(), review: vi.fn(), register: vi.fn() }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, editing: m.editing, setReviewOpen: m.review, refreshSoon: vi.fn(), showPreviewPath: vi.fn(), selectPage: m.select, startEditing: m.start }) }));
 vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
+vi.mock("../reviewLinkSave", () => ({ resolveReviewLink: vi.fn(async () => { throw new Error("We couldn't find this link on the page"); }), FIND_LINK_ERROR: "We couldn't find this link on the page", saveReviewLink: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 vi.mock("../pageSelection", () => ({ workingPageFrom: (p: any) => ({ id: p.id, name: p.name, path: p.path }) }));
 vi.mock("../usePreviewPage", () => ({ registerPreviewPage: (p: any) => { m.register(p); return Promise.resolve({ id: "id" + p.path, ...p }); } }));
@@ -29,6 +30,8 @@ async function changeWrong(h: ReturnType<typeof render>) {
   const { linkFingerprints } = await import("../SubmitWalkthrough");
   act(() => walk.markWrong("/a|/gallery", linkFingerprints(m.data)["/a|/gallery"]));
   fireEvent.click(screen.getByRole("button", { name: "Change This Link" }));
+  await screen.findByRole("button", { name: "Open in Manual Edit" });
+  fireEvent.click(screen.getByRole("button", { name: "Open in Manual Edit" }));
   await waitFor(() => expect(m.start).toHaveBeenCalled());
   m.editing = true; h.rerender(<Host />);
 }
@@ -50,7 +53,7 @@ describe("Change This Link", () => {
     act(() => walk.update(w => ({ ...w, linkCheck: { raw: "/gallery", href: "/gallery", kind: "internal", label: null, path: "/a", page: "/a" } })));
     expect(screen.getByRole("button", { name: "Change This Link" })).toBeTruthy();
   });
-  it("opens Manual Edit Mode on the link's page and shows the banner", async () => {
+  it("resolution fallback opens Manual Edit Mode on the link's page and shows the banner", async () => {
     const h = render(<Host />); toLinks();
     await changeWrong(h);
     expect(m.register).toHaveBeenCalledWith({ path: "/a", name: "About" });

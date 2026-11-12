@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 const db = vi.hoisted(() => ({ result: { data: [{ id: "p1" }], error: null } as any, calls: [] as any[] }));
-vi.mock("@/prototype/client", () => ({ supabase: { from: (table: string) => ({ update: (patch: any) => ({ eq: (_c: string, id: string) => ({ select: async () => { db.calls.push({ table, patch, id }); return db.result; } }) }) }) } }));
+vi.mock("@/prototype/client", () => ({ supabase: { from: (table: string) => ({ update: (patch: any) => {
+  const filters: any[] = [];
+  const q = { eq: (c: string, value: string) => { filters.push([c, value]); return q; }, select: async () => { db.calls.push({ table, patch, id: filters[0]?.[1], filters }); return db.result; } };
+  return q;
+} }) } }));
 import { saveRow } from "../saveRow";
 import { insertPickedBlock } from "../pageInsertion";
 import { stripHeldObjects } from "../framedPageProtocol";
@@ -25,6 +29,12 @@ describe("saving an added object", () => {
   it("a database error is reported", async () => {
     db.result = { data: null, error: { message: "denied" } };
     expect((await saveRow("pages", { content: [] }, "p1")).error?.message).toBe("denied");
+  });
+  it("uses the opened timestamp to reject a concurrent review-link save", async () => {
+    db.result = { data: [], error: null };
+    const out = await saveRow("pages", { inline_edits: {} }, "p1", "2026-11-12T20:00:00Z");
+    expect(db.calls[0].filters).toEqual([["id", "p1"], ["updated_at", "2026-11-12T20:00:00Z"]]);
+    expect(out.error?.message).toContain("changed while you were editing");
   });
 });
 

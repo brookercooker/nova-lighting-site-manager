@@ -8,7 +8,7 @@ import { isInternalPath } from "./designChat/registerPage";
 import { originalLink, validLinkHref, type InlineEdits, type LinkEdit } from "@/lib/inlineEditCore";
 import type { InlineSelection } from "@/components/InlineEditSurface";
 import { ToolField, ToolGroup } from "./designChat/ToolPanel";
-import { validTextLink } from "./textAdornment";
+import { LINK_DESTINATION_ERROR, validTextLink } from "./textAdornment";
 import { useWalk } from "./designChat/submitWalkthroughStore";
 
 const ERROR = "That address isn't allowed. Use a web address starting with https://, a page path starting with /, mailto:, tel: or #.";
@@ -43,7 +43,7 @@ export default function InlineDestinationPanel({ selection, editsFor, onChange, 
   if (!target) return null;
   const allowed = embedded ? validTextLink : validLinkHref;
   const save = (href: string, newTab = blank) => {
-    if (!allowed(href)) { setError(embedded ? "Use https://, mailto:, tel: or a site path starting with a single /." : ERROR); return; }
+    if (!allowed(href)) { setError(embedded ? LINK_DESTINATION_ERROR : ERROR); return; }
     setError(""); setAddress(href);
     onChange(target.scope, { ...edits, [key]: JSON.stringify({ href, ...(newTab ? { target: "_blank" } : {}) }) });
   };
