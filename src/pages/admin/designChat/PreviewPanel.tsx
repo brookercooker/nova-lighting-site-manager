@@ -1,6 +1,7 @@
 import { LinkCheckWindow, WalkthroughCheckBar } from "./SubmitWalkthrough";
 import { useWalk } from "./submitWalkthroughStore";
 import { LinkCheckBridge } from "./useLinkCheckBridge";
+import { linkCheckActive } from "./linkCheck";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Minimize2 } from "lucide-react";
@@ -52,8 +53,9 @@ export default function PreviewPanel() {
   const pending = !editing && !!preview.progressStage;
   const visible = location.pathname.split("/")[2] === "preview" && !editing;
 
-  const checkingPage = useWalk().checking?.kind === "page";
-  const linkChecking = checkingPage && visible && !editing;
+  // Link checking (outlines and click interception) runs only on the Check the Changed Links step.
+  const walkState = useWalk();
+  const linkChecking = linkCheckActive(walkState, visible, editing);
 
   useEffect(() => {
     drawing.setAvailable(visible && !pending);

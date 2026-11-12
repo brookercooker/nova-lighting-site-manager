@@ -17,7 +17,7 @@ import { useWalkthroughData, type WalkthroughData } from "./useWalkthroughData";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { changeFingerprint, OTHER_KEY, checklistItems, internalLinkChip, itemTicked, linkChip, remaining, type Chip, type ManagerPage, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 import { add, toggle, useWalk, walk, type WalkState, type WalkStep } from "./submitWalkthroughStore";
-import { KIND_TEXT, LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, focusWhenReady, linkAddress, linkText, linksNeedChecking, matchChangedLink, pageChecks, pageLinks, postLinkFocus, type PageCheck } from "./linkCheck";
+import { KIND_TEXT, LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, linkState, focusWhenReady, linkAddress, linkText, linksNeedChecking, matchChangedLink, pageChecks, pageLinks, postLinkFocus, type PageCheck } from "./linkCheck";
 import { shownPreviewFrame } from "./previewNavigate";
 
 /** Navigation that also works when the dialog is rendered outside a router (tests). */
@@ -145,14 +145,19 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
         <h2 ref={headingRef} tabIndex={-1} className="font-sans text-lg font-semibold outline-none">{STEP_TITLE[p.step]}</h2>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {p.step === "pages" ? "Open each changed page and approve it once it looks right."
-            : p.step === "links" ? "Open each link that was added or changed and approve it once it goes to the right place."
+            : p.step === "links" ? "Check each link that was added or changed. Confirming it in Check This Link approves it."
             : reviewOn ? "Your changes will be reviewed automatically, and anything it can't approve may go to a developer. Approved changes are put on the public site."
             : `This puts all ${changes} waiting in your draft on the public site right away. Visitors will see these changes as soon as publishing finishes.`}
         </p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3">
         {p.step === "pages" && (pagesReady ? <PagesStep rows={p.pageRows} data={data} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} /> : <p role="status" className="text-sm text-muted-foreground">{data.pagesStatus === "failed" ? "Changed pages couldn't be listed right now. Close and reopen to try again." : "Listing the changed pages…"}</p>)}
-        {p.step === "links" && <LinksStep data={data} onOpenInternal={(l, g) => openPage(linkPath(l, g).path, { key: l.key, kind: "link", name: l.label ?? l.href })} />}
+        {p.step === "links" && <LinksStep data={data} onShow={(l, g) => {
+          const path = g.page?.path ?? p.pageRows.find(r => r.page)?.page?.path ?? "/";
+          const already = walk.get().checking?.key === l.key;
+          if (!already) openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
+          if (already) postLinkFocus(shownPreviewFrame(document), l.href); else focusWhenReady(() => shownPreviewFrame(document), l.href);
+        }} />}
         {p.step === "checklist" && (
           <ul className="space-y-3" aria-label="Submission Checklist">
             {p.items.map((item) => {
@@ -211,51 +216,6 @@ function Suggestions({ className }: { className?: string }) {
   </div>;
 }
 
-/** The link items for a row, and whether its Approve may be pressed. */
-export function rowChecks(row: ChangedRow, data: WalkthroughData, s: WalkState) {
-  const fp = row.fingerprint ?? changeFingerprint(row);
-  const links = data.links.status === "ok" ? pageLinks(data.links.groups, row.page?.path) : [];
-  const items = pageChecks(row, links, s.linkTicked, Object.keys(s.linkWrong), data.pages);
-  const done = items.filter(i => i.ticked).length;
-  const viewed = s.viewed.includes(row.key);
-  const wrong = items.some(i => i.wrong);
-  const ready = viewed && done === items.length;
-  const hint = !viewed ? "Open the page first" : wrong ? "A link on this page is marked as wrong" : "";
-  return { fp, items, done, ready, hint, links };
-}
-
-function PageCheckList({ row, items, fp, phone, pages = [], onOpen }: { row: ChangedRow; items: PageCheck[]; fp: string; phone?: boolean; pages?: ManagerPage[]; onOpen?: () => void }) {
-  if (!items.length) return null;
-  const showOnPage = (raw: string) => {
-    if (onOpen && walk.get().checking?.key !== row.key) { onOpen(); focusWhenReady(() => shownPreviewFrame(document), raw); }
-    else postLinkFocus(shownPreviewFrame(document), raw);
-  };
-  return <ul className="space-y-1" aria-label={`Links to Check: ${rowName(row)}`}>
-    {items.map(i => {
-      const id = `pc-${row.key}-${i.id}`.replace(/[^A-Za-z0-9_-]/g, "_");
-      return <li key={i.id} className={cn("flex items-start gap-2", phone ? "min-h-11" : "min-h-9")}>
-        <Checkbox id={id} className="mt-1 h-5 w-5" checked={i.ticked} disabled={i.auto}
-          />
-        <div className="min-w-0 flex-1 text-sm">
-          <label htmlFor={id} aria-live="polite" className={cn("break-words", !i.auto && "cursor-pointer")}>{i.ticked ? i.done : i.todo}</label>
-          {i.link && i.state && <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1" data-link-line={i.link.key}>
-            <span className="min-w-0 break-words text-xs font-medium">{linkText(i.link, pages)}</span>
-            <Badge variant={i.state === "wrong" ? "destructive" : "secondary"} className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[i.state]}</Badge>
-            <span className="w-full break-all font-mono text-xs text-muted-foreground">{linkAddress(i.link)}</span>
-          </div>}
-          {i.wrong && <p role="status" className="flex items-center gap-1 text-xs text-destructive"><AlertTriangle className="h-3 w-3" aria-hidden />Marked as wrong</p>}
-          {i.link && <div className="flex flex-wrap gap-x-3">
-            <Button type="button" variant="link" className={cn("h-auto p-0 text-xs", phone ? "min-h-11" : "min-h-8")}
-              onClick={() => showOnPage(i.link!.href)}>Show on Page</Button>
-            {!i.ticked && <Button type="button" variant="link" className={cn("h-auto p-0 text-xs", phone ? "min-h-11" : "min-h-8")}
-              onClick={() => openLinkCheck(i.link!.href, i.link!.kind, i.link!.label ?? (linkText(i.link!, pages) !== linkAddress(i.link!) ? linkText(i.link!, pages) : null), row.page?.path ?? null)}>Check This Link</Button>}
-          </div>}
-        </div>
-      </li>;
-    })}
-  </ul>;
-}
-
 /** Opens the Check This Link window for a link the reviewer picked or clicked. */
 export function openLinkCheck(raw: string, kind: ReviewLink["kind"], label: string | null, page: string | null, href = raw) {
   walk.update(w => ({ ...w, linkCheck: { raw, href, kind, label, path: page, page } }));
@@ -264,11 +224,9 @@ export function openLinkCheck(raw: string, kind: ReviewLink["kind"], label: stri
 function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: WalkthroughData; onView: (r: ChangedRow) => void }) {
   const s = useWalk();
   if (!rows.length) return <p className="text-sm text-muted-foreground">No pages were changed in this draft.</p>;
-  const anyLinks = data.links.status === "ok" && data.links.groups.some(g => g.links.length);
-  return <><Suggestions className="mb-2" />{anyLinks && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<ul className="space-y-3" aria-label="Changed Pages">{rows.map(r => {
+  return <><Suggestions className="mb-2" /><ul className="space-y-3" aria-label="Changed Pages">{rows.map(r => {
     const approved = s.ticked.includes(r.key), viewed = s.viewed.includes(r.key);
     const tab = r.page ? draftPageUrl(r.page.path) : null;
-    const checks = rowChecks(r, data, s);
     return <li key={r.key} data-walk-row={r.key} className={cn("min-w-0 rounded-md border p-3 space-y-2", s.checking?.key === r.key && "border-primary bg-primary/5")}>
       <div className="flex items-start gap-1">
         <Button type="button" variant="link" className="h-auto min-h-9 min-w-0 flex-1 justify-start whitespace-normal p-0 text-left text-sm font-semibold text-foreground" onClick={() => onView(r)}>{rowName(r)}</Button>
@@ -280,11 +238,7 @@ function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: Walkthrou
       {(r.how || r.by) && <p className="break-words text-xs text-muted-foreground">{[r.how, r.by ? `by ${r.by}` : ""].filter(Boolean).join(" · ")}</p>}
       {s.changed.includes(r.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
       {r.key === OTHER_KEY && <Button type="button" variant="link" className="h-9 p-0" onClick={() => onView(r)}>Open Site</Button>}
-      {checks.items.length > 0 && <div className="rounded-md bg-muted/50 p-2">
-        <p className="mb-1 text-xs font-medium text-muted-foreground">Links to Check ({checks.done} of {checks.items.length})</p>
-        <PageCheckList row={r} items={checks.items} fp={checks.fp} pages={data.pages} onOpen={() => onView(r)} />
-      </div>}
-      <Approval approved={approved} enabled={approved || (r.page ? checks.ready : viewed)} hint={r.page ? checks.hint : "Open the page first"} onClick={() => walk.approve(r.key, r.fingerprint ?? changeFingerprint(r))} />
+      <Approval approved={approved} enabled={approved || viewed} hint="Open the page first" onClick={() => walk.approve(r.key, r.fingerprint ?? changeFingerprint(r))} />
     </li>;
   })}</ul></>;
 }
@@ -295,18 +249,16 @@ export function linkFingerprints(data: WalkthroughData): Record<string, string> 
 
 const CHIP_TONE: Record<Chip["tone"], string> = { ok: "border-border bg-secondary text-secondary-foreground", warn: "border-border bg-muted text-foreground", bad: "border-destructive bg-destructive text-destructive-foreground" };
 
-function LinksStep({ data, onOpenInternal }: { data: WalkthroughData; onOpenInternal: (l: ReviewLink, g: LinkGroup) => void }) {
+function LinksStep({ data, onShow }: { data: WalkthroughData; onShow: (l: ReviewLink, g: LinkGroup) => void }) {
   const s = useWalk();
-  const [copied, setCopied] = useState<string | null>(null);
   if (data.links.status === "failed") return <p role="status" className="text-sm">Links couldn't be listed right now. Open the changed pages and click the links you added or changed.</p>;
   if (data.links.status !== "ok") return <p className="text-sm text-muted-foreground">Listing the changed links…</p>;
   const { groups, unread, partial, truncated } = data.links;
-  const opened = (k: string) => walk.update((w) => ({ ...w, linkOpened: add(w.linkOpened, k) }));
   return (
     <div className="space-y-4">
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}
       {(partial || truncated) && <p className="text-xs text-muted-foreground">Some links may be missing from this list.</p>}
-      {groups.some(g => g.links.length) && <p className="text-xs text-muted-foreground">{LINK_HINT}</p>}
+      {groups.some(g => g.links.length) && <p className="text-xs text-muted-foreground">{LINK_HINT} Use Check This Link to confirm each one.</p>}
       {groups.map((g) => (
         <section key={g.label + (g.page?.path ?? "")} aria-label={g.label}>
           <h3 className="mb-2 text-sm font-semibold">{g.label}</h3>
@@ -316,26 +268,18 @@ function LinksStep({ data, onOpenInternal }: { data: WalkthroughData; onOpenInte
               const manual = l.kind === "mail" || l.kind === "phone";
               const address = manual ? l.href.replace(/^(mailto|tel):/i, "") : l.href;
               const part = l.kind === "anchor" ? linkPath(l, g).part : null;
-              const enabled = manual || s.linkOpened.includes(l.key);
+              const st = linkState(l.key, s.linkTicked, s.linkWrong);
               return (
                 <li key={l.key} data-walk-link={l.key} className={cn("space-y-2 min-w-0 rounded-md border p-3", s.checking?.key === l.key && "border-primary bg-primary/5")}>
-                  <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{linkText(l, data.pages)}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{s.linkTicked.includes(l.key) ? "Approved" : "Needs Checking"}</Badge>{!manual && <NewTab href={l.kind === "external" ? l.href : draftPageUrl(l.href.startsWith("#") ? (g.page?.path ?? "/") + l.href : l.href) ?? l.href} onOpen={() => opened(l.key)} />}</div>
+                  <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{linkText(l, data.pages)}</p><Badge variant={st === "wrong" ? "destructive" : "secondary"} className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[st]}</Badge></div>
                   {s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <p className="break-all font-mono text-xs text-muted-foreground">{address}</p>
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
                   {chip?.tone === "bad" && <p className="text-xs text-destructive">Fix this before submitting, or approve it if it is intended.</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}
                   <div className="flex flex-wrap items-start gap-x-4 gap-y-1 pt-1">
-                    {l.kind === "external" ? (
-                      <Button asChild variant="outline" className="h-11"><a href={l.href} target="_blank" rel="noopener noreferrer" onClick={() => opened(l.key)}><ExternalLink className="h-4 w-4" aria-hidden />Open Link</a></Button>
-                    ) : manual ? (
-                      <Button type="button" variant="outline" className="h-11" onClick={() => { void navigator.clipboard?.writeText(address).catch(() => {}); setCopied(l.key); }}>
-                        {copied === l.key ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}{copied === l.key ? "Copied" : "Copy Address"}
-                      </Button>
-                    ) : (
-                      <Button type="button" variant="outline" className="h-11" onClick={() => onOpenInternal(l, g)}><Eye className="h-4 w-4" aria-hidden />Open Link</Button>
-                    )}
-                    <Approval approved={s.linkTicked.includes(l.key)} enabled={enabled} hint="Open the link first" onClick={() => walk.approve(l.key, linkFingerprints(data)[l.key], true)} />
+                    {!manual && <Button type="button" variant="outline" className="h-11" onClick={() => onShow(l, g)}><Eye className="h-4 w-4" aria-hidden />Show on Page</Button>}
+                    <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11" onClick={() => { const t = linkText(l, data.pages); openLinkCheck(l.href, l.kind, l.label ?? (t !== linkAddress(l) ? t : null), g.page?.path ?? null); }}>{st === "done" ? <Check className="h-4 w-4" aria-hidden /> : null}Check This Link</Button>
                   </div>
                 </li>
               );
@@ -366,11 +310,9 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
   const links = linkFingerprints(data);
   useEffect(() => { if (ready) walk.reconcile(fingerprints, data.links.status === "ok" ? links : undefined); }, [ready, changeFingerprint(fingerprints), changeFingerprint(links)]);
   const row = c.kind === "page" ? data.rows.find(r => r.key === c.key) : undefined;
-  const checks = row ? rowChecks(row, data, s) : null;
   const { phone } = useManagerLayout();
   const [sheet, setSheet] = useState(false);
-  const linkCount = row?.page && checks ? linksNeedChecking(checks.links, s.linkTicked, s.linkWrong) : null;
-  const enabled = ready && (c.kind === "page" ? s.viewed : s.linkOpened).includes(c.key) && (!checks || !row?.page || checks.ready);
+  const enabled = ready && c.kind === "page" && s.viewed.includes(c.key);
   const yup = () => {
     const fingerprint = c.kind === "page" ? data.rows.find(r => r.key === c.key)?.fingerprint ?? changeFingerprint(data.rows.find(r => r.key === c.key)) : linkFingerprints(data)[c.key];
     if (!(c.kind === "page" ? walk.get().ticked : walk.get().linkTicked).includes(c.key)) walk.approve(c.key, fingerprint, c.kind === "link");
@@ -382,23 +324,21 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
       <p className="w-full min-w-0 break-words sm:w-auto sm:flex-1">
         Checking {c.name}{c.kind === "page" && at >= 0 ? ` · ${at + 1} of ${pageRows.length} pages` : ""}
       </p>
-      {linkCount && <span data-link-count role="status" className="rounded-full border border-border bg-background px-2 py-0.5 text-xs">{linkCount}</span>}
       <Button type="button" variant="outline" className="h-11 flex-1 sm:flex-none" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft className="h-4 w-4" aria-hidden />Back to Review</Button>
-      <Button type="button" className="h-11 flex-1 sm:flex-none" disabled={!enabled} onClick={yup}><Check className="h-4 w-4" aria-hidden />Approve</Button>
-      {row?.page && checks && (phone ? <>
-        <Button type="button" variant="outline" className="h-11 w-full" onClick={() => setSheet(true)}>{checks.items.length ? `Checks (${checks.done} of ${checks.items.length})` : "Things to Look At"}</Button>
+      {c.kind === "page" && <Button type="button" className="h-11 flex-1 sm:flex-none" disabled={!enabled} onClick={yup}><Check className="h-4 w-4" aria-hidden />Approve</Button>}
+      {row?.page && (phone ? <>
+        <Button type="button" variant="outline" className="h-11 w-full" onClick={() => setSheet(true)}>Things to Look At</Button>
         <Sheet open={sheet} onOpenChange={setSheet}>
           <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto">
-            <SheetHeader><SheetTitle>{checks.items.length ? `Checks (${checks.done} of ${checks.items.length})` : "Things to Look At"}</SheetTitle></SheetHeader>
-            <div className="pt-3"><Suggestions className="mb-3" />{checks.links.length > 0 && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<PageCheckList row={row} items={checks.items} fp={checks.fp} pages={data.pages} phone /></div>
+            <SheetHeader><SheetTitle>Things to Look At</SheetTitle></SheetHeader>
+            <div className="pt-3"><Suggestions /></div>
             <Button type="button" className="mt-3 h-11 w-full" onClick={() => setSheet(false)}>Done</Button>
           </SheetContent>
         </Sheet>
       </> : <details className="group w-full">
-        <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1 font-medium" aria-live="polite">{checks.items.length ? `Checks (${checks.done} of ${checks.items.length})` : "Things to Look At"}<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden /></summary>
-        <div className="pb-2 pt-1"><Suggestions className="mb-2" />{checks.links.length > 0 && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<PageCheckList row={row} items={checks.items} fp={checks.fp} pages={data.pages} /></div>
+        <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1 font-medium" >Things to Look At<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden /></summary>
+        <div className="pb-2 pt-1"><Suggestions /></div>
       </details>)}
-      {row?.page && checks && !enabled && s.viewed.includes(c.key) && checks.hint && <p className="w-full text-xs text-muted-foreground">{checks.hint}</p>}
     </div>
   );
 }

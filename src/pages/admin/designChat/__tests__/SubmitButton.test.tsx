@@ -27,14 +27,12 @@ const viewAndTick = (name = "About") => {
   fireEvent.click(within(dialog()).getAllByRole("button", { name: "About" })[0]);
   // Open Page closes the walkthrough; the preview bar's Back to Review reopens it.
   act(() => walk.reopen("pages"));
-  tickPageChecks(name);
   fireEvent.click(within(screen.getByRole("button", { name }).closest("li")!).getByRole("button", { name: "Approve" }));
 };
-/** Ticks the three "Check this page" items and confirms every changed link through the Check This Link window. */
-const tickPageChecks = (name = "About") => {
-  const row = () => within(screen.getByRole("button", { name }).closest("li")!);
-  while (row().queryAllByRole("button", { name: "Check This Link" }).length) {
-    fireEvent.click(row().getAllByRole("button", { name: "Check This Link" })[0]);
+/** Confirms every changed link on the Links step through the Check This Link window. */
+const confirmLinks = () => {
+  while (within(dialog()).queryAllByRole("button", { name: "Check This Link" }).filter(b => !b.querySelector("svg")).length) {
+    fireEvent.click(within(dialog()).getAllByRole("button", { name: "Check This Link" }).filter(b => !b.querySelector("svg"))[0]);
     const win = within(screen.getByRole("dialog", { name: "Check This Link" }));
     fireEvent.click(win.getByRole("checkbox", { name: "I checked that this goes to the right place" }));
     fireEvent.click(win.getAllByRole("button", { name: "Close" })[0]);
@@ -84,8 +82,9 @@ describe("Submit for Review walkthrough", () => {
     const host = render(<PanelHost open />);
     viewAndTick();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    // Confirmed in the Check This Link window, so the Links step already counts it.
-    expect(within(dialog()).getByRole("button", { name: "Approved" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
+    confirmLinks();
+    expect(within(dialog()).getByText("Confirmed")).toBeInTheDocument();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("checkbox", { name: "I checked the links that changed." })).toBeChecked();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, requestIds: ["first", "later"] }] }] } };
@@ -93,7 +92,8 @@ describe("Submit for Review walkthrough", () => {
     expect(within(dialog()).getByRole("checkbox", { name: /^Check the links that changed\./ })).not.toBeChecked();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Back" }));
     expect(dialog()).toHaveTextContent("Changed since you approved it");
-    expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(within(dialog()).getByText("Needs Checking")).toBeInTheDocument();
+    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
   });
   it.each(["loading", "failed"])("does not allow advancing or submitting while the authoritative page list is %s", (status) => {
     m.data.rows = [];
@@ -138,7 +138,6 @@ describe("Submit for Review walkthrough", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(link.getAttribute("href")).toMatch(/\/a$/);
     fireEvent.click(link);
-    tickPageChecks();
     expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeEnabled();
   });
   it("never shows 0 of 0 and lets Next through when no pages changed", () => {
@@ -163,6 +162,8 @@ describe("Submit for Review walkthrough", () => {
     expect(dialog()).toHaveTextContent("1 of 1 page approved");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(dialog()).toHaveTextContent("Step 2 of 3");
+    expect(within(dialog()).queryByRole("button", { name: "Show on Page" })).toBeNull(); // email: window only
+    confirmLinks();
     expect(dialog()).toHaveTextContent("1 of 1 links approved");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     const submit = within(dialog()).getByRole("button", { name: "Submit for Review" });

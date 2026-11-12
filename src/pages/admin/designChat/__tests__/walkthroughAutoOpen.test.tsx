@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmitConfirmDialog, SubmitWalkthroughPanel, WalkthroughCheckBar, LinkCheckWindow } from "../SubmitWalkthrough";
 import { walk, useWalk } from "../submitWalkthroughStore";
-import { linkText } from "../linkCheck";
+import { linkCheckActive, linkText } from "../linkCheck";
 
 const post = vi.fn();
 const frame = { src: "https://site.example/a", contentWindow: { postMessage: post } } as unknown as HTMLIFrameElement;
@@ -61,50 +61,45 @@ describe("walkthrough auto-open and link lines", () => {
     expect(m.show).not.toHaveBeenCalled();
     expect(walk.get().checking).toBeNull();
   });
-  it("never shows Tick every check first while Approve stays disabled", () => {
+  it("step 1 Approve needs only the open page, with no link content", () => {
     render(<Host />);
     act(() => walk.reopen("pages"));
-    const region = screen.getByRole("region", { name: "Submit for Review Walkthrough" });
-    const row = within(screen.getByRole("button", { name: "About" }).closest("li")!);
-    expect(row.getByRole("button", { name: "Approve" })).toBeDisabled();
+    const blog = within(screen.getByRole("button", { name: "Blog" }).closest("li")!);
+    expect(blog.getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(blog.getByText("Open the page first")).toBeInTheDocument();
+    const about = within(screen.getByRole("button", { name: "About" }).closest("li")!);
+    expect(about.getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Show on Page" })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
     expect(document.body).not.toHaveTextContent("Tick every check first");
-    expect(region).toHaveTextContent("Open the page first"); // Blog is not opened yet
   });
-  it("Show on Page opens an unchecked page, then focuses once the frame is ready", () => {
+  it("Show on Page on step 2 opens the link's page, then focuses once the frame is ready", () => {
+    act(() => { walk.reopen("links"); walk.update(w => ({ ...w, ticked: ["page:/a", "page:/b"], viewed: ["page:/a", "page:/b"], checking: null })); });
     m.data.links.groups = [{ page: { name: "Blog", path: "/b" }, label: "Blog", links: [{ ...link, key: "/b|/gallery" }] }];
     render(<Host />);
-    act(() => walk.reopen("pages"));
-    const row = within(screen.getByRole("button", { name: "Blog" }).closest("li")!);
-    post.mockClear();
-    fireEvent.click(row.getByRole("button", { name: "Show on Page" }));
+    post.mockClear(); m.show.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Show on Page" }));
     expect(m.show).toHaveBeenLastCalledWith("/b");
-    expect(walk.get().checking?.key).toBe("page:/b");
-    expect(post.mock.calls.some(c => c[0].type === "link-check-focus")).toBe(false);
+    expect(walk.get().checking?.key).toBe("/b|/gallery");
+    expect(post).not.toHaveBeenCalled();
     act(() => ready());
     expect(post).toHaveBeenCalledWith({ source: "nova-manager", type: "link-check-focus", raw: "/gallery" }, "https://site.example");
+  });
+  it("runs the link bridge only on the Links step while something is being checked", () => {
+    const c = { key: "x", kind: "link" as const, name: "X" };
+    expect(linkCheckActive({ step: "pages", checking: c }, true, false)).toBe(false);
+    expect(linkCheckActive({ step: "links", checking: c }, true, false)).toBe(true);
+    expect(linkCheckActive({ step: "links", checking: null }, true, false)).toBe(false);
+    expect(linkCheckActive({ step: "links", checking: c }, true, true)).toBe(false);
   });
   it("uses a friendly link text fallback", () => {
     const pages = m.data.pages;
     expect(linkText({ href: "/gallery", kind: "internal", label: null }, pages)).toBe("Link to Inspiration Gallery");
     expect(linkText({ href: "/missing", kind: "internal", label: null }, pages)).toBe("/missing");
     expect(linkText({ href: "/gallery", kind: "internal", label: "See More" }, pages)).toBe("See More");
+    act(() => walk.reopen("links"));
     render(<Host />);
-    act(() => walk.reopen("pages"));
     expect(screen.getAllByText("Link to Inspiration Gallery").length).toBeGreaterThan(0);
-  });
-  it("only link items are tickable; Approve needs open + every link confirmed", () => {
-    render(<Host />);
-    act(() => walk.reopen("pages"));
-    expect(screen.queryByRole("checkbox", { name: /phone|text that changed|images and layout/i })).toBeNull();
-    const about = within(screen.getByRole("button", { name: "About" }).closest("li")!);
-    expect(about.getByText("Links to Check (0 of 1)")).toBeInTheDocument();
-    expect(about.getByRole("button", { name: "Approve" })).toBeDisabled();
-    act(() => walk.confirmLink("/a|/gallery", "fp", true));
-    expect(about.getByRole("button", { name: "Approve" })).toBeEnabled();
-    const blog = within(screen.getByRole("button", { name: "Blog" }).closest("li")!);
-    expect(blog.queryByText(/Links to Check/)).toBeNull();
-    act(() => walk.update(w => ({ ...w, viewed: [...w.viewed, "page:/b"] })));
-    expect(blog.getByRole("button", { name: "Approve" })).toBeEnabled();
   });
   it("shows the suggestions as plain bullets on the step and in the bar", () => {
     render(<Host />);

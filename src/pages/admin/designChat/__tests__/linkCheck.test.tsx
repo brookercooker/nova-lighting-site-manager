@@ -76,32 +76,37 @@ const openAbout = () => { act(() => walk.open("panel")); render(<Host />); fireE
 const tickThree = () => { expect(panel().queryByRole("checkbox", { name: /phone|text that changed|images and layout/ })).toBeNull(); };
 
 describe("Approve gating and the Check This Link window", () => {
-  it("needs the page opened and the link confirmed (shared with the Links step)", () => {
+  it("step 1 has no links and Approve needs only the open page", () => {
     openAbout();
-    tickThree();
-    expect(panel().getByRole("button", { name: "Approve" })).toBeDisabled();
-    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
-    expect(win().getByText("/team")).toBeInTheDocument();
-    expect(win().getByText("A page on your site")).toBeInTheDocument();
-    expect(win().getByText("Page found")).toBeInTheDocument();
-    expect(win().getByTitle("Link Destination").getAttribute("src")).toMatch(/\/team$/);
-    fireEvent.click(win().getByRole("checkbox", { name: "I checked that this goes to the right place" }));
-    expect(win().getByText("I confirmed this link goes to /team")).toBeInTheDocument();
-    expect(walk.get().linkTicked).toEqual(["/a|/team"]);
-    expect(walk.get().linkOpened).toEqual(["/a|/team"]);
-    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
-    expect(panel().getByText("I confirmed “Team” goes to /team.")).toBeInTheDocument();
+    expect(panel().queryByRole("button", { name: "Check This Link" })).toBeNull();
+    expect(panel().queryByText(/Dashed orange outlines/)).toBeNull();
+    expect(panel().queryByText(/Links to Check/)).toBeNull();
     expect(panel().getByRole("button", { name: "Approve" })).toBeEnabled();
   });
-  it("This Isn't Right marks the link and keeps Approve disabled until it is confirmed", () => {
-    openAbout();
-    tickThree();
+  it("step 2: Check This Link confirms the link, updates the count and enables Next", () => {
+    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"], viewed: ["page:/a"] })));
+    render(<Host />);
+    expect(panel().getByText(/Dashed orange outlines/)).toBeInTheDocument();
+    const row = within(document.querySelector("[data-walk-link='/a|/team']") as HTMLElement);
+    expect(row.getAllByRole("button").map(b => b.textContent)).toEqual(["Show on Page", "Check This Link"]);
+    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
+    fireEvent.click(row.getByRole("button", { name: "Check This Link" }));
+    expect(win().getByText("A page on your site")).toBeInTheDocument();
+    expect(win().getByText("Page found")).toBeInTheDocument();
+    fireEvent.click(win().getByRole("checkbox", { name: "I checked that this goes to the right place" }));
+    expect(walk.get().linkTicked).toEqual(["/a|/team"]);
+    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
+    expect(row.getByText("Confirmed")).toBeInTheDocument();
+    expect(panel().getByText(/1 of 1 link/)).toBeInTheDocument();
+    expect(panel().getByRole("button", { name: "Next" })).toBeEnabled();
+  });
+  it("This Isn't Right marks the link and blocks Next until it changes", () => {
+    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"], viewed: ["page:/a"] })));
+    render(<Host />);
     fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
     fireEvent.click(win().getByRole("button", { name: "This Isn't Right" }));
-    expect(panel().getByText("Marked as wrong")).toBeInTheDocument();
-    expect(panel().getByRole("button", { name: "Approve" })).toBeDisabled();
-    expect(panel().getByText("A link on this page is marked as wrong")).toBeInTheDocument();
-    // A changed link clears the mark.
+    expect(panel().getByText("Marked as Wrong")).toBeInTheDocument();
+    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...team, requestIds: ["r1", "r2"] }] }] } };
     act(() => walk.update(s => ({ ...s })));
     expect(Object.keys(walk.get().linkWrong)).toEqual([]);
@@ -199,7 +204,7 @@ describe("links needing checks", () => {
   it("shows badges and Show on Page sends focus; the Links step says Needs Checking", () => {
     const f = frameWith();
     const post = vi.spyOn(f.contentWindow!, "postMessage");
-    walk.update(s => ({ ...s, linkWrong: {}, checking: { key: "page:/a", kind: "page", name: "About" } }));
+    walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], linkWrong: {}, checking: { key: "/a|/team", kind: "link", name: "Team" } }));
     render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
     expect(screen.getAllByText("Needs Checking").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Show on Page" }));

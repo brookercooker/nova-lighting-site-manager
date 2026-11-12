@@ -112,3 +112,6 @@ export function pageChecks(row: ChangedRow, links: ReviewLink[], linkTicked: str
   }
   return items;
 }
+
+/** The preview link bridge runs only on the Links step, while a link's page is shown in the visible, non-editing preview. */
+export const linkCheckActive = (w: { step: string; checking: unknown }, visible: boolean, editing: boolean) => !!w.checking && w.step === "links" && visible && !editing;
