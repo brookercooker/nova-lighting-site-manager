@@ -17,7 +17,8 @@ import { useWalkthroughData, type WalkthroughData } from "./useWalkthroughData";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { changeFingerprint, OTHER_KEY, checklistItems, internalLinkChip, itemTicked, linkChip, remaining, type Chip, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 import { add, pageCheckIds, toggle, useWalk, walk, type WalkState, type WalkStep } from "./submitWalkthroughStore";
-import { KIND_TEXT, linkAddress, matchChangedLink, pageChecks, pageLinks, type PageCheck } from "./linkCheck";
+import { KIND_TEXT, LINK_BADGE, LINK_HINT, linkAddress, linksNeedChecking, matchChangedLink, pageChecks, pageLinks, postLinkFocus, type PageCheck } from "./linkCheck";
+import { shownPreviewFrame } from "./previewNavigate";
 
 /** Navigation that also works when the dialog is rendered outside a router (tests). */
 function useGoToPreview(): () => void {
@@ -203,7 +204,7 @@ export function rowChecks(row: ChangedRow, data: WalkthroughData, s: WalkState) 
   const wrong = items.some(i => i.wrong);
   const ready = viewed && done === items.length;
   const hint = !viewed ? "Open the page first" : wrong ? "A link on this page is marked as wrong" : "Tick every check first";
-  return { fp, items, done, ready, hint };
+  return { fp, items, done, ready, hint, links };
 }
 
 function PageCheckList({ row, items, fp, phone }: { row: ChangedRow; items: PageCheck[]; fp: string; phone?: boolean }) {
@@ -216,9 +217,18 @@ function PageCheckList({ row, items, fp, phone }: { row: ChangedRow; items: Page
           onCheckedChange={v => walk.tickPageCheck(row.key, fp, i.id, v === true)} />
         <div className="min-w-0 flex-1 text-sm">
           <label htmlFor={id} aria-live="polite" className={cn("break-words", !i.auto && "cursor-pointer")}>{i.ticked ? i.done : i.todo}</label>
+          {i.link && i.state && <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1" data-link-line={i.link.key}>
+            <span className="min-w-0 break-words text-xs font-medium">{i.link.label ?? linkAddress(i.link)}</span>
+            <Badge variant={i.state === "wrong" ? "destructive" : "secondary"} className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[i.state]}</Badge>
+            <span className="w-full break-all font-mono text-xs text-muted-foreground">{linkAddress(i.link)}</span>
+          </div>}
           {i.wrong && <p role="status" className="flex items-center gap-1 text-xs text-destructive"><AlertTriangle className="h-3 w-3" aria-hidden />Marked as wrong</p>}
-          {i.link && !i.ticked && <Button type="button" variant="link" className={cn("block h-auto p-0 text-xs", phone ? "min-h-11" : "min-h-8")}
-            onClick={() => openLinkCheck(i.link!.href, i.link!.kind, i.link!.label, row.page?.path ?? null)}>Check This Link</Button>}
+          {i.link && <div className="flex flex-wrap gap-x-3">
+            <Button type="button" variant="link" className={cn("h-auto p-0 text-xs", phone ? "min-h-11" : "min-h-8")}
+              onClick={() => postLinkFocus(shownPreviewFrame(document), i.link!.href)}>Show on Page</Button>
+            {!i.ticked && <Button type="button" variant="link" className={cn("h-auto p-0 text-xs", phone ? "min-h-11" : "min-h-8")}
+              onClick={() => openLinkCheck(i.link!.href, i.link!.kind, i.link!.label, row.page?.path ?? null)}>Check This Link</Button>}
+          </div>}
         </div>
       </li>;
     })}
@@ -233,7 +243,8 @@ export function openLinkCheck(raw: string, kind: ReviewLink["kind"], label: stri
 function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: WalkthroughData; onView: (r: ChangedRow) => void }) {
   const s = useWalk();
   if (!rows.length) return <p className="text-sm text-muted-foreground">No pages were changed in this draft.</p>;
-  return <ul className="space-y-3" aria-label="Changed Pages">{rows.map(r => {
+  const anyLinks = data.links.status === "ok" && data.links.groups.some(g => g.links.length);
+  return <>{anyLinks && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<ul className="space-y-3" aria-label="Changed Pages">{rows.map(r => {
     const approved = s.ticked.includes(r.key), viewed = s.viewed.includes(r.key);
     const tab = r.page ? draftPageUrl(r.page.path) : null;
     const checks = rowChecks(r, data, s);
@@ -254,7 +265,7 @@ function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: Walkthrou
       </div>}
       <Approval approved={approved} enabled={approved || (r.page ? checks.ready : viewed)} hint={r.page ? checks.hint : "Open the page first"} onClick={() => walk.approve(r.key, r.fingerprint ?? changeFingerprint(r))} />
     </li>;
-  })}</ul>;
+  })}</ul></>;
 }
 
 export function linkFingerprints(data: WalkthroughData): Record<string, string> {
@@ -274,6 +285,7 @@ function LinksStep({ data, onOpenInternal }: { data: WalkthroughData; onOpenInte
     <div className="space-y-4">
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}
       {(partial || truncated) && <p className="text-xs text-muted-foreground">Some links may be missing from this list.</p>}
+      {groups.some(g => g.links.length) && <p className="text-xs text-muted-foreground">{LINK_HINT}</p>}
       {groups.map((g) => (
         <section key={g.label + (g.page?.path ?? "")} aria-label={g.label}>
           <h3 className="mb-2 text-sm font-semibold">{g.label}</h3>
@@ -286,7 +298,7 @@ function LinksStep({ data, onOpenInternal }: { data: WalkthroughData; onOpenInte
               const enabled = manual || s.linkOpened.includes(l.key);
               return (
                 <li key={l.key} data-walk-link={l.key} className={cn("space-y-2 min-w-0 rounded-md border p-3", s.checking?.key === l.key && "border-primary bg-primary/5")}>
-                  <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{l.label ?? address}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{s.linkTicked.includes(l.key) ? "Approved" : "Not Reviewed"}</Badge>{!manual && <NewTab href={l.kind === "external" ? l.href : draftPageUrl(l.href.startsWith("#") ? (g.page?.path ?? "/") + l.href : l.href) ?? l.href} onOpen={() => opened(l.key)} />}</div>
+                  <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{l.label ?? address}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{s.linkTicked.includes(l.key) ? "Approved" : "Needs Checking"}</Badge>{!manual && <NewTab href={l.kind === "external" ? l.href : draftPageUrl(l.href.startsWith("#") ? (g.page?.path ?? "/") + l.href : l.href) ?? l.href} onOpen={() => opened(l.key)} />}</div>
                   {s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <p className="break-all font-mono text-xs text-muted-foreground">{address}</p>
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
@@ -336,6 +348,7 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
   const checks = row ? rowChecks(row, data, s) : null;
   const { phone } = useManagerLayout();
   const [sheet, setSheet] = useState(false);
+  const linkCount = row?.page && checks ? linksNeedChecking(checks.links, s.linkTicked, s.linkWrong) : null;
   const enabled = ready && (c.kind === "page" ? s.viewed : s.linkOpened).includes(c.key) && (!checks || !row?.page || checks.ready);
   const yup = () => {
     const fingerprint = c.kind === "page" ? data.rows.find(r => r.key === c.key)?.fingerprint ?? changeFingerprint(data.rows.find(r => r.key === c.key)) : linkFingerprints(data)[c.key];
@@ -348,6 +361,7 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
       <p className="w-full min-w-0 break-words sm:w-auto sm:flex-1">
         Checking {c.name}{c.kind === "page" && at >= 0 ? ` · ${at + 1} of ${pageRows.length} pages` : ""}
       </p>
+      {linkCount && <span data-link-count role="status" className="rounded-full border border-border bg-background px-2 py-0.5 text-xs">{linkCount}</span>}
       <Button type="button" variant="outline" className="h-11 flex-1 sm:flex-none" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft className="h-4 w-4" aria-hidden />Back to Review</Button>
       <Button type="button" className="h-11 flex-1 sm:flex-none" disabled={!enabled} onClick={yup}><Check className="h-4 w-4" aria-hidden />Approve</Button>
       {row?.page && checks && checks.items.length > 0 && (phone ? <>
@@ -355,13 +369,13 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
         <Sheet open={sheet} onOpenChange={setSheet}>
           <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto">
             <SheetHeader><SheetTitle>Checks ({checks.done} of {checks.items.length})</SheetTitle></SheetHeader>
-            <div className="pt-3"><PageCheckList row={row} items={checks.items} fp={checks.fp} phone /></div>
+            <div className="pt-3">{checks.links.length > 0 && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<PageCheckList row={row} items={checks.items} fp={checks.fp} phone /></div>
             <Button type="button" className="mt-3 h-11 w-full" onClick={() => setSheet(false)}>Done</Button>
           </SheetContent>
         </Sheet>
       </> : <details className="group w-full">
         <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1 font-medium" aria-live="polite">Checks ({checks.done} of {checks.items.length})<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden /></summary>
-        <div className="pb-2 pt-1"><PageCheckList row={row} items={checks.items} fp={checks.fp} /></div>
+        <div className="pb-2 pt-1">{checks.links.length > 0 && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<PageCheckList row={row} items={checks.items} fp={checks.fp} /></div>
       </details>)}
       {row?.page && checks && !enabled && s.viewed.includes(c.key) && <p className="w-full text-xs text-muted-foreground">{checks.hint}</p>}
     </div>

@@ -1,6 +1,6 @@
 import { LinkCheckWindow, WalkthroughCheckBar } from "./SubmitWalkthrough";
 import { useWalk } from "./submitWalkthroughStore";
-import { useLinkCheckBridge } from "./useLinkCheckBridge";
+import { LinkCheckBridge } from "./useLinkCheckBridge";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Minimize2 } from "lucide-react";
@@ -53,7 +53,7 @@ export default function PreviewPanel() {
   const visible = location.pathname.split("/")[2] === "preview" && !editing;
 
   const checkingPage = useWalk().checking?.kind === "page";
-  useLinkCheckBridge(sectionRef, checkingPage && visible && !editing, `${preview.shownId}|${frameAddresses}`);
+  const linkChecking = checkingPage && visible && !editing;
 
   useEffect(() => {
     drawing.setAvailable(visible && !pending);
@@ -65,6 +65,7 @@ export default function PreviewPanel() {
       <ContentSyncNote previewFailed={previewFailed} />
       <WalkthroughCheckBar />
       <LinkCheckWindow />
+      {linkChecking && <LinkCheckBridge root={sectionRef} frameKey={`${preview.shownId}|${frameAddresses}`} />}
       <div className={cn("shrink-0 overflow-hidden bg-background transition-[height] duration-200 motion-reduce:transition-none", ribbon && !ribbon.fading ? phone ? "h-2" : "h-12" : "h-0")}>
         <StageRibbon progress={ribbon} thin={phone} className={phone ? "pb-0.5" : "px-2 pt-1 pb-3"} />
       </div>

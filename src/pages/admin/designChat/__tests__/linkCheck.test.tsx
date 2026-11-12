@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseLinkClick, pageChecks } from "../linkCheck";
+import { isLinkCheckReady, linkCheckList, linksNeedChecking, parseLinkClick, pageChecks } from "../linkCheck";
 import { LinkCheckWindow, SubmitWalkthroughPanel } from "../SubmitWalkthrough";
 import { useLinkCheckBridge } from "../useLinkCheckBridge";
 import { walk, useWalk } from "../submitWalkthroughStore";
@@ -27,12 +27,12 @@ function frameWith(src = ORIGIN + "/a") {
   document.body.appendChild(f);
   return f;
 }
-const click = (over: Record<string, unknown> = {}) => ({ source: "nova-site", type: "link-click", v: 1, raw: "/team", href: ORIGIN + "/team", kind: "internal", label: "Team", path: "/a", ...over });
+const click = (over: Record<string, unknown> = {}) => ({ source: "nova-site", type: "link-click", v: 2, match: "/team", raw: "/team", href: ORIGIN + "/team", kind: "internal", label: "Team", path: "/a", ...over });
 
 describe("link-click validation", () => {
   it("accepts a well-formed click from the frame's exact origin and window", () => {
     const f = frameWith();
-    expect(parseLinkClick(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow }), f)).toMatchObject({ raw: "/team", kind: "internal", label: "Team" });
+    expect(parseLinkClick(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow }), f, ["/team"])).toMatchObject({ raw: "/team", kind: "internal", label: "Team" });
     f.remove();
   });
   it.each([
@@ -40,12 +40,14 @@ describe("link-click validation", () => {
     ["wrong source", { source: window }, {}],
     ["wrong kind", {}, { kind: "script" }],
     ["missing raw", {}, { raw: "" }],
-    ["wrong version", {}, { v: 2 }],
+    ["v1 click", {}, { v: 1 }],
+    ["missing match", {}, { match: undefined }],
+    ["unlisted match", {}, { match: "/other" }],
     ["wrong sender", {}, { source: "other" }],
     ["unsafe path", {}, { path: "//evil" }],
   ])("ignores %s", (_n, ev: any, data) => {
     const f = frameWith();
-    expect(parseLinkClick(new MessageEvent("message", { data: click(data), origin: ORIGIN, source: f.contentWindow, ...ev }), f)).toBeNull();
+    expect(parseLinkClick(new MessageEvent("message", { data: click(data), origin: ORIGIN, source: f.contentWindow, ...ev }), f, ["/team"])).toBeNull();
     f.remove();
   });
 });
@@ -142,26 +144,77 @@ describe("Approve gating and the Check This Link window", () => {
   });
 });
 
-function Bridge({ active }: { active: boolean }) {
+function Bridge({ active, links = [] }: { active: boolean; links?: any[] }) {
   const ref = useRef<HTMLElement>(document.body);
-  useLinkCheckBridge(ref, active, "k");
+  useLinkCheckBridge(ref, active, "k", links);
   return null;
 }
+const ready = (v = 2) => ({ source: "nova-site", type: "link-check-ready", v, enabled: true });
 describe("frame bridge", () => {
-  it("switches link checks on while checking, opens the window on a click, and off on Keep Editing", () => {
+  const Wired = () => { const s = useWalk(); const links = linkCheckList(m.data.links.groups, s.linkTicked, s.linkWrong); return <Bridge active={s.checking?.kind === "page"} links={links} />; };
+  it("sends the list on enable, re-sends on state change, opens only listed v2 clicks, and switches off on Keep Editing", () => {
     const f = frameWith();
     const post = vi.spyOn(f.contentWindow!, "postMessage");
-    const Wired = () => { const s = useWalk(); return <Bridge active={s.checking?.kind === "page"} />; };
     render(<><Wired /><LinkCheckWindow /></>);
     act(() => walk.update(s => ({ ...s, checking: { key: "page:/a", kind: "page", name: "About" } })));
-    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true }, ORIGIN);
-    act(() => { window.dispatchEvent(new MessageEvent("message", { data: click(), origin: "https://evil.example", source: f.contentWindow })); });
+    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "todo" }] }, ORIGIN);
+    const send = (data: any, origin = ORIGIN) => act(() => { window.dispatchEvent(new MessageEvent("message", { data, origin, source: f.contentWindow })); });
+    send(click());
+    expect(screen.queryByRole("dialog")).toBeNull(); // no v2 ready yet
+    send(ready());
+    send(click(), "https://evil.example");
+    send(click({ match: "/other" }));
+    send(click({ match: undefined }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    act(() => { window.dispatchEvent(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow })); });
+    send(click());
     expect(win().getByText("Is this the correct destination?")).toBeInTheDocument();
+    act(() => walk.confirmLink("/a|/team", "fp", true));
+    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "done" }] }, ORIGIN);
+    act(() => walk.markWrong("/a|/team", "fp"));
+    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: true, links: [{ raw: "/team", state: "wrong" }] }, ORIGIN);
     act(() => walk.keepEditing());
     expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check", enabled: false }, ORIGIN);
     expect(screen.queryByRole("dialog")).toBeNull();
+    f.remove();
+  });
+  it("treats a v1 ready reply as unsupported", () => {
+    const f = frameWith();
+    render(<><Wired /><LinkCheckWindow /></>);
+    act(() => walk.update(s => ({ ...s, checking: { key: "page:/a", kind: "page", name: "About" } })));
+    expect(isLinkCheckReady(new MessageEvent("message", { data: ready(1), origin: ORIGIN, source: f.contentWindow }), f)).toBe(false);
+    act(() => { window.dispatchEvent(new MessageEvent("message", { data: ready(1), origin: ORIGIN, source: f.contentWindow })); });
+    act(() => { window.dispatchEvent(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow })); });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    f.remove();
+  });
+});
+
+describe("links needing checks", () => {
+  it("lists shared-piece links, caps at 100 and counts what is left", () => {
+    const header = { ...team, key: "|/shop", href: "/shop", label: "Shop" };
+    const groups = [{ page: { name: "About", path: "/a" }, label: "About", links: [team] }, { page: null, label: "Header", links: [header] }];
+    expect(linkCheckList(groups as any, ["|/shop"], {})).toEqual([{ raw: "/team", state: "todo" }, { raw: "/shop", state: "done" }]);
+    const many = Array.from({ length: 120 }, (_, i) => ({ ...team, key: "k" + i, href: "/p" + i }));
+    expect(linkCheckList([{ page: null, label: "X", links: many }] as any, [], {})).toHaveLength(100);
+    expect(linksNeedChecking([team, header] as any, ["|/shop"], {})).toBe("1 of 2 links need checking");
+    expect(linksNeedChecking([team, header] as any, ["|/shop", "/a|/team"], {})).toBe("All links confirmed");
+  });
+  it("shows badges and Show on Page sends focus; the Links step says Needs Checking", () => {
+    const f = frameWith();
+    const post = vi.spyOn(f.contentWindow!, "postMessage");
+    walk.update(s => ({ ...s, linkWrong: {} }));
+    render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
+    expect(screen.getAllByText("Needs Checking").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Show on Page" }));
+    expect(post).toHaveBeenLastCalledWith({ source: "nova-manager", type: "link-check-focus", raw: "/team" }, ORIGIN);
+    act(() => walk.confirmLink("/a|/team", "fp", true));
+    expect(screen.getByText("Confirmed")).toBeInTheDocument();
+    act(() => walk.markWrong("/a|/team", "fp"));
+    expect(screen.getByText("Marked as Wrong")).toBeInTheDocument();
+    act(() => walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], linkTicked: [], linkWrong: {} })));
+    const link = document.querySelector("[data-walk-link='/a|/team']") as HTMLElement;
+    expect(within(link).getByText("Needs Checking")).toBeInTheDocument();
+    expect(within(link).queryByText("Not Reviewed")).toBeNull();
     f.remove();
   });
 });

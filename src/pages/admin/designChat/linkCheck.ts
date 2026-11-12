@@ -1,7 +1,7 @@
 import { normPath, type ChangedRow, type LinkGroup, type LinkKind, type ReviewLink } from "./submitWalkthrough";
 
 /** "Check This Link": the frame bridge and the per-page checks of the Submit for Review walkthrough. */
-export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null };
+export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string };
 const KINDS: LinkKind[] = ["internal", "external", "mail", "phone", "anchor"];
 export const KIND_TEXT: Record<LinkKind, string> = { internal: "A page on your site", external: "A different website", mail: "An email address", phone: "A phone number", anchor: "A section of this page" };
 
@@ -16,32 +16,55 @@ export function frameOrigin(frame: HTMLIFrameElement | null): string | null {
 const fromFrame = (event: MessageEvent, frame: HTMLIFrameElement | null) =>
   !!frame?.contentWindow && event.source === frame.contentWindow && frameOrigin(frame) === event.origin;
 
-export function postLinkCheck(frame: HTMLIFrameElement | null, enabled: boolean): boolean {
+export type LinkState = "todo" | "done" | "wrong";
+export type LinkCheckEntry = { raw: string; state: LinkState };
+export const MAX_LISTED_LINKS = 100;
+export const linkState = (key: string, linkTicked: string[], wrong: Record<string, string> | string[]): LinkState =>
+  (Array.isArray(wrong) ? wrong.includes(key) : key in wrong) ? "wrong" : linkTicked.includes(key) ? "done" : "todo";
+const RANK: Record<LinkState, number> = { wrong: 2, todo: 1, done: 0 };
+/** Every changed link (page and shared-piece groups) for the frame, one entry per raw href, capped at 100. */
+export function linkCheckList(groups: LinkGroup[], linkTicked: string[], wrong: Record<string, string>): LinkCheckEntry[] {
+  const out = new Map<string, LinkState>();
+  for (const l of groups.flatMap(g => g.links)) {
+    const st = linkState(l.key, linkTicked, wrong), prev = out.get(l.href);
+    if (prev === undefined ? out.size < MAX_LISTED_LINKS : RANK[st] > RANK[prev]) out.set(l.href, st);
+  }
+  return [...out].map(([raw, state]) => ({ raw, state }));
+}
+function post(frame: HTMLIFrameElement | null, message: Record<string, unknown>): boolean {
   const origin = frameOrigin(frame);
   if (!origin || !frame?.contentWindow) return false;
-  frame.contentWindow.postMessage({ source: "nova-manager", type: "link-check", enabled }, origin);
-  return true;
+  try { frame.contentWindow.postMessage({ source: "nova-manager", ...message }, origin); return true; }
+  catch { return false; } // a frame removed mid-teardown
+}
+export function postLinkCheck(frame: HTMLIFrameElement | null, enabled: boolean, links: LinkCheckEntry[] = []): boolean {
+  return post(frame, enabled ? { type: "link-check", enabled, links: links.slice(0, MAX_LISTED_LINKS) } : { type: "link-check", enabled });
+}
+/** Asks the public frame to scroll to and flash a listed link. */
+export function postLinkFocus(frame: HTMLIFrameElement | null, raw: string): boolean {
+  return post(frame, { type: "link-check-focus", raw });
 }
 export function isLinkCheckReady(event: MessageEvent, frame: HTMLIFrameElement | null): boolean {
   const d = event.data;
-  return fromFrame(event, frame) && !!d && d.source === "nova-site" && d.type === "link-check-ready" && d.v === 1 && d.enabled === true;
+  return fromFrame(event, frame) && !!d && d.source === "nova-site" && d.type === "link-check-ready" && d.v === 2 && d.enabled === true;
 }
 const str = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max && !/[\u0000-\u001f]/.test(v);
-/** A validated link-click from the shown preview frame, or null for anything else. */
-export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | null): LinkClick | null {
+/** A validated v2 link-click whose match is one of the listed links, or null for anything else. */
+export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | null, listed: string[]): LinkClick | null {
   const d = event.data;
-  if (!fromFrame(event, frame) || !d || typeof d !== "object" || d.source !== "nova-site" || d.type !== "link-click" || d.v !== 1) return null;
+  if (!fromFrame(event, frame) || !d || typeof d !== "object" || d.source !== "nova-site" || d.type !== "link-click" || d.v !== 2) return null;
+  if (typeof d.match !== "string" || !listed.includes(d.match)) return null;
   if (!str(d.raw, 2048) || !str(d.href, 2048) || !KINDS.includes(d.kind)) return null;
   if (d.label != null && typeof d.label !== "string") return null;
   if (d.path != null && !(str(d.path, 300) && /^\/(?!\/)/.test(d.path))) return null;
   const label = typeof d.label === "string" && d.label.trim() ? d.label.trim().slice(0, 300) : null;
-  return { raw: d.raw, href: d.href, kind: d.kind, label, path: d.path ?? null };
+  return { raw: d.raw, href: d.href, kind: d.kind, label, path: d.path ?? null, match: d.match };
 }
 
-/** The changed links listed for one page. */
+/** The changed links that appear on one page: its own plus changed shared-piece links (Header, Footer). */
 export function pageLinks(groups: LinkGroup[], path: string | undefined): ReviewLink[] {
   if (!path) return [];
-  return groups.filter(g => g.page && normPath(g.page.path) === normPath(path)).flatMap(g => g.links);
+  return groups.filter(g => !g.page || normPath(g.page.path) === normPath(path)).flatMap(g => g.links);
 }
 /** The changed link a click refers to (same key the Links step uses), or null when it isn't one. */
 export function matchChangedLink(groups: LinkGroup[], path: string | null | undefined, raw: string): ReviewLink | null {
@@ -49,7 +72,15 @@ export function matchChangedLink(groups: LinkGroup[], path: string | null | unde
 }
 
 export const linkAddress = (l: { href: string; kind: LinkKind }) => l.kind === "mail" || l.kind === "phone" ? l.href.replace(/^(mailto|tel):/i, "") : l.href;
-export type PageCheck = { id: string; todo: string; done: string; ticked: boolean; link?: ReviewLink; wrong?: boolean; auto: boolean };
+export type PageCheck = { id: string; todo: string; done: string; ticked: boolean; link?: ReviewLink; wrong?: boolean; state?: LinkState; auto: boolean };
+export const LINK_BADGE: Record<LinkState, string> = { todo: "Needs Checking", done: "Confirmed", wrong: "Marked as Wrong" };
+/** "2 of 3 links need checking", or "All links confirmed". */
+export function linksNeedChecking(links: ReviewLink[], linkTicked: string[], wrong: Record<string, string>): string | null {
+  if (!links.length) return null;
+  const left = links.filter(l => linkState(l.key, linkTicked, wrong) !== "done").length;
+  return left ? `${left} of ${links.length} ${links.length === 1 ? "link needs" : "links need"} checking` : "All links confirmed";
+}
+export const LINK_HINT = "Dashed orange outlines on the page mark links to check. Click one to confirm where it goes.";
 export const PAGE_CHECKS = [
   { id: "phone", todo: "Check how this page looks on a phone.", done: "I checked how this page looks on a phone." },
   { id: "text", todo: "Read the text that changed.", done: "I read the text that changed." },
@@ -62,7 +93,7 @@ export function pageChecks(row: ChangedRow, links: ReviewLink[], manual: string[
   if (!links.length) items.push({ id: "links", todo: "No links changed on this page.", done: "No links changed on this page.", ticked: true, auto: true });
   for (const l of links) {
     const name = l.label ?? linkAddress(l), to = linkAddress(l);
-    items.push({ id: "link:" + l.key, todo: `Check that “${name}” goes to ${to}.`, done: `I confirmed “${name}” goes to ${to}.`, ticked: linkTicked.includes(l.key) && !wrong.includes(l.key), link: l, wrong: wrong.includes(l.key), auto: true });
+    items.push({ id: "link:" + l.key, todo: `Check that “${name}” goes to ${to}.`, done: `I confirmed “${name}” goes to ${to}.`, ticked: linkTicked.includes(l.key) && !wrong.includes(l.key), link: l, wrong: wrong.includes(l.key), state: linkState(l.key, linkTicked, wrong), auto: true });
   }
   return items;
 }
