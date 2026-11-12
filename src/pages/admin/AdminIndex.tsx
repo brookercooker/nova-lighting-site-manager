@@ -137,6 +137,11 @@ function AdminShell() {
     setFinishing(true);
     try {
       const ok = await saveAll();
+      if (ok && walk.get().fix) {
+        // Change This Link: a successful save goes straight back to the Links step with the walkthrough kept.
+        walk.fixReturning(true); stopEditing(); walk.finishFix(); designChat.setReviewOpen(true);
+        return ok;
+      }
       if (ok) { stopEditing(); if (thenClear) clearWorkingPage(); }
       return ok;
     } finally { finishingRef.current = false; setFinishing(false); }

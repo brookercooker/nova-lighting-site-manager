@@ -38,7 +38,7 @@ export function walkProgress(data: WalkthroughData, s = walk.get()) {
   const pageRows = data.rows;
   const pagesLeft = pageRows.filter((r) => !s.ticked.includes(r.key)).length;
   const allLinks = data.links.status === "ok" ? data.links.groups.flatMap((g) => g.links) : [];
-  const hasLinksStep = data.links.status === "failed" || allLinks.length > 0;
+  const hasLinksStep = data.links.status === "failed" || allLinks.length > 0 || s.step === "links";
   const linksLeft = allLinks.filter((l) => !linkResolved(linkState(l.key, s.linkTicked, s.linkWrong, s.linkReplaced))).length;
   const items = checklistItems(pageRows, allLinks.length > 0, pagesLeft === 0, linksLeft === 0);
   const checksLeft = items.filter((i) => !itemTicked(i, s.checks)).length;
@@ -136,7 +136,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
     try { const res = await postToHelper("/publish"); if (res?.ok) walk.reset(); refreshSoon(); onClose(); }
     finally { setSending(false); }
   };
-  const nextDisabled = p.step === "pages" ? p.pagesLeft > 0 || !pagesReady || data.links.status === "loading" : p.step === "links" ? p.linksLeft > 0 : true;
+  const nextDisabled = p.step === "pages" ? p.pagesLeft > 0 || !pagesReady || data.links.status === "loading" : p.step === "links" ? p.linksLeft > 0 || data.links.status === "loading" : true;
   const changes = `${count} ${count === 1 ? "change" : "changes"}`;
 
   return (
@@ -266,7 +266,9 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
     <div className="space-y-4">
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}
       {(partial || truncated) && <p className="text-xs text-muted-foreground">Some links may be missing from this list.</p>}
-      {groups.some(g => g.links.length) && <p className="text-xs text-muted-foreground">{LINK_HINT} Use Check This Link to confirm each one.</p>}
+{(() => { const all = groups.flatMap(g => g.links); const left = all.filter(l => !linkResolved(linkState(l.key, s.linkTicked, s.linkWrong, s.linkReplaced))).length;
+        return !all.length || !left ? <p role="status" className="text-sm">Nothing is left to check here. Press Next to continue.</p>
+          : <p className="text-xs text-muted-foreground">{LINK_HINT} Use Check This Link to confirm each one.</p>; })()}
       {groups.map((g) => (
         <section key={g.label + (g.page?.path ?? "")} aria-label={g.label}>
           <h3 className="mb-2 text-sm font-semibold">{g.label}</h3>

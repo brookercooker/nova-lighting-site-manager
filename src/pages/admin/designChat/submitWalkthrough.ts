@@ -189,3 +189,35 @@ export function remaining(pagesLeft: number, linksLeft: number, checksLeft: numb
   if (checksLeft) parts.push(plural(checksLeft, "checklist item", "checklist items") + " left to tick");
   return parts.length ? parts.join(", ") : null;
 }
+
+const handLinkKind = (href: string): LinkKind => /^mailto:/i.test(href) ? "mail" : /^tel:/i.test(href) ? "phone" : href.startsWith("#") ? "anchor" : /^\/(?!\/)/.test(href) ? "internal" : "external";
+/** Hand-set destinations (link:<path> overrides) on pages whose saved hand edits are part of the draft. */
+export function handLinks(pages: ManagerPage[], handPaths: Set<string>): { path: string; href: string }[] {
+  const out: { path: string; href: string }[] = [];
+  for (const p of pages) {
+    if (!handPaths.has(normPath(p.path)) || !p.inlineEdits || typeof p.inlineEdits !== "object") continue;
+    for (const [k, v] of Object.entries(p.inlineEdits as Record<string, unknown>)) {
+      if (!k.startsWith("link:") || typeof v !== "string") continue;
+      try { const e = JSON.parse(v); if (typeof e?.href === "string" && e.href && !e.unlinked) out.push({ path: normPath(p.path), href: e.href }); } catch { /* invalid stored value: not a link */ }
+    }
+  }
+  return out;
+}
+/**
+ * The Links step list: the relay's changed links plus hand-set destinations on hand-edited draft pages, with every page
+ * group named as the Manager names that page ("Homepage", never a file name like "Index").
+ */
+export function mergeReviewLinks(relay: ReviewLinks, pages: ManagerPage[], handPaths: Set<string>): ReviewLinks {
+  const friendly = (p: PageRef) => ({ path: p.path, name: pages.find(m => normPath(m.path) === normPath(p.path))?.name ?? p.name });
+  const groups: LinkGroup[] = relay.groups.map(g => g.page ? { ...g, page: friendly(g.page), label: g.label === g.page.name ? friendly(g.page).name : g.label } : { ...g, links: [...g.links] });
+  for (const h of handLinks(pages, handPaths)) {
+    let g = groups.find(x => x.page && normPath(x.page.path) === h.path);
+    if (!g) {
+      const page = friendly({ name: h.path, path: h.path });
+      g = { page, label: page.name, links: [] }; groups.push(g);
+    } else if (g.links === relay.groups.find(x => x.page && normPath(x.page.path) === h.path)?.links) g.links = [...g.links];
+    const key = `${g.page!.path}|${h.href}`;
+    if (!g.links.some(l => l.key === key)) g.links.push({ key, href: h.href, kind: handLinkKind(h.href), label: null, requestIds: [], status: null });
+  }
+  return { ...relay, groups };
+}

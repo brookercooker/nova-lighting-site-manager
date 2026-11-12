@@ -1,5 +1,9 @@
 import { useSyncExternalStore } from "react";
 import type { LinkClick } from "./linkCheck";
+import { normPath } from "./submitWalkthrough";
+
+/** How long after Change This Link a refetched page keeps its approvals (re-pinned to the new fingerprint). */
+export const REPIN_MS = 120_000;
 
 /** Session-only walkthrough progress, outside any component so it survives the dialog closing for View Page. */
 /** The return point of Change This Link: which wrong link is being replaced by hand, and whether a save happened. */
@@ -21,8 +25,10 @@ export type WalkState = {
   linkReplaced: Record<string, string>;
   /** Set while Change This Link is open in Manual Edit Mode; cleared by Keep Editing and normal mode exits. */
   fix: LinkFix | null;
+  /** The page just saved through Change This Link: its approval and confirmed links follow the hand save instead of resetting. */
+  repin: { path: string; until: number } | null;
 };
-const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkWrong: {}, linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null });
+const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkWrong: {}, linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
 let state = initial();
 const listeners = new Set<() => void>();
 const hosts = new Map<string, boolean>();
@@ -49,7 +55,7 @@ export const walk = {
       if (!fix?.saved) return { ...s, fix: null };
       const linkWrong = { ...s.linkWrong }; delete linkWrong[fix.key];
       const linkApprovals = { ...s.linkApprovals }; delete linkApprovals[fix.key];
-      return { ...s, fix: null, linkWrong, linkApprovals, linkTicked: s.linkTicked.filter(k => k !== fix.key), linkReplaced: { ...s.linkReplaced, [fix.key]: fix.fingerprint } };
+      return { ...s, fix: null, repin: { path: normPath(fix.path), until: Date.now() + REPIN_MS }, linkWrong, linkApprovals, linkTicked: s.linkTicked.filter(k => k !== fix.key), linkReplaced: { ...s.linkReplaced, [fix.key]: fix.fingerprint } };
     });
     walk.reopen("links");
   },
@@ -78,6 +84,16 @@ export const walk = {
   },
   /** `own` is each link's own fingerprint (key, address, requests); Replaced by Hand uses it because hand saves change the page-level link fingerprint. */
   reconcile(pages: Record<string, string>, links?: Record<string, string>, own?: Record<string, string>) {
+    const pin = state.repin && state.repin.until > Date.now() ? state.repin.path : null;
+    if (state.repin && !pin) state = { ...state, repin: null };
+    if (pin) {
+      const pinned = (k: string) => k === "page:" + pin || (k.includes("|") && normPath(k.split("|")[0] || "/") === pin);
+      const pg = Object.entries(state.approvals).filter(([k, v]) => pinned(k) && pages[k] && pages[k] !== v);
+      const ln = links ? Object.entries(state.linkApprovals).filter(([k, v]) => pinned(k) && links[k] && links[k] !== v) : [];
+      if (pg.length || ln.length) state = { ...state, repin: null,
+        approvals: { ...state.approvals, ...Object.fromEntries(pg.map(([k]) => [k, pages[k]])) },
+        linkApprovals: { ...state.linkApprovals, ...Object.fromEntries(ln.map(([k]) => [k, links![k]])) } };
+    }
     const invalid = Object.entries(state.approvals).filter(([k,v]) => pages[k] !== v).map(([k]) => k);
     const badLinks = links ? Object.entries(state.linkApprovals).filter(([k,v]) => links[k] !== v).map(([k]) => k) : [];
     const fixedLinks = links ? Object.entries(state.linkWrong).filter(([k, v]) => links[k] !== v).map(([k]) => k) : [];

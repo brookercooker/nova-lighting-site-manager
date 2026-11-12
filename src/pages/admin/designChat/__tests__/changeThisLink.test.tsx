@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SubmitWalkthroughPanel, LinkCheckWindow, walkProgress } from "../SubmitWalkthrough";
+import { SubmitWalkthroughPanel, LinkCheckWindow, walkProgress, ownLinkPrint } from "../SubmitWalkthrough";
 import { walk, useWalk } from "../submitWalkthroughStore";
 import { LINK_BADGE, fixPage, linkCheckList, linkState } from "../linkCheck";
 import { LinkFixBanner, useClearFixOnExit } from "../linkFix";
@@ -113,5 +113,13 @@ describe("Change This Link", () => {
     expect(fixPage({ page: null, label: "Header", links: [] }, rows)).toEqual({ path: "/b", name: "Blog" });
     expect(fixPage({ page: null, label: "Header", links: [] }, [])).toEqual({ path: "/", name: "Home" });
     expect(fixPage({ page: { name: "About", path: "/a" }, label: "About", links: [] }, rows)).toEqual({ path: "/a", name: "About" });
+  });
+});
+describe("Links step with nothing left", () => {
+  it("says so and lets the reviewer continue", async () => {
+    render(<Host />); toLinks();
+    act(() => walk.update(w => ({ ...w, linkReplaced: { "/a|/gallery": ownLinkPrint(m.data.links.groups[0].links[0]) } })));
+    expect(screen.getByText("Nothing is left to check here. Press Next to continue.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

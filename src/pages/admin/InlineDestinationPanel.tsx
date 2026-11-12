@@ -9,6 +9,7 @@ import { originalLink, validLinkHref, type InlineEdits, type LinkEdit } from "@/
 import type { InlineSelection } from "@/components/InlineEditSurface";
 import { ToolField, ToolGroup } from "./designChat/ToolPanel";
 import { validTextLink } from "./textAdornment";
+import { useWalk } from "./designChat/submitWalkthroughStore";
 
 const ERROR = "That address isn't allowed. Use a web address starting with https://, a page path starting with /, mailto:, tel: or #.";
 
@@ -34,6 +35,7 @@ export default function InlineDestinationPanel({ selection, editsFor, onChange, 
   const [kind, setKind] = useState<LinkKind>(() => detectLinkKind(destination));
   const [pageSearch, setPageSearch] = useState("");
   const addressRef = useRef<HTMLInputElement>(null);
+  const fix = useWalk().fix;
   useEffect(() => { setAddress(destination); setError(""); }, [destination, target?.scope, target?.key]);
   useEffect(() => { setKind(detectLinkKind(destination)); }, [destination]);
   if (!target) return null;
@@ -48,7 +50,9 @@ export default function InlineDestinationPanel({ selection, editsFor, onChange, 
     if (embedded && !address) { setError(""); onChange(target.scope, { ...edits, [key]: JSON.stringify({ unlinked: true }) }); return; }
     save(address);
   };
-  const content = <>
+  const missing = !!fix && !destination && !edit
+    ? <p data-link-fix-hint className="text-xs text-muted-foreground">This text has no link of its own. The link to {fix.address} may be on the card or button around it, which can't be selected here yet.</p> : null;
+  const content = <>{missing}
     <div className="relative space-y-1" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false); }}>
       <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground"><label htmlFor="link-address">Link Address</label><span>{!address ? "None" : kind === "email" ? "Email" : kind === "phone" ? "Phone" : kind === "page" ? `Page: ${pages.find(p => p.path === address)?.name ?? address}` : "Web Address"}</span></div>
       <Input ref={addressRef} id="link-address" aria-label="Link Address" aria-expanded={open} type={kind === "email" ? "email" : kind === "phone" ? "tel" : "text"} value={kind === "email" || kind === "phone" ? address.replace(/^(mailto:|tel:)/i, "") : address} placeholder={embedded && !destination ? "None" : kind === "email" ? "name@example.com" : kind === "phone" ? "Phone number" : "https://"} aria-invalid={!!error}

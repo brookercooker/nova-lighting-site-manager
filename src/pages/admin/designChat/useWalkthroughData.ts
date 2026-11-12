@@ -1,9 +1,10 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CONTENT_SAVED } from "./contentSavedEvent";
 import { supabase } from "@/prototype/client";
 import { codePagePaths, loadSiteManifest } from "../siteManifest";
 import { RELAY, relayHeaders, type RelayState } from "./helper";
-import { changeFingerprint, normPath, changedPages, countHandEdits, dropRevertedHandEdits, parseReviewLinks, parseReviewPages, relayChangedPages, type ChangedRow, type ManagerPage, type PageRef, type ReviewLinks, type ReviewPages } from "./submitWalkthrough";
+import { changeFingerprint, normPath, changedPages, countHandEdits, dropRevertedHandEdits, mergeReviewLinks, parseReviewLinks, parseReviewPages, relayChangedPages, type ChangedRow, type ManagerPage, type PageRef, type ReviewLinks, type ReviewPages } from "./submitWalkthrough";
 
 export type LinksResult = { status: "loading" } | { status: "failed" } | ({ status: "ok" } & ReviewLinks);
 export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; pagesStatus?: "loading" | "failed" | "ok" };
@@ -73,7 +74,18 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const links = useQuery({ queryKey: ["walkthrough", "links", sig], queryFn: fetchReviewLinks, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
   const rows = useMemo(() => dropRevertedHandEdits(reviewPages.data ? relayChangedPages(reviewPages.data, pages.data ?? [], objects.data ?? {}, requests)
     : reviewPages.data === null ? changedPages(requests, objects.data ?? {}) : [], pages.data ?? []), [reviewPages.data, requests, objects.data, pages.data]);
-  const linkResult: LinksResult = links.isError ? { status: "failed" } : links.data && !links.isFetching ? { status: "ok", ...links.data } : { status: "loading" };
+  // Saved hand edits (Manual Edit Mode, Change This Link) re-read every list, so new destinations appear straight away.
+  const client = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
+    const on = () => { void client.invalidateQueries({ queryKey: ["walkthrough"] }); };
+    window.addEventListener(CONTENT_SAVED, on);
+    return () => window.removeEventListener(CONTENT_SAVED, on);
+  }, [enabled, client]);
+  const handPaths = useMemo(() => new Set(reviewPages.data ? reviewPages.data.rows.filter(r => r.how.includes("content")).map(r => normPath(r.path))
+    : (requests ?? []).filter(r => r.source === "content").flatMap(r => (r.pages ?? (r.page ? [r.page] : [])).map(p => normPath(p.path)))), [reviewPages.data, requests]);
+  const merged = useMemo(() => links.data ? mergeReviewLinks(links.data, pages.data ?? [], handPaths) : null, [links.data, pages.data, handPaths]);
+  const linkResult: LinksResult = links.isError ? { status: "failed" } : merged && !links.isFetching && !pages.isFetching ? { status: "ok", ...merged } : { status: "loading" };
   const pagesStatus = reviewPages.isError || objects.isError || pages.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
   const fingerprintedRows = rows.map((row) => {
     const path = row.page?.path;
