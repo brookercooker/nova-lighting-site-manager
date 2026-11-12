@@ -16,8 +16,8 @@ import { useManagerLayout } from "./useManagerLayout";
 import { useWalkthroughData, type WalkthroughData } from "./useWalkthroughData";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { changeFingerprint, OTHER_KEY, checklistItems, internalLinkChip, itemTicked, linkChip, remaining, type Chip, type ManagerPage, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
-import { add, pageCheckIds, toggle, useWalk, walk, type WalkState, type WalkStep } from "./submitWalkthroughStore";
-import { KIND_TEXT, LINK_BADGE, LINK_HINT, focusWhenReady, linkAddress, linkText, linksNeedChecking, matchChangedLink, pageChecks, pageLinks, postLinkFocus, type PageCheck } from "./linkCheck";
+import { add, toggle, useWalk, walk, type WalkState, type WalkStep } from "./submitWalkthroughStore";
+import { KIND_TEXT, LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, focusWhenReady, linkAddress, linkText, linksNeedChecking, matchChangedLink, pageChecks, pageLinks, postLinkFocus, type PageCheck } from "./linkCheck";
 import { shownPreviewFrame } from "./previewNavigate";
 
 /** Navigation that also works when the dialog is rendered outside a router (tests). */
@@ -203,11 +203,19 @@ function NewTab({ href, onOpen }: { href: string; onOpen: () => void }) {
   </TooltipTrigger><TooltipContent>Open in New Tab</TooltipContent></Tooltip></TooltipProvider>;
 }
 
-/** The "Check this page" items for a row, and whether its Approve may be pressed. */
+/** "Things to Look At on Each Page": plain bullets, never ticked or stored. */
+function Suggestions({ className }: { className?: string }) {
+  return <div data-page-suggestions className={className}>
+    <p className="text-xs font-medium text-muted-foreground">Things to Look At on Each Page</p>
+    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">{PAGE_SUGGESTIONS.map(t => <li key={t}>{t}</li>)}</ul>
+  </div>;
+}
+
+/** The link items for a row, and whether its Approve may be pressed. */
 export function rowChecks(row: ChangedRow, data: WalkthroughData, s: WalkState) {
   const fp = row.fingerprint ?? changeFingerprint(row);
   const links = data.links.status === "ok" ? pageLinks(data.links.groups, row.page?.path) : [];
-  const items = pageChecks(row, links, pageCheckIds(s, row.key, fp), s.linkTicked, Object.keys(s.linkWrong), data.pages);
+  const items = pageChecks(row, links, s.linkTicked, Object.keys(s.linkWrong), data.pages);
   const done = items.filter(i => i.ticked).length;
   const viewed = s.viewed.includes(row.key);
   const wrong = items.some(i => i.wrong);
@@ -222,12 +230,12 @@ function PageCheckList({ row, items, fp, phone, pages = [], onOpen }: { row: Cha
     if (onOpen && walk.get().checking?.key !== row.key) { onOpen(); focusWhenReady(() => shownPreviewFrame(document), raw); }
     else postLinkFocus(shownPreviewFrame(document), raw);
   };
-  return <ul className="space-y-1" aria-label={`Check This Page: ${rowName(row)}`}>
+  return <ul className="space-y-1" aria-label={`Links to Check: ${rowName(row)}`}>
     {items.map(i => {
       const id = `pc-${row.key}-${i.id}`.replace(/[^A-Za-z0-9_-]/g, "_");
       return <li key={i.id} className={cn("flex items-start gap-2", phone ? "min-h-11" : "min-h-9")}>
         <Checkbox id={id} className="mt-1 h-5 w-5" checked={i.ticked} disabled={i.auto}
-          onCheckedChange={v => walk.tickPageCheck(row.key, fp, i.id, v === true)} />
+          />
         <div className="min-w-0 flex-1 text-sm">
           <label htmlFor={id} aria-live="polite" className={cn("break-words", !i.auto && "cursor-pointer")}>{i.ticked ? i.done : i.todo}</label>
           {i.link && i.state && <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1" data-link-line={i.link.key}>
@@ -257,7 +265,7 @@ function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: Walkthrou
   const s = useWalk();
   if (!rows.length) return <p className="text-sm text-muted-foreground">No pages were changed in this draft.</p>;
   const anyLinks = data.links.status === "ok" && data.links.groups.some(g => g.links.length);
-  return <>{anyLinks && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<ul className="space-y-3" aria-label="Changed Pages">{rows.map(r => {
+  return <><Suggestions className="mb-2" />{anyLinks && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<ul className="space-y-3" aria-label="Changed Pages">{rows.map(r => {
     const approved = s.ticked.includes(r.key), viewed = s.viewed.includes(r.key);
     const tab = r.page ? draftPageUrl(r.page.path) : null;
     const checks = rowChecks(r, data, s);
@@ -273,7 +281,7 @@ function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: Walkthrou
       {s.changed.includes(r.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
       {r.key === OTHER_KEY && <Button type="button" variant="link" className="h-9 p-0" onClick={() => onView(r)}>Open Site</Button>}
       {checks.items.length > 0 && <div className="rounded-md bg-muted/50 p-2">
-        <p className="mb-1 text-xs font-medium text-muted-foreground">Check This Page ({checks.done} of {checks.items.length})</p>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Links to Check ({checks.done} of {checks.items.length})</p>
         <PageCheckList row={r} items={checks.items} fp={checks.fp} pages={data.pages} onOpen={() => onView(r)} />
       </div>}
       <Approval approved={approved} enabled={approved || (r.page ? checks.ready : viewed)} hint={r.page ? checks.hint : "Open the page first"} onClick={() => walk.approve(r.key, r.fingerprint ?? changeFingerprint(r))} />
@@ -377,18 +385,18 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
       {linkCount && <span data-link-count role="status" className="rounded-full border border-border bg-background px-2 py-0.5 text-xs">{linkCount}</span>}
       <Button type="button" variant="outline" className="h-11 flex-1 sm:flex-none" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft className="h-4 w-4" aria-hidden />Back to Review</Button>
       <Button type="button" className="h-11 flex-1 sm:flex-none" disabled={!enabled} onClick={yup}><Check className="h-4 w-4" aria-hidden />Approve</Button>
-      {row?.page && checks && checks.items.length > 0 && (phone ? <>
-        <Button type="button" variant="outline" className="h-11 w-full" onClick={() => setSheet(true)}>Checks ({checks.done} of {checks.items.length})</Button>
+      {row?.page && checks && (phone ? <>
+        <Button type="button" variant="outline" className="h-11 w-full" onClick={() => setSheet(true)}>{checks.items.length ? `Checks (${checks.done} of ${checks.items.length})` : "Things to Look At"}</Button>
         <Sheet open={sheet} onOpenChange={setSheet}>
           <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto">
-            <SheetHeader><SheetTitle>Checks ({checks.done} of {checks.items.length})</SheetTitle></SheetHeader>
-            <div className="pt-3">{checks.links.length > 0 && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<PageCheckList row={row} items={checks.items} fp={checks.fp} pages={data.pages} phone /></div>
+            <SheetHeader><SheetTitle>{checks.items.length ? `Checks (${checks.done} of ${checks.items.length})` : "Things to Look At"}</SheetTitle></SheetHeader>
+            <div className="pt-3"><Suggestions className="mb-3" />{checks.links.length > 0 && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<PageCheckList row={row} items={checks.items} fp={checks.fp} pages={data.pages} phone /></div>
             <Button type="button" className="mt-3 h-11 w-full" onClick={() => setSheet(false)}>Done</Button>
           </SheetContent>
         </Sheet>
       </> : <details className="group w-full">
-        <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1 font-medium" aria-live="polite">Checks ({checks.done} of {checks.items.length})<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden /></summary>
-        <div className="pb-2 pt-1">{checks.links.length > 0 && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<PageCheckList row={row} items={checks.items} fp={checks.fp} pages={data.pages} /></div>
+        <summary className="flex min-h-9 cursor-pointer list-none items-center gap-1 font-medium" aria-live="polite">{checks.items.length ? `Checks (${checks.done} of ${checks.items.length})` : "Things to Look At"}<ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden /></summary>
+        <div className="pb-2 pt-1"><Suggestions className="mb-2" />{checks.links.length > 0 && <p className="mb-2 text-xs text-muted-foreground">{LINK_HINT}</p>}<PageCheckList row={row} items={checks.items} fp={checks.fp} pages={data.pages} /></div>
       </details>)}
       {row?.page && checks && !enabled && s.viewed.includes(c.key) && checks.hint && <p className="w-full text-xs text-muted-foreground">{checks.hint}</p>}
     </div>

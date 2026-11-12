@@ -100,16 +100,12 @@ export function linksNeedChecking(links: ReviewLink[], linkTicked: string[], wro
   return left ? `${left} of ${links.length} ${links.length === 1 ? "link needs" : "links need"} checking` : "All links confirmed";
 }
 export const LINK_HINT = "Dashed orange outlines on the page mark links to check. Click one to confirm where it goes.";
-export const PAGE_CHECKS = [
-  { id: "phone", todo: "Check how this page looks on a phone.", done: "I checked how this page looks on a phone." },
-  { id: "text", todo: "Read the text that changed.", done: "I read the text that changed." },
-  { id: "images", todo: "Check the images and layout.", done: "I checked the images and layout." },
-];
-/** Instruction until ticked, then first-person past tense; link lines tick themselves when the link is confirmed. */
-export function pageChecks(row: ChangedRow, links: ReviewLink[], manual: string[], linkTicked: string[], wrong: string[], pages: Pick<ManagerPage, "name" | "path">[] = []): PageCheck[] {
+/** Plain suggestions shown on the Pages step and in the Checking Changes bar; never ticked, stored or gating. */
+export const PAGE_SUGGESTIONS = ["How the page looks on a phone", "That the text that changed reads correctly", "That the images and layout look right"];
+/** One item per changed link on the page; each ticks itself when the link is confirmed. Pages without links have none. */
+export function pageChecks(row: ChangedRow, links: ReviewLink[], linkTicked: string[], wrong: string[], pages: Pick<ManagerPage, "name" | "path">[] = []): PageCheck[] {
   if (!row.page) return [];
-  const items: PageCheck[] = PAGE_CHECKS.map(c => ({ ...c, ticked: manual.includes(c.id), auto: false }));
-  if (!links.length) items.push({ id: "links", todo: "No links changed on this page.", done: "No links changed on this page.", ticked: true, auto: true });
+  const items: PageCheck[] = [];
   for (const l of links) {
     const name = linkText(l, pages), to = linkAddress(l);
     items.push({ id: "link:" + l.key, todo: `Check that “${name}” goes to ${to}.`, done: `I confirmed “${name}” goes to ${to}.`, ticked: linkTicked.includes(l.key) && !wrong.includes(l.key), link: l, wrong: wrong.includes(l.key), state: linkState(l.key, linkTicked, wrong), auto: true });

@@ -53,19 +53,16 @@ describe("link-click validation", () => {
 });
 
 describe("per-page checks", () => {
-  it("starts as instructions and reads in the past tense once ticked; a page without links says so", () => {
-    const items = pageChecks(row as any, [], ["phone"], [], []);
-    expect(items.map(i => i.ticked ? i.done : i.todo)).toEqual(["I checked how this page looks on a phone.", "Read the text that changed.", "Check the images and layout.", "No links changed on this page."]);
-    const link = pageChecks(row as any, [team as any], [], ["/a|/team"], []).at(-1)!;
+  it("lists only changed links; a page without links has no items", () => {
+    expect(pageChecks(row as any, [], [], [])).toEqual([]);
+    const link = pageChecks(row as any, [team as any], ["/a|/team"], []).at(-1)!;
     expect(link.done).toBe("I confirmed “Team” goes to /team.");
-    expect(pageChecks(row as any, [team as any], [], [], []).at(-1)!.todo).toBe("Check that “Team” goes to /team.");
+    expect(link.auto).toBe(true);
+    expect(pageChecks(row as any, [team as any], [], []).map(i => i.todo)).toEqual(["Check that “Team” goes to /team."]);
   });
-  it("ticks persist for the same fingerprint and reset when the page changes", () => {
-    walk.tickPageCheck("page:/a", "v1", "phone", true);
-    walk.reconcile({ "page:/a": "v1" });
-    expect(walk.get().pageChecks["page:/a"].ids).toEqual(["phone"]);
-    walk.reconcile({ "page:/a": "v2" });
-    expect(walk.get().pageChecks["page:/a"]).toBeUndefined();
+  it("ignores older saved general ticks without crashing", () => {
+    walk.update(s => ({ ...s, pageChecks: { "page:/a": { fp: "v1", ids: ["phone"] } } } as any));
+    expect(() => walk.reconcile({ "page:/a": "v2" })).not.toThrow();
   });
 });
 
@@ -76,10 +73,10 @@ function Host() {
 const panel = () => within(screen.getByRole("region", { name: "Submit for Review Walkthrough" }));
 const win = () => within(screen.getByRole("dialog", { name: "Check This Link" }));
 const openAbout = () => { act(() => walk.open("panel")); render(<Host />); fireEvent.click(panel().getAllByRole("button", { name: "About" })[0]); act(() => walk.reopen("pages")); };
-const tickThree = () => { for (const t of ["Check how this page looks on a phone.", "Read the text that changed.", "Check the images and layout."]) fireEvent.click(panel().getByRole("checkbox", { name: t })); };
+const tickThree = () => { expect(panel().queryByRole("checkbox", { name: /phone|text that changed|images and layout/ })).toBeNull(); };
 
 describe("Approve gating and the Check This Link window", () => {
-  it("needs the page opened, every item ticked, and the link confirmed (shared with the Links step)", () => {
+  it("needs the page opened and the link confirmed (shared with the Links step)", () => {
     openAbout();
     tickThree();
     expect(panel().getByRole("button", { name: "Approve" })).toBeDisabled();

@@ -92,4 +92,30 @@ describe("walkthrough auto-open and link lines", () => {
     act(() => walk.reopen("pages"));
     expect(screen.getAllByText("Link to Inspiration Gallery").length).toBeGreaterThan(0);
   });
+  it("only link items are tickable; Approve needs open + every link confirmed", () => {
+    render(<Host />);
+    act(() => walk.reopen("pages"));
+    expect(screen.queryByRole("checkbox", { name: /phone|text that changed|images and layout/i })).toBeNull();
+    const about = within(screen.getByRole("button", { name: "About" }).closest("li")!);
+    expect(about.getByText("Links to Check (0 of 1)")).toBeInTheDocument();
+    expect(about.getByRole("button", { name: "Approve" })).toBeDisabled();
+    act(() => walk.confirmLink("/a|/gallery", "fp", true));
+    expect(about.getByRole("button", { name: "Approve" })).toBeEnabled();
+    const blog = within(screen.getByRole("button", { name: "Blog" }).closest("li")!);
+    expect(blog.queryByText(/Links to Check/)).toBeNull();
+    act(() => walk.update(w => ({ ...w, viewed: [...w.viewed, "page:/b"] })));
+    expect(blog.getByRole("button", { name: "Approve" })).toBeEnabled();
+  });
+  it("shows the suggestions as plain bullets on the step and in the bar", () => {
+    render(<Host />);
+    act(() => walk.close());
+    const bar = within(screen.getByRole("region", { name: "Checking Changes" }));
+    const inBar = bar.getByText("Things to Look At on Each Page").parentElement!;
+    expect(within(inBar).getAllByRole("listitem").map(l => l.textContent)).toEqual(["How the page looks on a phone", "That the text that changed reads correctly", "That the images and layout look right"]);
+    expect(within(inBar).queryByRole("checkbox")).toBeNull();
+    act(() => walk.reopen("pages"));
+    const step = screen.getByRole("region", { name: "Submit for Review Walkthrough" }).querySelector("[data-page-suggestions]") as HTMLElement;
+    expect(within(step).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(step).queryByRole("checkbox")).toBeNull();
+  });
 });

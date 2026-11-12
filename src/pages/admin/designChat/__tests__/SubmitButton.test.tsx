@@ -33,7 +33,6 @@ const viewAndTick = (name = "About") => {
 /** Ticks the three "Check this page" items and confirms every changed link through the Check This Link window. */
 const tickPageChecks = (name = "About") => {
   const row = () => within(screen.getByRole("button", { name }).closest("li")!);
-  for (const t of ["Check how this page looks on a phone.", "Read the text that changed.", "Check the images and layout."]) fireEvent.click(row().getByRole("checkbox", { name: t }));
   while (row().queryAllByRole("button", { name: "Check This Link" }).length) {
     fireEvent.click(row().getAllByRole("button", { name: "Check This Link" })[0]);
     const win = within(screen.getByRole("dialog", { name: "Check This Link" }));
@@ -120,10 +119,9 @@ describe("Submit for Review walkthrough", () => {
     fireEvent.click(within(dialog()).getByRole("button", { name: "About" }));
     expect(m.show).toHaveBeenCalledWith("/a");
     expect(dialog()).toBeInTheDocument();
-    expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeDisabled();
-    expect(dialog()).not.toHaveTextContent("Tick every check first");
-    tickPageChecks();
+    // No changed links: opening the page is enough.
     expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(within(dialog()).queryByText(/Links to Check/)).toBeNull();
   });
   it("shows one gated Other site changes row that opens the home page", () => {
     m.data.rows = [{ key: "other", page: null, how: "2 changes that aren't tied to one page", count: 2 }];
