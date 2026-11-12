@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isLinkCheckReady, linkCheckList, linksNeedChecking, parseLinkClick, pageChecks } from "../linkCheck";
-import { LinkCheckWindow, SubmitWalkthroughPanel } from "../SubmitWalkthrough";
+import { LinkCheckWindow, SubmitWalkthroughPanel, walkProgress } from "../SubmitWalkthrough";
 import { useLinkCheckBridge } from "../useLinkCheckBridge";
 import { walk, useWalk } from "../submitWalkthroughStore";
 
@@ -188,6 +188,22 @@ describe("Approve gating and the Check This Link window", () => {
     act(() => walk.confirmLink("/a|/team", "fp", true));
     expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
     fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
+    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+  it("only explicit Keep after opening resolves a missing page; Confirm remains disabled", () => {
+    m.data.pages = [];
+    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
+    render(<Host />);
+    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
+    expect(win().getByRole("button", { name: "Keep This Link" })).toBeDisabled();
+    fireEvent.click(win().getByRole("link", { name: "Open Link to Verify" }));
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
+    expect(walkProgress(m.data).linksLeft).toBe(1);
+    fireEvent.click(win().getByRole("button", { name: "Keep This Link" }));
+    expect(panel().getByRole("button", { name: "Next" })).toBeEnabled();
+    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeDisabled();
+    fireEvent.click(win().getByRole("button", { name: "Undo Keep" }));
     expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
   });
   it("an unnamed unknown destination has a friendly source-page label", () => {

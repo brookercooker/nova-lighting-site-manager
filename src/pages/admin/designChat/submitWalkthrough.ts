@@ -20,7 +20,7 @@ export function dropRevertedHandEdits(rows: ChangedRow[], pages: ManagerPage[]):
 }
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
 export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirmed"; detail?: string } | null;
-export type ReviewLink = { key: string; href: string; kind: LinkKind; label: string | null; ariaLabel?: string; requestIds: string[]; status: RelayLinkStatus };
+export type ReviewLink = { key: string; href: string; kind: LinkKind; label: string | null; ariaLabel?: string; elementKey?: string; scope?: string; requestIds: string[]; status: RelayLinkStatus };
 export type LinkGroup = { page: PageRef | null; label: string; links: ReviewLink[] };
 export type ReviewLinks = { groups: LinkGroup[]; unread: number; partial: boolean; truncated: boolean };
 /** Stable value fingerprint; object key order is not a change. */
@@ -125,6 +125,7 @@ export function parseReviewLinks(d: any): ReviewLinks | null {
       const st = l.status && typeof l.status === "object" && STATES.includes(l.status.state)
         ? { state: l.status.state, detail: typeof l.status.detail === "string" ? l.status.detail : undefined } : null;
       links.push({ key: `${page?.path ?? ""}|${l.href}`, href: l.href, kind: l.kind, label: typeof l.label === "string" && l.label.trim() ? l.label : null,
+        ...(typeof (l.elementKey ?? l.key) === "string" && /^(?:link:)?\d+(?:\.\d+)*$/.test(l.elementKey ?? l.key) ? { elementKey: (l.elementKey ?? l.key).replace(/^link:/, ""), scope: typeof l.scope === "string" ? l.scope : "page" } : {}),
         ...(typeof l.ariaLabel === "string" && l.ariaLabel.trim() ? { ariaLabel: l.ariaLabel.trim().slice(0, 300) } : {}),
         requestIds: Array.isArray(l.requestIds) ? l.requestIds.filter((x: unknown) => typeof x === "string") : [], status: st });
     }
@@ -193,13 +194,13 @@ export function remaining(pagesLeft: number, linksLeft: number, checksLeft: numb
 
 const handLinkKind = (href: string): LinkKind => /^mailto:/i.test(href) ? "mail" : /^tel:/i.test(href) ? "phone" : href.startsWith("#") ? "anchor" : /^\/(?!\/)/.test(href) ? "internal" : "external";
 /** Hand-set destinations (link:<path> overrides) on pages whose saved hand edits are part of the draft. */
-export function handLinks(pages: ManagerPage[], handPaths: Set<string>): { path: string; href: string }[] {
-  const out: { path: string; href: string }[] = [];
+export function handLinks(pages: ManagerPage[], handPaths: Set<string>): { path: string; href: string; elementKey: string; scope: string }[] {
+  const out: { path: string; href: string; elementKey: string; scope: string }[] = [];
   for (const p of pages) {
     if (!handPaths.has(normPath(p.path)) || !p.inlineEdits || typeof p.inlineEdits !== "object") continue;
     for (const [k, v] of Object.entries(p.inlineEdits as Record<string, unknown>)) {
       if (!k.startsWith("link:") || typeof v !== "string") continue;
-      try { const e = JSON.parse(v); if (typeof e?.href === "string" && e.href && !e.unlinked) out.push({ path: normPath(p.path), href: e.href }); } catch { /* invalid stored value: not a link */ }
+      try { const e = JSON.parse(v); if (typeof e?.href === "string" && e.href && !e.unlinked) out.push({ path: normPath(p.path), href: e.href, elementKey: k.slice(5), scope: "page" }); } catch { /* invalid stored value: not a link */ }
     }
   }
   return out;
@@ -211,6 +212,12 @@ export function handLinks(pages: ManagerPage[], handPaths: Set<string>): { path:
 export function mergeReviewLinks(relay: ReviewLinks, pages: ManagerPage[], handPaths: Set<string>): ReviewLinks {
   const friendly = (p: PageRef) => ({ path: p.path, name: pages.find(m => normPath(m.path) === normPath(p.path))?.name ?? p.name });
   const groups: LinkGroup[] = relay.groups.map(g => g.page ? { ...g, page: friendly(g.page), label: g.label === g.page.name ? friendly(g.page).name : g.label } : { ...g, links: [...g.links] });
+  const stored = handLinks(pages, new Set(pages.map(p => normPath(p.path))));
+  for (const g of groups) g.links = g.links.map(l => {
+    if (l.elementKey || !g.page) return l;
+    const matches = stored.filter(h => h.path === normPath(g.page?.path ?? "") && h.href === l.href);
+    return matches.length === 1 ? { ...l, elementKey: matches[0].elementKey, scope: matches[0].scope } : l;
+  });
   for (const h of handLinks(pages, handPaths)) {
     let g = groups.find(x => x.page && normPath(x.page.path) === h.path);
     if (!g) {
@@ -218,7 +225,7 @@ export function mergeReviewLinks(relay: ReviewLinks, pages: ManagerPage[], handP
       g = { page, label: page.name, links: [] }; groups.push(g);
     } else if (g.links === relay.groups.find(x => x.page && normPath(x.page.path) === h.path)?.links) g.links = [...g.links];
     const key = `${g.page!.path}|${h.href}`;
-    if (!g.links.some(l => l.key === key)) g.links.push({ key, href: h.href, kind: handLinkKind(h.href), label: null, requestIds: [], status: null });
+    if (!g.links.some(l => l.key === key)) g.links.push({ key, href: h.href, elementKey: h.elementKey, scope: h.scope, kind: handLinkKind(h.href), label: null, requestIds: [], status: null });
   }
   return { ...relay, groups };
 }

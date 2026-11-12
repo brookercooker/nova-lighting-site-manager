@@ -7,6 +7,12 @@ const pages: ManagerPage[] = [{ name: "Homepage", path: "/", build_status: "read
 
 beforeEach(() => walk.reset());
 describe("Links step from the saved draft", () => {
+  it("attaches the stored builder override key without relying on the generated label", () => {
+    const saved = [{ ...pages[0], inlineEdits: { "link:0.5.0.1": '{"href":"/contact"}' } }];
+    const out = mergeReviewLinks(relay, saved, new Set());
+    expect(out.groups[0].links[0]).toMatchObject({ elementKey: "0.5.0.1", scope: "page" });
+    expect(relay.groups[0].links[0]).not.toHaveProperty("elementKey");
+  });
   it("adds hand-set destinations on hand-edited pages as new rows and uses the friendly page name", () => {
     const out = mergeReviewLinks(relay, pages, new Set(["/"]));
     expect(out.groups).toHaveLength(1);

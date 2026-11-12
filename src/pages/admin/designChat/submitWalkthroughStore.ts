@@ -15,6 +15,8 @@ export type WalkState = {
   savedReviewLinks: { path: string; link: ReviewLink }[];
   /** Actual verification-tab clicks only, keyed by link key and its own fingerprint. */
   verificationOpened: Record<string, string>;
+  /** Explicit exceptions for missing pages, tied to the link's own fingerprint. */
+  keptMissing: Record<string, string>;
   open: boolean; host: string | null; step: WalkStep;
   viewed: string[]; ticked: string[]; linkOpened: string[]; linkTicked: string[]; checks: string[];
   checking: Checking;
@@ -30,11 +32,27 @@ export type WalkState = {
   /** The page just saved through Change This Link: its approval and confirmed links follow the hand save instead of resetting. */
   repin: { path: string; until: number } | null;
 };
-const initial = (): WalkState => ({ verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
-let state = initial();
+const initial = (): WalkState => ({ keptMissing: {}, verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], linkCheck: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
+export const WALK_SESSION_KEY = "nova-review-progress-v1";
+const progressFields = ["approvals", "linkApprovals", "verificationOpened", "linkReplaced", "keptMissing"] as const;
+function readProgress(): WalkState {
+  const next = initial();
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(WALK_SESSION_KEY) ?? "null");
+    if (saved?.v !== 1) return next;
+    for (const field of progressFields) if (saved[field] && typeof saved[field] === "object" && !Array.isArray(saved[field]))
+      next[field] = Object.fromEntries(Object.entries(saved[field]).filter(([k, v]) => k.length <= 4096 && typeof v === "string" && v.length <= 100_000).slice(0, 500)) as Record<string, string>;
+    next.ticked = Object.keys(next.approvals); next.viewed = [...next.ticked]; next.linkTicked = Object.keys(next.linkApprovals);
+  } catch { /* unavailable or older storage never blocks review */ }
+  return next;
+}
+let state = readProgress();
 const listeners = new Set<() => void>();
 const hosts = new Map<string, boolean>();
-const emit = () => listeners.forEach((l) => l());
+const emit = () => {
+  try { sessionStorage.setItem(WALK_SESSION_KEY, JSON.stringify({ v: 1, ...Object.fromEntries(progressFields.map(f => [f, state[f]])) })); } catch { /* optional tab-session storage */ }
+  listeners.forEach((l) => l());
+};
 
 export const walk = {
   get: () => state,
@@ -46,11 +64,17 @@ export const walk = {
   keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", linkCheck: null, fix: null, reviewEdit: null })); },
   editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, linkCheck: null, step: "links" })); },
   openedVerification(key: string, fingerprint: string) { walk.update(s => ({ ...s, verificationOpened: { ...s.verificationOpened, [key]: fingerprint } })); },
+  keepMissing(key: string, own: string, fingerprint: string) {
+    if (state.verificationOpened[key] !== own) return;
+    walk.update(s => ({ ...s, keptMissing: { ...s.keptMissing, [key]: own } }));
+    walk.confirmLink(key, fingerprint, true);
+  },
   savedLink(path: string, link: ReviewLink) {
     const edit = state.reviewEdit;
     if (!edit) return;
     walk.update(s => ({ ...s, reviewEdit: null, repin: { path: normPath(path), until: Date.now() + REPIN_MS },
       verificationOpened: Object.fromEntries(Object.entries(s.verificationOpened).filter(([k]) => k !== edit.link.key && k !== link.key)),
+      keptMissing: Object.fromEntries(Object.entries(s.keptMissing).filter(([k]) => k !== edit.link.key && k !== link.key)),
       linkTicked: s.linkTicked.filter(k => k !== edit.link.key && k !== link.key),
       linkApprovals: Object.fromEntries(Object.entries(s.linkApprovals).filter(([k]) => k !== edit.link.key && k !== link.key)),
       linkReplaced: { ...s.linkReplaced, [edit.link.key]: edit.fingerprint },
@@ -76,7 +100,8 @@ export const walk = {
   confirmLink(key: string, fingerprint: string, on: boolean) {
     walk.update(s => {
       const linkApprovals = { ...s.linkApprovals }; if (on) linkApprovals[key] = fingerprint; else delete linkApprovals[key];
-      return { ...s, linkApprovals, linkTicked: toggle(s.linkTicked, key, on), linkOpened: add(s.linkOpened, key), changed: s.changed.filter(k => k !== key) };
+      const keptMissing = { ...s.keptMissing }; if (!on) delete keptMissing[key];
+      return { ...s, keptMissing, linkApprovals, linkTicked: toggle(s.linkTicked, key, on), linkOpened: add(s.linkOpened, key), changed: s.changed.filter(k => k !== key) };
     });
   },
   approve(key: string, fingerprint: string, link = false) {
@@ -104,8 +129,10 @@ export const walk = {
     const badLinks = links ? Object.entries(state.linkApprovals).filter(([k,v]) => links[k] !== v).map(([k]) => k) : [];
     const staleReplaced = own ? Object.entries(state.linkReplaced).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
     const staleOpened = own ? Object.entries(state.verificationOpened).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
-    if (!invalid.length && !badLinks.length && !staleReplaced.length && !staleOpened.length) return;
+    const staleKept = own ? Object.entries(state.keptMissing).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
+    if (!invalid.length && !badLinks.length && !staleReplaced.length && !staleOpened.length && !staleKept.length) return;
     walk.update(s => ({ ...s,
+      keptMissing: Object.fromEntries(Object.entries(s.keptMissing).filter(([k]) => !staleKept.includes(k))),
       verificationOpened: Object.fromEntries(Object.entries(s.verificationOpened).filter(([k]) => !staleOpened.includes(k))),
       linkReplaced: Object.fromEntries(Object.entries(s.linkReplaced).filter(([k]) => !staleReplaced.includes(k))),
       ticked: s.ticked.filter(k => !invalid.includes(k)), viewed: s.viewed.filter(k => !invalid.includes(k)),
@@ -121,6 +148,8 @@ export const walk = {
   },
   /** After a successful submit or an empty draft. */
   reset() { state = initial(); emit(); },
+  /** Reload only persisted fingerprinted progress, never dialogs or unfinished editing. */
+  restoreSession() { state = readProgress(); emit(); },
 };
 export const add = (list: string[], key: string) => (list.includes(key) ? list : [...list, key]);
 export const toggle = (list: string[], key: string, on: boolean) => (on ? add(list, key) : list.filter((k) => k !== key));

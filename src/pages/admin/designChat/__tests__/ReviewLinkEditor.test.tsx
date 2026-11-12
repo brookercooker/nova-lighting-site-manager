@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const m = vi.hoisted(() => ({ resolve: vi.fn(), save: vi.fn(), notify: vi.fn(), fallback: vi.fn(), phone: false }));
-vi.mock("../reviewLinkSave", () => ({ resolveReviewLink: m.resolve, saveReviewLink: m.save, FIND_LINK_ERROR: "We couldn't find this link on the page" }));
+vi.mock("../reviewLinkSave", () => ({ resolveReviewLink: m.resolve, saveReviewLink: m.save, FIND_LINK_ERROR: "We couldn't pin down which link this is. Use Open in Manual Edit to change it." }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ preview: null }) }));
 vi.mock("../useManagerLayout", () => ({ useManagerLayout: () => ({ phone: m.phone }) }));
 vi.mock("../linkFix", () => ({ useChangeLink: () => m.fallback }));
@@ -13,7 +13,7 @@ const group = { page: { name: "Homepage", path: "/" }, label: "Homepage", links:
 const pages = [{ name: "Inspiration Gallery", path: "/gallery", build_status: "ready" }];
 beforeEach(() => {
   vi.clearAllMocks(); walk.reset(); m.phone = false;
-  m.resolve.mockResolvedValue({ href: "/contact", blank: true }); m.save.mockResolvedValue(["Homepage: changed link to /gallery"]);
+  m.resolve.mockResolvedValue({ href: "/contact", blank: true, element: { key: "0.5.0.1", scope: "page" } }); m.save.mockResolvedValue(["Homepage: changed link to /gallery"]);
   walk.update(s => ({ ...s, open: true, ticked: ["page:/"], approvals: { "page:/": "p1" }, linkTicked: ["/|/team"], linkApprovals: { "/|/team": "l1" } }));
   walk.editLink({ link, group, rows: [], fingerprint: "own" });
 });
@@ -56,8 +56,9 @@ it("resolution failure offers only the existing Manual fallback, including share
   walk.editLink({ link, group: { ...group, page: null }, rows, fingerprint: "own" });
   render(<ReviewLinkEditor pages={pages} />);
   await screen.findByRole("button", { name: "Open in Manual Edit" });
-  expect(screen.getByText("Saving here isn't available yet for this link; Open in Manual Edit")).toBeInTheDocument();
-  expect(m.resolve).toHaveBeenCalledWith("/about", "/contact", "Consultation", undefined);
+  expect(screen.queryByRole("button", { name: "Save New Link" })).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(m.resolve).toHaveBeenCalledWith("/about", "/contact", "Consultation", undefined, { elementKey: undefined, scope: undefined });
   fireEvent.click(screen.getByRole("button", { name: "Open in Manual Edit" }));
   expect(m.fallback).toHaveBeenCalledWith(link, expect.objectContaining({ page: null }), rows, "own");
   expect(m.save).not.toHaveBeenCalled();

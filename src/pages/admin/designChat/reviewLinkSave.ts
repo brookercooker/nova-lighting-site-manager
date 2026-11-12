@@ -8,16 +8,16 @@ import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { publicLinkAddress } from "../linkDisplay";
 
 export type ResolvedReviewLink = { table: "pages" | "object_registry"; id: string; name: string; updatedAt: string; edits: InlineEdits; element: InventoryLink; href: string; blank: boolean };
-export const FIND_LINK_ERROR = "We couldn't find this link on the page";
+export const FIND_LINK_ERROR = "We couldn't pin down which link this is. Use Open in Manual Edit to change it.";
 
 /** Only authoritative frame keys and complete link metadata can authorize a direct write. */
-export async function resolveReviewLink(path: string, href: string, label: string | null, embed?: string): Promise<ResolvedReviewLink> {
+export async function resolveReviewLink(path: string, href: string, label: string | null, embed?: string, identity?: { elementKey?: string; scope?: string }): Promise<ResolvedReviewLink> {
   const inv = await requestInventory(publicPreviewPage(publicPreviewBase(embed), path));
   const candidates = inv?.links.filter(l => l.href === href && parseKey(`link:${l.key}`) && (l.scope === "page" || l.scope.startsWith("object:"))) ?? [];
   const named = label ? candidates.filter(l => l.label === label) : [];
   const pool = named.length ? named : candidates;
   const body = pool.filter(l => l.scope === "page");
-  const matches = body.length ? body : pool;
+  const matches = identity?.elementKey ? candidates.filter(l => l.key === identity.elementKey?.replace(/^link:/, "") && l.scope === (identity.scope ?? "page")) : body.length ? body : pool;
   if (matches.length !== 1) throw new Error(FIND_LINK_ERROR);
   const element = matches[0];
   const table = element.scope === "page" ? "pages" : "object_registry";

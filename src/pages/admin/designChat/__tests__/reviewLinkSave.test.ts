@@ -12,6 +12,20 @@ beforeEach(() => {
   m.save.mockResolvedValue({ error: null });
 });
 describe("review link writes", () => {
+  it("matches stored page key first among three Contact links and shared links, ignoring Manager labels", async () => {
+    m.inventory.links = [
+      { ...m.inventory.links[0], label: "EXPLORE GALLERIES", originalHref: "/inspiration-gallery" },
+      { ...m.inventory.links[0], key: "0.7.0.0.1.1", label: "TALK TO A CONSULTANT" },
+      { ...m.inventory.links[0], key: "0.14.1.0.1.3.1", label: "BOOK A CONSULTATION" },
+      { ...m.inventory.links[0], scope: "object:footer" },
+    ];
+    m.row.inline_edits["link:0.5.0.1"] = '{"href":"/contact"}';
+    const r = await resolveReviewLink("/", "/contact", "Link to Contact", undefined, { elementKey: "link:0.5.0.1", scope: "page" });
+    await saveReviewLink(r, "/gallery", false);
+    expect(m.save.mock.calls[0][1].inline_edits["link:0.5.0.1"]).toBe('{"href":"/gallery"}');
+    expect(r.element.label).toBe("EXPLORE GALLERIES");
+    await expect(resolveReviewLink("/", "/contact", "BOOK A CONSULTATION", undefined, { elementKey: "0.99", scope: "page" })).rejects.toThrow("pin down");
+  });
   it.each(["https://example.com/a", "mailto:a@b.co", "tel:+15550100", "/gallery"])("uses the Manual destination validation for %s", href => expect(validTextLink(href)).toBe(true));
   it.each(["http://example.com", "//example.com", "javascript:alert(1)", "#faq", "https://", "mailto:", "tel:", "/a b", "/a\\b"])("rejects %s before any save", async href => {
     const r = await resolveReviewLink("/", "/contact", null);
@@ -36,7 +50,7 @@ describe("review link writes", () => {
     if (what === "ambiguous") m.inventory.links.push({ ...m.inventory.links[0], key: "0.2" });
     if (what === "target") delete m.inventory.links[0].target;
     if (what === "fingerprint") delete m.inventory.links[0].fingerprint;
-    await expect(resolveReviewLink("/", "/contact", null)).rejects.toThrow("We couldn't find this link on the page");
+    await expect(resolveReviewLink("/", "/contact", null)).rejects.toThrow("We couldn't pin down which link this is.");
     expect(m.save).not.toHaveBeenCalled();
   });
   it("propagates conflict errors without saving another map", async () => {

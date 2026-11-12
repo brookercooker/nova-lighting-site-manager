@@ -25,7 +25,7 @@ import { publicLinkAddress } from "../linkDisplay";
 const missingInternalLink = (link: ReviewLink, pages: ManagerPage[]) =>
   (link.kind === "internal" || link.kind === "anchor") && linkChip(link, pages)?.tone === "bad";
 const linkNeedsCheck = (link: ReviewLink, s: WalkState, pages: ManagerPage[]) =>
-  !(link.key in s.linkReplaced) && (missingInternalLink(link, pages) || !s.linkTicked.includes(link.key));
+  !(link.key in s.linkReplaced) && ((missingInternalLink(link, pages) && s.keptMissing[link.key] !== ownLinkPrint(link)) || !s.linkTicked.includes(link.key));
 
 /** Navigation that also works when the dialog is rendered outside a router (tests). */
 function useGoToPreview(): () => void {
@@ -269,6 +269,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   const { groups, unread, partial, truncated } = data.links;
   return (
     <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">Approvals are remembered in this tab until the draft changes or is submitted. For a missing page, edit the destination or open it to verify before choosing Keep This Link.</p>
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}
       {(partial || truncated) && <p className="text-xs text-muted-foreground">Some links may be missing from this list.</p>}
 {(() => { const all = groups.flatMap(g => g.links); const left = all.filter(l => linkNeedsCheck(l, s, data.pages)).length;
@@ -283,7 +284,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
               const manual = l.kind === "mail" || l.kind === "phone";
               const address = publicLinkAddress(manual ? l.href.replace(/^(mailto|tel):/i, "") : l.href);
               const part = l.kind === "anchor" ? linkPath(l, g).part : null;
-              const st = linkState(l.key, s.linkTicked, s.linkReplaced);
+              const st = missingInternalLink(l, data.pages) && !(l.key in s.linkReplaced) && s.keptMissing[l.key] !== ownLinkPrint(l) ? "todo" : linkState(l.key, s.linkTicked, s.linkReplaced);
               return (
                 <li key={l.key} data-walk-link={l.key} className={cn("space-y-2 min-w-0 rounded-md border p-3", s.checking?.key === l.key && "border-primary bg-primary/5")}>
                   <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{linkText(l, data.pages)}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[st]}</Badge></div>
@@ -393,6 +394,7 @@ function LinkCheckDialog() {
   const tabUrl = internal ? (dest ? draftPageUrl(dest, embed) : null) : lc.kind === "external" && /^https:\/\//i.test(lc.href) ? lc.href : null;
   const chip = internal ? (lc.raw.startsWith("#") || !dest ? null : internalLinkChip(dest, data.pages)) : match ? linkChip(match, data.pages) : null;
   const missing = internal && chip?.tone === "bad";
+  const kept = !!match && s.keptMissing[match.key] === ownLinkPrint(match) && s.linkTicked.includes(match.key);
   const ticked = !missing && !!match && s.linkTicked.includes(match.key);
   const fp = match ? linkFingerprints(data)[match.key] ?? changeFingerprint(match) : "";
   const verificationKey = match?.key ?? `${lc.page ?? ""}|${lc.raw}`;
@@ -423,10 +425,12 @@ function LinkCheckDialog() {
         </div>
         <div className="shrink-0 space-y-2 border-t px-4 py-3">
           {ticked && <Badge variant="secondary" aria-live="polite">Confirmed</Badge>}
+          {kept && <Badge variant="secondary" aria-live="polite">Kept Intentionally</Badge>}
           <div className="grid grid-cols-2 items-stretch gap-1.5 sm:flex sm:flex-wrap">
             {tabUrl && !manual && <Button asChild variant={!missing && !opened && !ticked ? "default" : "outline"} className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3"><a href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={() => walk.openedVerification(verificationKey, verificationPrint)}><ExternalLink className="h-4 w-4" aria-hidden />Open Link to Verify</a></Button>}
             <Button type="button" variant={ticked ? "secondary" : canConfirm ? "default" : "outline"} className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" disabled={!canConfirm} aria-disabled={!canConfirm} aria-describedby="link-confirm-hint" onClick={() => confirm(!ticked)}>{ticked ? <Undo2 className="h-4 w-4" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}{ticked ? "Unconfirm" : "Confirm Link"}</Button>
             {match && <Button type="button" variant={missing ? "default" : "outline"} className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => { const g = groups.find(x => x.links.some(y => y.key === match.key)); if (g) { walk.editLink({ link: match, group: g, rows: data.rows, fingerprint: ownLinkPrint(match) }); walk.reopen("links"); } }}><Pencil aria-hidden />Edit Link Destination</Button>}
+            {missing && match && <Button type="button" variant="outline" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8" disabled={!opened} aria-disabled={!opened} aria-describedby="link-confirm-hint" onClick={() => { if (kept) walk.confirmLink(match.key, fp, false); else walk.keepMissing(match.key, verificationPrint, fp); close(); }}>{kept ? "Undo Keep" : "Keep This Link"}</Button>}
             <Button type="button" variant="outline" className="h-11 px-2 text-sm sm:h-8" onClick={close}>Close</Button>
           </div>
           <p id="link-confirm-hint" aria-live="polite" className="text-xs leading-relaxed text-muted-foreground">{confirmHint}</p>

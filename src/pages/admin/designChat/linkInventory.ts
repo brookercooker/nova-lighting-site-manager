@@ -80,7 +80,7 @@ function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): Revi
     const key = `${path}|${l.href}`;
     if (out.some(x => x.key === key)) continue;
     const was = prior.find(x => x.key === key);
-    out.push({ ...(was ?? { key, href: l.href, kind: kindOf(l.href), requestIds: [], status: null }), label: l.label, ...(l.ariaLabel ? { ariaLabel: l.ariaLabel } : {}) });
+    out.push({ ...(was ?? { key, href: l.href, kind: kindOf(l.href), requestIds: [], status: null }), elementKey: l.key, scope: l.scope, label: l.label, ...(l.ariaLabel ? { ariaLabel: l.ariaLabel } : {}) });
   }
   return out;
 }
