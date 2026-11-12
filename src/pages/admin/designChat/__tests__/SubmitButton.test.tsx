@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmitButton, SubmitConfirmDialog } from "../PreviewTools";
-import { SubmitWalkthroughPanel } from "../SubmitWalkthrough";
+import { LinkCheckWindow, SubmitWalkthroughPanel } from "../SubmitWalkthrough";
 import { walk, useWalk } from "../submitWalkthroughStore";
 
 const m = vi.hoisted(() => ({ state: null as any, post: vi.fn(), refresh: vi.fn(), show: vi.fn(), review: vi.fn(), data: null as any }));
@@ -20,14 +20,26 @@ afterEach(cleanup);
 
 function PanelHost({ open = true, onOpenChange = () => {} }: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const s = useWalk();
-  return <><SubmitConfirmDialog open={open} onOpenChange={onOpenChange} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => { walk.keepEditing(); onOpenChange(false); }} />}</>;
+  return <><SubmitConfirmDialog open={open} onOpenChange={onOpenChange} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => { walk.keepEditing(); onOpenChange(false); }} />}<LinkCheckWindow /></>;
 }
 const dialog = () => screen.getByRole("region", { name: "Submit for Review Walkthrough" });
 const viewAndTick = (name = "About") => {
   fireEvent.click(within(dialog()).getAllByRole("button", { name: "About" })[0]);
   // Open Page closes the walkthrough; the preview bar's Back to Review reopens it.
   act(() => walk.reopen("pages"));
+  tickPageChecks(name);
   fireEvent.click(within(screen.getByRole("button", { name }).closest("li")!).getByRole("button", { name: "Approve" }));
+};
+/** Ticks the three "Check this page" items and confirms every changed link through the Check This Link window. */
+const tickPageChecks = (name = "About") => {
+  const row = () => within(screen.getByRole("button", { name }).closest("li")!);
+  for (const t of ["Check how this page looks on a phone.", "Read the text that changed.", "Check the images and layout."]) fireEvent.click(row().getByRole("checkbox", { name: t }));
+  while (row().queryAllByRole("button", { name: "Check This Link" }).length) {
+    fireEvent.click(row().getAllByRole("button", { name: "Check This Link" })[0]);
+    const win = within(screen.getByRole("dialog", { name: "Check This Link" }));
+    fireEvent.click(win.getByRole("checkbox", { name: "I checked that this goes to the right place" }));
+    fireEvent.click(win.getAllByRole("button", { name: "Close" })[0]);
+  }
 };
 const tickManual = () => {
   for (const t of ["Check how it looks on a phone.", "Make sure nothing was changed by accident."])
@@ -73,8 +85,8 @@ describe("Submit for Review walkthrough", () => {
     const host = render(<PanelHost open />);
     viewAndTick();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    fireEvent.click(within(dialog()).getByRole("button", { name: "Open Link" }));
-    fireEvent.click(within(dialog()).getByRole("button", { name: "Approve" }));
+    // Confirmed in the Check This Link window, so the Links step already counts it.
+    expect(within(dialog()).getByRole("button", { name: "Approved" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("checkbox", { name: "I checked the links that changed." })).toBeChecked();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, requestIds: ["first", "later"] }] }] } };
@@ -108,6 +120,9 @@ describe("Submit for Review walkthrough", () => {
     fireEvent.click(within(dialog()).getByRole("button", { name: "About" }));
     expect(m.show).toHaveBeenCalledWith("/a");
     expect(dialog()).toBeInTheDocument();
+    expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(dialog()).toHaveTextContent("Tick every check first");
+    tickPageChecks();
     expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeEnabled();
   });
   it("shows one gated Other site changes row that opens the home page", () => {
@@ -125,6 +140,7 @@ describe("Submit for Review walkthrough", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(link.getAttribute("href")).toMatch(/\/a$/);
     fireEvent.click(link);
+    tickPageChecks();
     expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeEnabled();
   });
   it("never shows 0 of 0 and lets Next through when no pages changed", () => {
@@ -149,8 +165,7 @@ describe("Submit for Review walkthrough", () => {
     expect(dialog()).toHaveTextContent("1 of 1 page approved");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(dialog()).toHaveTextContent("Step 2 of 3");
-    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
-    fireEvent.click(within(dialog()).getByRole("button", { name: "Approve" }));
+    expect(dialog()).toHaveTextContent("1 of 1 links approved");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     const submit = within(dialog()).getByRole("button", { name: "Submit for Review" });
     expect(submit).toBeDisabled();

@@ -148,3 +148,4 @@
 - [x] Open from Tools > Objects in the new editor; redirect /manage/objects/design
 - [x] Rendering-match check (3/3 match); CodedObjectEditor removed
 - [ ] Move the remaining designer-only settings (LAYOUT_GAPS) into the panel, then remove the standalone designer
+- [x] Submit for Review: per-page "Check this page" items, Checks panel in the check bar, and the Check This Link window (frame link-check bridge).

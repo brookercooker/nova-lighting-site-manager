@@ -1,0 +1,68 @@
+import { normPath, type ChangedRow, type LinkGroup, type LinkKind, type ReviewLink } from "./submitWalkthrough";
+
+/** "Check This Link": the frame bridge and the per-page checks of the Submit for Review walkthrough. */
+export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null };
+const KINDS: LinkKind[] = ["internal", "external", "mail", "phone", "anchor"];
+export const KIND_TEXT: Record<LinkKind, string> = { internal: "A page on your site", external: "A different website", mail: "An email address", phone: "A phone number", anchor: "A section of this page" };
+
+/** Exact https cross-origin origin of a frame, or null when it must not be messaged. */
+export function frameOrigin(frame: HTMLIFrameElement | null): string | null {
+  if (!frame) return null;
+  try {
+    const url = new URL(frame.src);
+    return url.protocol === "https:" && url.origin !== "null" && url.origin !== window.location.origin ? url.origin : null;
+  } catch { return null; }
+}
+const fromFrame = (event: MessageEvent, frame: HTMLIFrameElement | null) =>
+  !!frame?.contentWindow && event.source === frame.contentWindow && frameOrigin(frame) === event.origin;
+
+export function postLinkCheck(frame: HTMLIFrameElement | null, enabled: boolean): boolean {
+  const origin = frameOrigin(frame);
+  if (!origin || !frame?.contentWindow) return false;
+  frame.contentWindow.postMessage({ source: "nova-manager", type: "link-check", enabled }, origin);
+  return true;
+}
+export function isLinkCheckReady(event: MessageEvent, frame: HTMLIFrameElement | null): boolean {
+  const d = event.data;
+  return fromFrame(event, frame) && !!d && d.source === "nova-site" && d.type === "link-check-ready" && d.v === 1 && d.enabled === true;
+}
+const str = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max && !/[\u0000-\u001f]/.test(v);
+/** A validated link-click from the shown preview frame, or null for anything else. */
+export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | null): LinkClick | null {
+  const d = event.data;
+  if (!fromFrame(event, frame) || !d || typeof d !== "object" || d.source !== "nova-site" || d.type !== "link-click" || d.v !== 1) return null;
+  if (!str(d.raw, 2048) || !str(d.href, 2048) || !KINDS.includes(d.kind)) return null;
+  if (d.label != null && typeof d.label !== "string") return null;
+  if (d.path != null && !(str(d.path, 300) && /^\/(?!\/)/.test(d.path))) return null;
+  const label = typeof d.label === "string" && d.label.trim() ? d.label.trim().slice(0, 300) : null;
+  return { raw: d.raw, href: d.href, kind: d.kind, label, path: d.path ?? null };
+}
+
+/** The changed links listed for one page. */
+export function pageLinks(groups: LinkGroup[], path: string | undefined): ReviewLink[] {
+  if (!path) return [];
+  return groups.filter(g => g.page && normPath(g.page.path) === normPath(path)).flatMap(g => g.links);
+}
+/** The changed link a click refers to (same key the Links step uses), or null when it isn't one. */
+export function matchChangedLink(groups: LinkGroup[], path: string | null | undefined, raw: string): ReviewLink | null {
+  return pageLinks(groups, path ?? undefined).find(l => l.href === raw) ?? null;
+}
+
+export const linkAddress = (l: { href: string; kind: LinkKind }) => l.kind === "mail" || l.kind === "phone" ? l.href.replace(/^(mailto|tel):/i, "") : l.href;
+export type PageCheck = { id: string; todo: string; done: string; ticked: boolean; link?: ReviewLink; wrong?: boolean; auto: boolean };
+export const PAGE_CHECKS = [
+  { id: "phone", todo: "Check how this page looks on a phone.", done: "I checked how this page looks on a phone." },
+  { id: "text", todo: "Read the text that changed.", done: "I read the text that changed." },
+  { id: "images", todo: "Check the images and layout.", done: "I checked the images and layout." },
+];
+/** Instruction until ticked, then first-person past tense; link lines tick themselves when the link is confirmed. */
+export function pageChecks(row: ChangedRow, links: ReviewLink[], manual: string[], linkTicked: string[], wrong: string[]): PageCheck[] {
+  if (!row.page) return [];
+  const items: PageCheck[] = PAGE_CHECKS.map(c => ({ ...c, ticked: manual.includes(c.id), auto: false }));
+  if (!links.length) items.push({ id: "links", todo: "No links changed on this page.", done: "No links changed on this page.", ticked: true, auto: true });
+  for (const l of links) {
+    const name = l.label ?? linkAddress(l), to = linkAddress(l);
+    items.push({ id: "link:" + l.key, todo: `Check that “${name}” goes to ${to}.`, done: `I confirmed “${name}” goes to ${to}.`, ticked: linkTicked.includes(l.key) && !wrong.includes(l.key), link: l, wrong: wrong.includes(l.key), auto: true });
+  }
+  return items;
+}
