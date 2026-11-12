@@ -1,4 +1,4 @@
-import { normPath, type ChangedRow, type LinkGroup, type LinkKind, type ReviewLink } from "./submitWalkthrough";
+import { normPath, type ManagerPage, type ChangedRow, type LinkGroup, type LinkKind, type ReviewLink } from "./submitWalkthrough";
 
 /** "Check This Link": the frame bridge and the per-page checks of the Submit for Review walkthrough. */
 export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string };
@@ -44,6 +44,15 @@ export function postLinkCheck(frame: HTMLIFrameElement | null, enabled: boolean,
 export function postLinkFocus(frame: HTMLIFrameElement | null, raw: string): boolean {
   return post(frame, { type: "link-check-focus", raw });
 }
+/** Sends link-check-focus once the shown frame reports v2 link-check-ready, or after a short timeout so it never hangs. */
+export function focusWhenReady(getFrame: () => HTMLIFrameElement | null, raw: string, timeoutMs = 4000): () => void {
+  let done = false;
+  const finish = () => { if (done) return; done = true; window.removeEventListener("message", receive); clearTimeout(t); postLinkFocus(getFrame(), raw); };
+  const receive = (event: MessageEvent) => { if (isLinkCheckReady(event, getFrame())) finish(); };
+  window.addEventListener("message", receive);
+  const t = setTimeout(finish, timeoutMs);
+  return () => { done = true; window.removeEventListener("message", receive); clearTimeout(t); };
+}
 export function isLinkCheckReady(event: MessageEvent, frame: HTMLIFrameElement | null): boolean {
   const d = event.data;
   return fromFrame(event, frame) && !!d && d.source === "nova-site" && d.type === "link-check-ready" && d.v === 2 && d.enabled === true;
@@ -71,6 +80,16 @@ export function matchChangedLink(groups: LinkGroup[], path: string | null | unde
   return pageLinks(groups, path ?? undefined).find(l => l.href === raw) ?? null;
 }
 
+/** Link text for display: the label, else "Link to <page name>" for an internal link to a known page, else the address. */
+export function linkText(l: { href: string; kind: LinkKind; label?: string | null }, pages: Pick<ManagerPage, "name" | "path">[] = []): string {
+  if (l.label) return l.label;
+  if (l.kind === "internal" && !l.href.startsWith("#")) {
+    const path = normPath(l.href.split(/[?#]/)[0] || "/");
+    const page = pages.find(p => normPath(p.path) === path);
+    if (page?.name) return `Link to ${page.name}`;
+  }
+  return linkAddress(l);
+}
 export const linkAddress = (l: { href: string; kind: LinkKind }) => l.kind === "mail" || l.kind === "phone" ? l.href.replace(/^(mailto|tel):/i, "") : l.href;
 export type PageCheck = { id: string; todo: string; done: string; ticked: boolean; link?: ReviewLink; wrong?: boolean; state?: LinkState; auto: boolean };
 export const LINK_BADGE: Record<LinkState, string> = { todo: "Needs Checking", done: "Confirmed", wrong: "Marked as Wrong" };
@@ -87,12 +106,12 @@ export const PAGE_CHECKS = [
   { id: "images", todo: "Check the images and layout.", done: "I checked the images and layout." },
 ];
 /** Instruction until ticked, then first-person past tense; link lines tick themselves when the link is confirmed. */
-export function pageChecks(row: ChangedRow, links: ReviewLink[], manual: string[], linkTicked: string[], wrong: string[]): PageCheck[] {
+export function pageChecks(row: ChangedRow, links: ReviewLink[], manual: string[], linkTicked: string[], wrong: string[], pages: Pick<ManagerPage, "name" | "path">[] = []): PageCheck[] {
   if (!row.page) return [];
   const items: PageCheck[] = PAGE_CHECKS.map(c => ({ ...c, ticked: manual.includes(c.id), auto: false }));
   if (!links.length) items.push({ id: "links", todo: "No links changed on this page.", done: "No links changed on this page.", ticked: true, auto: true });
   for (const l of links) {
-    const name = l.label ?? linkAddress(l), to = linkAddress(l);
+    const name = linkText(l, pages), to = linkAddress(l);
     items.push({ id: "link:" + l.key, todo: `Check that “${name}” goes to ${to}.`, done: `I confirmed “${name}” goes to ${to}.`, ticked: linkTicked.includes(l.key) && !wrong.includes(l.key), link: l, wrong: wrong.includes(l.key), state: linkState(l.key, linkTicked, wrong), auto: true });
   }
   return items;

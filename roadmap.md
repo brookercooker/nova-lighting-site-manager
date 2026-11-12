@@ -152,3 +152,4 @@
 
 - [x] Check This Link v2: send changed-link list with states, open only listed links, Needs Checking badges, counts, Show on Page
 - [x] Chat errors: Dismiss Error per person; admin Show Details from /api/admin/error-details
+- [x] Walkthrough fixes: no "Tick every check first" note; auto-open first changed page once per Submit (desktop only); Show on Page opens the page then focuses after link-check-ready; "Link to <page>" fallback for unlabelled internal links.

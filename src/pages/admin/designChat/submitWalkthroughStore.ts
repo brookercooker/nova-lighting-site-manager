@@ -15,8 +15,10 @@ export type WalkState = {
   linkWrong: Record<string, string>;
   /** The Check This Link window, with the page it was clicked on. */
   linkCheck: (LinkClick & { page: string | null }) | null;
+  /** Set by each Submit opening; consumed by the one automatic open of the first changed page. */
+  autoOpen: boolean;
 };
-const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], pageChecks: {}, linkWrong: {}, linkCheck: null });
+const initial = (): WalkState => ({ open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], pageChecks: {}, linkWrong: {}, linkCheck: null, autoOpen: false });
 let state = initial();
 const listeners = new Set<() => void>();
 const hosts = new Map<string, boolean>();
@@ -24,10 +26,10 @@ const emit = () => listeners.forEach((l) => l());
 
 export const walk = {
   get: () => state,
-  update(fn: (s: WalkState) => WalkState) { state = fn(state); emit(); },
+  update(fn: (s: WalkState) => WalkState) { const next = fn(state); state = next.checking && next.autoOpen ? { ...next, autoOpen: false } : next; emit(); },
   subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; },
   mount(id: string, fallback: boolean) { hosts.set(id, fallback); return () => { hosts.delete(id); }; },
-  open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null })); },
+  open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null, autoOpen: true })); },
   close() { walk.update((s) => ({ ...s, open: false })); },
   keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", linkCheck: null })); },
   tickPageCheck(key: string, fp: string, id: string, on: boolean) {

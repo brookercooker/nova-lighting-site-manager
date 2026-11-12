@@ -202,7 +202,7 @@ describe("links needing checks", () => {
   it("shows badges and Show on Page sends focus; the Links step says Needs Checking", () => {
     const f = frameWith();
     const post = vi.spyOn(f.contentWindow!, "postMessage");
-    walk.update(s => ({ ...s, linkWrong: {} }));
+    walk.update(s => ({ ...s, linkWrong: {}, checking: { key: "page:/a", kind: "page", name: "About" } }));
     render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
     expect(screen.getAllByText("Needs Checking").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Show on Page" }));

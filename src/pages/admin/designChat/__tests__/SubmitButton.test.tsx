@@ -121,7 +121,7 @@ describe("Submit for Review walkthrough", () => {
     expect(m.show).toHaveBeenCalledWith("/a");
     expect(dialog()).toBeInTheDocument();
     expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeDisabled();
-    expect(dialog()).toHaveTextContent("Tick every check first");
+    expect(dialog()).not.toHaveTextContent("Tick every check first");
     tickPageChecks();
     expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeEnabled();
   });
