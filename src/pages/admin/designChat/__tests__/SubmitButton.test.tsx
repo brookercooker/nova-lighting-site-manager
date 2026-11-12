@@ -34,8 +34,7 @@ const confirmLinks = () => {
   while (within(dialog()).queryAllByRole("button", { name: "Check This Link" }).filter(b => !b.querySelector("svg")).length) {
     fireEvent.click(within(dialog()).getAllByRole("button", { name: "Check This Link" }).filter(b => !b.querySelector("svg"))[0]);
     const win = within(screen.getByRole("dialog", { name: "Check This Link" }));
-    fireEvent.click(win.getByRole("checkbox", { name: "I checked that this goes to the right place" }));
-    fireEvent.click(win.getAllByRole("button", { name: "Close" })[0]);
+    fireEvent.click(win.getByRole("button", { name: "Confirm Link" }));
   }
 };
 const tickManual = () => {

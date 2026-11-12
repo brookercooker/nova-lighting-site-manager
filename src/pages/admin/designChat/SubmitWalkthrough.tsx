@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Pencil, ArrowRight, Check, ChevronDown, Copy, ExternalLink, Eye, Send, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Pencil, ArrowRight, Check, ChevronDown, ExternalLink, Eye, Send, Undo2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -54,8 +54,8 @@ function pageCount(rows: ChangedRow[], ticked: string[]): string {
 const rowName = (r: ChangedRow) => r.page?.name ?? "Other site changes";
 const rowPath = (r: ChangedRow) => r.page?.path ?? "/";
 /** The draft site address for a page (new tab), or null when no draft address is configured. */
-function draftPageUrl(path: string): string | null {
-  try { const base = publicPreviewBase(null); return base ? publicPreviewPage(base, path) : null; } catch { return null; }
+function draftPageUrl(path: string, embed: unknown = null): string | null {
+  try { const base = publicPreviewBase(embed); return base ? publicPreviewPage(base, path) : null; } catch { return null; }
 }
 
 function linkPath(link: ReviewLink, group: LinkGroup): { path: string; part: string | null } {
@@ -372,38 +372,30 @@ export function LinkCheckWindow(): ReactNode {
 }
 
 function LinkCheckDialog() {
-  const { state } = useDesignChat();
+  const { state, preview } = useDesignChat();
   const s = useWalk();
-  const lc = s.linkCheck!;
+  const lc = s.linkCheck;
   const changeLink = useChangeLink();
   const data = useWalkthroughData(state, true);
-  const { phone } = useManagerLayout();
+  if (!lc) return null;
   const groups = data.links.status === "ok" ? data.links.groups : [];
   const match = matchChangedLink(groups, lc.page, lc.raw);
-  const [localTick, setLocalTick] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [slow, setSlow] = useState(false);
   const manual = lc.kind === "mail" || lc.kind === "phone";
   const address = manual ? linkAddress({ href: lc.raw, kind: lc.kind }) : lc.href;
   const internal = lc.kind === "internal" || lc.kind === "anchor";
   const dest = internal ? sitePath(lc.href, lc.raw, lc.page) : null;
-  const frameSrc = internal ? (dest ? draftPageUrl(dest) : null) : lc.kind === "external" && /^https?:\/\//i.test(lc.href) ? lc.href : null;
-  useEffect(() => {
-    if (lc.kind !== "external" || !frameSrc) return;
-    const t = setTimeout(() => setSlow(true), 4000);
-    return () => clearTimeout(t);
-  }, [lc.kind, frameSrc]);
+  const embed = preview?.frames.find(f => f.id === preview.shownId)?.url ?? preview?.frames.at(-1)?.url;
+  const tabUrl = internal ? (dest ? draftPageUrl(dest, embed) : null) : lc.kind === "external" && /^https:\/\//i.test(lc.href) ? lc.href : null;
   const chip = internal ? (lc.raw.startsWith("#") || !dest ? null : internalLinkChip(dest, data.pages)) : match ? linkChip(match, data.pages) : null;
-  const ticked = match ? s.linkTicked.includes(match.key) : localTick;
+  const ticked = !!match && s.linkTicked.includes(match.key);
   const wrong = !!match && match.key in s.linkWrong;
   const fp = match ? linkFingerprints(data)[match.key] ?? changeFingerprint(match) : "";
   const close = () => walk.update(w => ({ ...w, linkCheck: null }));
-  const setTick = (on: boolean) => { if (match) walk.confirmLink(match.key, fp, on); else setLocalTick(on); };
+  const confirm = (on: boolean) => { if (match) walk.confirmLink(match.key, fp, on); close(); };
   const name = lc.label ?? (internal ? linkText({ href: dest ?? lc.href, kind: "internal", label: null }, data.pages) : address);
   return (
     <Dialog open onOpenChange={o => { if (!o) close(); }}>
-      <DialogContent data-link-check className={cn("flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl", phone && "h-[100dvh] max-h-[100dvh] w-screen max-w-none rounded-none")}>
+      <DialogContent data-link-check className="flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 space-y-1 border-b px-4 py-3 text-left">
           <DialogTitle>Check This Link</DialogTitle>
           <DialogDescription>{KIND_TEXT[lc.kind]}</DialogDescription>
@@ -413,27 +405,17 @@ function LinkCheckDialog() {
           <div><p className="text-xs text-muted-foreground">Goes To</p><p data-link-address className="break-all font-mono text-lg leading-snug">{address}</p></div>
           {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
           {!match && <p className="text-xs text-muted-foreground">This link wasn't changed in this draft, so checking it here isn't counted.</p>}
-          {lc.kind === "external" && <Button asChild variant="outline" className="h-11"><a href={lc.href} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" aria-hidden />Open in New Tab</a></Button>}
-          {manual && <Button type="button" variant="outline" className="h-11" onClick={() => { void navigator.clipboard?.writeText(address).catch(() => {}); setCopied(true); }}>
-            {copied ? <Check className="h-4 w-4" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}{copied ? "Copied" : "Copy Address"}
-          </Button>}
-          {frameSrc && <div className="space-y-1">
-            {lc.kind === "external" && slow && !loaded && <p role="status" className="text-xs text-muted-foreground">This website may not allow being shown here. Use Open in New Tab to look at it.</p>}
-            <iframe title="Link Destination" src={frameSrc} referrerPolicy="origin" sandbox="allow-scripts allow-same-origin allow-forms"
-              onLoad={() => setLoaded(true)} className="h-[45dvh] w-full rounded-md border bg-background" />
-          </div>}
+          {tabUrl && !manual && <Button asChild variant="outline" className="h-11 w-full"><a href={tabUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" aria-hidden />Open in New Tab</a></Button>}
           <p className="text-sm font-medium">Is this the correct destination?</p>
         </div>
         <div className="shrink-0 space-y-2 border-t px-4 py-3">
-          <div className="flex min-h-11 items-start gap-3">
-            <Checkbox id="link-check-confirm" className="mt-1 h-5 w-5" checked={ticked} onCheckedChange={v => setTick(v === true)} />
-            <label htmlFor="link-check-confirm" aria-live="polite" className="min-w-0 cursor-pointer break-words text-sm">{ticked ? `I confirmed this link goes to ${address}` : "I checked that this goes to the right place"}</label>
-          </div>
+          {ticked && <Badge variant="secondary" aria-live="polite">Confirmed</Badge>}
           {wrong && <div className="flex flex-wrap items-center gap-2"><p role="status" className="text-xs text-destructive">Marked as wrong</p>
-            {match && <Button type="button" variant="outline" className="h-11" onClick={() => { const g = groups.find(x => x.links.some(y => y.key === match.key)); if (g) void changeLink(match, g, data.rows, ownLinkPrint(match)); }}><Pencil className="h-4 w-4" aria-hidden />Change This Link</Button>}</div>}
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" className="h-11" onClick={() => { if (match) walk.markWrong(match.key, fp); close(); }}>This Isn't Right</Button>
-            <Button type="button" className="h-11" onClick={close}>Close</Button>
+            {match && <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { const g = groups.find(x => x.links.some(y => y.key === match.key)); if (g) void changeLink(match, g, data.rows, ownLinkPrint(match)); }}><Pencil className="h-4 w-4" aria-hidden />Change This Link</Button>}</div>}
+          <div className="flex flex-col gap-2">
+            <Button type="button" variant={ticked ? "secondary" : "default"} className="h-11 w-full" onClick={() => confirm(!ticked)}>{ticked ? <Undo2 className="h-4 w-4" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}{ticked ? "Unconfirm" : "Confirm Link"}</Button>
+            <Button type="button" variant="outline" className="h-11 w-full" onClick={() => { if (match) walk.markWrong(match.key, fp); close(); }}>This Isn't Right</Button>
+            <Button type="button" variant="outline" className="h-11 w-full" onClick={close}>Close</Button>
           </div>
         </div>
       </DialogContent>

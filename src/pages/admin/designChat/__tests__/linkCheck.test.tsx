@@ -6,8 +6,8 @@ import { LinkCheckWindow, SubmitWalkthroughPanel } from "../SubmitWalkthrough";
 import { useLinkCheckBridge } from "../useLinkCheckBridge";
 import { walk, useWalk } from "../submitWalkthroughStore";
 
-const m = vi.hoisted(() => ({ state: null as any, data: null as any, show: vi.fn() }));
-vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, setReviewOpen: vi.fn(), refreshSoon: vi.fn(), showPreviewPath: m.show, selectPage: vi.fn() }) }));
+const m = vi.hoisted(() => ({ state: null as any, data: null as any, preview: null as any, show: vi.fn() }));
+vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, preview: m.preview, setReviewOpen: vi.fn(), refreshSoon: vi.fn(), showPreviewPath: m.show, selectPage: vi.fn() }) }));
 vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 
@@ -16,6 +16,7 @@ const team = { key: "/a|/team", href: "/team", kind: "internal", label: "Team", 
 const row = { key: "page:/a", page: { name: "About", path: "/a" }, how: "Changed by the builder", fingerprint: "v1" };
 beforeEach(() => {
   walk.reset();
+  m.preview = null;
   m.state = { busy: false, publish: { ok: true, open: 1 }, review: { enabled: true } };
   m.data = { rows: [row], pages: [{ name: "Team", path: "/team", build_status: "ready" }], links: { status: "ok", unread: 0, partial: false, truncated: false, groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [team] }] } };
 });
@@ -93,9 +94,10 @@ describe("Approve gating and the Check This Link window", () => {
     fireEvent.click(row.getByRole("button", { name: "Check This Link" }));
     expect(win().getByText("A page on your site")).toBeInTheDocument();
     expect(win().getByText("Page found")).toBeInTheDocument();
-    fireEvent.click(win().getByRole("checkbox", { name: "I checked that this goes to the right place" }));
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
+    fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
     expect(walk.get().linkTicked).toEqual(["/a|/team"]);
-    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(row.getByText("Confirmed")).toBeInTheDocument();
     expect(panel().getByText(/1 of 1 link/)).toBeInTheDocument();
     expect(panel().getByRole("button", { name: "Next" })).toBeEnabled();
@@ -111,32 +113,75 @@ describe("Approve gating and the Check This Link window", () => {
     act(() => walk.update(s => ({ ...s })));
     expect(Object.keys(walk.get().linkWrong)).toEqual([]);
   });
-  it("shows external links with Open in New Tab and a slow-frame note after 4 seconds", () => {
-    vi.useFakeTimers();
+  it("opens external HTTPS destinations directly without requiring a tab visit to confirm", () => {
     render(<LinkCheckWindow />);
     act(() => walk.update(s => ({ ...s, linkCheck: { raw: "https://other.example/x", href: "https://other.example/x", kind: "external", label: "Partner", path: "/a", page: "/a" } })));
     expect(win().getByText("A different website")).toBeInTheDocument();
     expect(win().getByRole("link", { name: "Open in New Tab" })).toHaveAttribute("rel", "noopener noreferrer");
+    expect(win().getByRole("link", { name: "Open in New Tab" })).toHaveAttribute("href", "https://other.example/x");
+    expect(win().getByRole("link", { name: "Open in New Tab" })).toHaveAttribute("target", "_blank");
     expect(win().getByText("This link wasn't changed in this draft, so checking it here isn't counted.")).toBeInTheDocument();
-    act(() => { vi.advanceTimersByTime(4000); });
-    expect(win().getByText(/may not allow being shown here/)).toBeInTheDocument();
-    fireEvent.click(win().getByRole("checkbox", { name: "I checked that this goes to the right place" }));
+    fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
     expect(walk.get().linkTicked).toEqual([]);
-    vi.useRealTimers();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
-  it.each([["mail", "mailto:a@b.co", "a@b.co", "An email address"], ["phone", "tel:+15550100", "+15550100", "A phone number"]])("shows %s addresses with Copy Address and no frame", (kind, raw, address, text) => {
+  it.each([["mail", "mailto:a@b.co", "a@b.co", "An email address"], ["phone", "tel:+15550100", "+15550100", "A phone number"]])("shows %s addresses without an open-tab or copy button", (kind, raw, address, text) => {
     render(<LinkCheckWindow />);
     act(() => walk.update(s => ({ ...s, linkCheck: { raw, href: raw, kind: kind as any, label: null, path: "/a", page: "/a" } })));
     expect(win().getByText(text)).toBeInTheDocument();
     expect(win().getAllByText(address).length).toBeGreaterThan(0);
-    expect(win().getByRole("button", { name: "Copy Address" })).toBeInTheDocument();
-    expect(win().queryByTitle("Link Destination")).toBeNull();
+    expect(win().queryByRole("link", { name: "Open in New Tab" })).toBeNull();
+    expect(win().queryByRole("button", { name: "Copy Address" })).toBeNull();
   });
-  it("shows anchors as a section of this page, framed at that page", () => {
+  it("opens internal destinations using the shown draft preview base, preserving its query", () => {
+    m.preview = { shownId: 4, frames: [{ id: 4, url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/a?fixture=draft" }] };
+    render(<LinkCheckWindow />);
+    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team?view=all#people", href: "/team?view=all#people", kind: "internal", label: null, path: "/a", page: "/a" } })));
+    const url = new URL(win().getByRole("link", { name: "Open in New Tab" }).getAttribute("href") ?? "");
+    expect(url.origin).toBe("https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app");
+    expect(url.pathname + url.hash).toBe("/team#people");
+    expect(url.searchParams.get("fixture")).toBe("draft");
+    expect(url.searchParams.get("view")).toBe("all");
+  });
+  it("opens anchors in a new tab at their page", () => {
     render(<LinkCheckWindow />);
     act(() => walk.update(s => ({ ...s, linkCheck: { raw: "#faq", href: "#faq", kind: "anchor", label: "FAQ", path: "/a", page: "/a" } })));
     expect(win().getByText("A section of this page")).toBeInTheDocument();
-    expect(win().getByTitle("Link Destination").getAttribute("src")).toMatch(/\/a#faq$/);
+    expect(win().getByRole("link", { name: "Open in New Tab" }).getAttribute("href")).toMatch(/\/a#faq$/);
+  });
+  it("Unconfirm returns a confirmed link to Needs Checking and blocks Next", () => {
+    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
+    render(<Host />);
+    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
+    fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
+    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
+    expect(win().getByText("Confirmed")).toBeInTheDocument();
+    fireEvent.click(win().getByRole("button", { name: "Unconfirm" }));
+    expect(walk.get().linkTicked).toEqual([]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(panel().getByText("Needs Checking")).toBeInTheDocument();
+    expect(panel().getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+  it("Close without deciding preserves the unresolved state", () => {
+    render(<LinkCheckWindow />);
+    act(() => walk.update(s => ({ ...s, linkCheck: { raw: "/team", href: "/team", kind: "internal", label: null, path: "/a", page: "/a" } })));
+    fireEvent.click(win().getAllByRole("button", { name: "Close" })[0]);
+    expect(walk.get().linkTicked).toEqual([]);
+    expect(walk.get().linkWrong).toEqual({});
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it("a page-not-found link may still be opened and confirmed intentionally", () => {
+    m.data.pages = [];
+    act(() => walk.update(s => ({ ...s, open: true, step: "links", ticked: ["page:/a"] })));
+    render(<Host />);
+    expect(panel().getByText("Fix this before submitting, or approve it if it is intended.")).toBeInTheDocument();
+    fireEvent.click(panel().getByRole("button", { name: "Check This Link" }));
+    expect(win().getByText("Page not found")).toBeInTheDocument();
+    expect(win().getByRole("link", { name: "Open in New Tab" })).toBeInTheDocument();
+    expect(win().getByRole("button", { name: "Confirm Link" })).toBeEnabled();
+    fireEvent.click(win().getByRole("button", { name: "Confirm Link" }));
+    expect(panel().getByText("Confirmed")).toBeInTheDocument();
+    expect(panel().getByRole("button", { name: "Next" })).toBeEnabled();
   });
   it("renders label text as text, never HTML", () => {
     render(<LinkCheckWindow />);
