@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "./linkAuditLayout.css";
 import ListPager, { usePager } from "./ListPager";
+import { auditLinkTitle } from "./auditLinkTitle";
 import { matchesLabelFilter } from "./labelPath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -359,7 +360,8 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
         </Button>
         <div className="text-xs text-muted-foreground">
           {lastRun ? `Last scan: ${lastRun.toLocaleString()} · ${scannedPages.length} page${scannedPages.length === 1 ? "" : "s"}` : "No scans yet. Click Scan the Public Site to begin."}
-          <span className="block">Checks the links visitors actually see, by loading each page of the public site. Links to other sites aren't checked.</span>
+          <span className="block">This checks the live site. Draft changes are checked when you Submit for Review.</span>
+          <span className="block">Links to other sites aren't checked.</span>
         </div>
       </div>
 
@@ -387,7 +389,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
             <SummaryCard label="Same Page" value={counts.SelfRef} />
             {counts.Unchecked > 0 && <SummaryCard label="Couldn't Check" value={counts.Unchecked} tone="warn" />}
           </div>
-          <p className="-mt-2 text-xs text-muted-foreground">Counts are individual links; repeated links are grouped below.</p>
+          <p className="-mt-2 text-xs text-muted-foreground">Tiles count {activeRows.length} current distinct links; results also include {deletedRows.length} removed links and follow your filters. Repeated header/footer links count once, and matching results are grouped below—not counted like every link in a page inventory.</p>
 
           <div className="nova-audit-filters flex items-center gap-2 flex-wrap">
             <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[240px] max-w-md">
@@ -455,7 +457,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
                       <Checkbox checked={checked} aria-label="Select Row"
                         onCheckedChange={(v) => setSelectedIds((cur) => v ? [...cur, r.id] : cur.filter((id) => id !== r.id))} />
                     </label>
-                    <div className="min-w-0 flex-1 font-medium break-words">{r.link_text || <span className="italic opacity-60">No wording</span>}</div>
+                    <div className="min-w-0 flex-1 font-medium break-words"><AuditLinkText text={r.link_text} /></div>
                   </div>
                   <p className="mt-2 break-words font-mono text-xs">{r.destination || "—"}</p>
                   <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
@@ -550,7 +552,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
                       />
                     </td>
                     <td className="px-3 py-2 text-xs">
-                      <div className="truncate" title={r.link_text}>{r.link_text || <span className="italic opacity-60">No wording</span>}</div>
+                      <AuditLinkText text={r.link_text} />
                       {r.is_deleted && (
                         <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded border border-destructive/40 text-destructive bg-destructive/10">
                           Link Removed
@@ -662,6 +664,21 @@ function SummaryCard({ label, value, tone }: { label: string; value: number; ton
   );
 }
 
+function AuditLinkText({ text }: { text: string }) {
+  const title = auditLinkTitle(text);
+  if (!title) return <span className="italic opacity-60">No wording</span>;
+  if (title === text.trim()) return <span className="break-words">{title}</span>;
+  return (
+    <details className="group min-w-0">
+      <summary aria-label={`Show Full Link Text: ${title}`} className="flex min-h-11 sm:min-h-0 cursor-pointer list-none items-start gap-1 break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRight aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
+        <span className="min-w-0">{title}</span>
+      </summary>
+      <p className="mt-2 whitespace-pre-wrap break-words font-normal text-muted-foreground">{text}</p>
+    </details>
+  );
+}
+
 /** The individual link texts inside a grouped row, closed by default. */
 function GroupLinkTexts({ rows }: { rows: { id: string; link_text: string }[] }) {
   const shown = rows.slice(0, 20);
@@ -671,7 +688,7 @@ function GroupLinkTexts({ rows }: { rows: { id: string; link_text: string }[] })
         <ChevronRight aria-hidden className="h-3.5 w-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" />Show Links
       </summary>
       <ul className="mt-1 space-y-0.5 break-words text-xs">
-        {shown.map((r) => <li key={r.id}>{r.link_text || <span className="italic opacity-60">No wording</span>}</li>)}
+        {shown.map((r) => <li key={r.id}><AuditLinkText text={r.link_text} /></li>)}
         {rows.length > shown.length && <li className="text-muted-foreground">and {rows.length - shown.length} more</li>}
       </ul>
     </details>
