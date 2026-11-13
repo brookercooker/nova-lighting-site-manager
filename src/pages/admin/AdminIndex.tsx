@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileText, Box, Image as ImageIcon, Video as VideoLucide, Shield, UserCircle2, KeyRound, LogOut, Camera, Eye, PanelLeftClose, PanelLeftOpen, Save, Trash2, Code, Loader2, Wrench, Pencil } from "lucide-react";
+import { FileText, Box, Image as ImageIcon, Video as VideoLucide, Shield, UserCircle2, KeyRound, LogOut, Camera, Eye, PanelLeftClose, PanelLeftOpen, Save, Trash2, Code, Loader2, Wrench, Pencil, Plus } from "lucide-react";
 import ChangeMyPasswordDialog from "./ChangeMyPasswordDialog";
 import ChatPanel from "./designChat/ChatPanel";
 import PreviewTools, { SubmitButton, SubmitConfirmDialog } from "./designChat/PreviewTools";
@@ -609,7 +609,7 @@ function PhoneLibraryMenu({ onExpand }: { onExpand: () => void }) {
   };
   return <>
     <DropdownMenu>
-      <DropdownMenuTrigger asChild><Button ref={anchor} type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Select Content" title="Select Content"><Box className="h-4 w-4" aria-hidden /></Button></DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild><Button ref={anchor} type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Select Content" title="Select Content"><Plus className="h-4 w-4" aria-hidden /></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" onCloseAutoFocus={event => { if (picker) event.preventDefault(); }}>
         {TABS.filter(({ key }) => key !== "preview").map(({ key, label, Icon }) => <DropdownMenuItem key={key} className="min-h-11" onSelect={() => { if (key === "objects" || key === "images" || key === "videos") choose(key); }}><Icon className="mr-2 h-4 w-4" aria-hidden />{label}</DropdownMenuItem>)}
       </DropdownMenuContent>
