@@ -97,7 +97,7 @@ export function SubmitConfirmDialog({ open, onOpenChange, returnFocus }: { open:
     <DialogContent className="p-5 [&>button:last-child]:h-11 [&>button:last-child]:w-11 [&>button:last-child]:right-1 [&>button:last-child]:top-1" onCloseAutoFocus={e => { e.preventDefault(); if (continuing.current) return; if (returnFocus) returnFocus(); else if (opener.current?.isConnected) opener.current.focus(); }}>
       <DialogTitle className="pr-8 leading-snug">Before You Submit for Review</DialogTitle>
       <DialogDescription asChild><div className="space-y-3 text-sm text-muted-foreground">
-        <p>We'll check the design of changed pages, then verify the destinations of changed links, then you'll confirm and submit. Approved changes go live after review.</p>
+        <p>We'll check the design of changed pages, then verify the destinations of changed links, then you'll confirm and submit. Your changes are sent to review and may need to be approved by a developer before they go live.</p>
         <p>Make all your edits first. Submitting before you finish can mean going through the review again.</p>
       </div></DialogDescription>
       <div className="grid gap-2 sm:grid-cols-2">
