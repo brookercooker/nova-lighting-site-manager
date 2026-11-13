@@ -37,3 +37,12 @@ Public replies using the existing trusted v2 link-click shape:
 Set `match` to the listed raw value for changed links; set **`match: null`** for unchanged links. Keep `raw`, `href`, `kind`, `label`, and `path` valid under the current contract. Manager validates the exact iframe window/origin before opening the sidebar and selecting the row or showing the unchanged-link note. Manager does not navigate the preview in response.
 
 Continue answering `link-check-ready` with `{source:"nova-site",type:"link-check-ready",v:2,enabled:true}` and fully remove interception when Manager sends `enabled:false`. Frames ignoring `interceptAll` retain their old behavior; Manager cannot cancel navigation inside a cross-origin iframe. The Public change is therefore required to guarantee that unchanged links never navigate away during review.
+## Manager Readiness and Diagnostics
+
+Manager installs its listener before sending link-check. A valid v2 click from the exact currently shown frame window/origin is accepted while review is active even before link-check-ready; readiness is not an additional click gate. Unchanged clicks must explicitly include match:null (missing match is rejected). Development builds log [review-link] received link-click with v/match/raw/href/kind/path and accepted, with preview credentials redacted; wrong windows/origins are never logged.
+
+Real Public ca608cd9 message capture at 375px was attempted from the authenticated Manager in this sandbox. The design service was unavailable and the real Public frame refused connection, including a direct real-frame probe. No link-click payload was observed, so the actual unchanged-card payload shape remains unverified; do not infer it from the example above.
+
+## Status Count Ownership
+
+Status displays the relay's authoritative publish.open / draft.requests, not a computed link-difference count. Review saves send /content/sync through the existing durable queue. Its current contract accepts change description lines, with no cancellation or baseline identifier. A destination changed back to its opening value is not enough to prove zero pending changes (the opening draft may already differ from live). Netting already accepted requests must be handled by the relay against its accepted/live content baseline; Manager must not subtract two requests locally or hide unrelated pending changes.

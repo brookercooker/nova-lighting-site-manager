@@ -232,3 +232,38 @@ it.each([{ href: "/changed" }, { target: "_blank" }, { elementKey: "0.9" }, { sc
   expect(walk.get().linkTicked).toEqual([contact.key]);
   expect(walk.get().changed).toContain(team.key);
 });
+
+describe("unchanged clicks without a readiness dependency", () => {
+  it.each([375, 1280])("real Manager bridge opens the note for exact-frame match:null before ready at %s", width => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    const f = frameWith();
+    m.review.mockClear(); m.show.mockClear();
+    act(() => walk.update(s => ({ ...s, step: "links", open: false, checking: { key: team.key, kind: "link", name: "Team" } })));
+    render(<><LinkCheckBridge root={{ current: document.body }} frameKey="early-click" /><Host /></>);
+    act(() => window.dispatchEvent(new MessageEvent("message", { data: click({ match: null, raw: "/wall-sconces", href: ORIGIN + "/wall-sconces", label: "Wall & Sconces" }), origin: ORIGIN, source: f.contentWindow })));
+    expect(walk.get().open).toBe(true);
+    expect(walk.get().selectedLink).toBeNull();
+    expect(m.review).toHaveBeenCalledWith(true);
+    expect(walk.get().linkNote).toBe("This link wasn't changed, so it doesn't need checking.");
+    expect(m.show).not.toHaveBeenCalled();
+    f.remove(); Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
+  });
+  it("rejects missing match and forged window/origin even before ready", () => {
+    const f = frameWith();
+    render(<Bridge active links={[{ raw: "/team", state: "todo" }]} />);
+    for (const [source, origin, match] of [[f.contentWindow, ORIGIN, undefined], [window, ORIGIN, null], [f.contentWindow, "https://evil.example", null]] as const) {
+      act(() => window.dispatchEvent(new MessageEvent("message", { data: click({ match }), origin, source })));
+    }
+    expect(walk.get().open).toBe(false);
+    expect(walk.get().linkNote).toBeNull();
+    f.remove();
+  });
+  it("redacts preview credentials in trusted dev diagnostics", () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const f = frameWith(); render(<Bridge active links={[{ raw: "/team", state: "todo" }]} />);
+    act(() => window.dispatchEvent(new MessageEvent("message", { data: click({ match: null, raw: "/wall?__lovable_token=private-value", href: ORIGIN + "/wall?access_token=private-value" }), origin: ORIGIN, source: f.contentWindow })));
+    expect(debug).toHaveBeenCalledWith("[review-link] received link-click", expect.objectContaining({ match: null, accepted: true, kind: "internal" }));
+    expect(JSON.stringify(debug.mock.calls)).not.toContain("private-value");
+    debug.mockRestore(); f.remove();
+  });
+});

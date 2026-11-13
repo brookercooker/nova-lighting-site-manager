@@ -1,7 +1,7 @@
 import { normPath, type ManagerPage, type ChangedRow, type LinkGroup, type LinkKind, type ReviewLink } from "./submitWalkthrough";
 
 /** "Check This Link": the frame bridge and the per-page checks of the Submit for Review walkthrough. */
-export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string };
+export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string | null };
 const KINDS: LinkKind[] = ["internal", "external", "mail", "phone", "anchor"];
 export const KIND_TEXT: Record<LinkKind, string> = { internal: "A page on your site", external: "A different website", mail: "An email address", phone: "A phone number", anchor: "A section of this page" };
 
@@ -65,7 +65,7 @@ const str = (v: unknown, max: number) => typeof v === "string" && v.length > 0 &
 export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | null, listed: string[], allowUnmatched = false): LinkClick | null {
   const d = event.data;
   if (!fromFrame(event, frame) || !d || typeof d !== "object" || d.source !== "nova-site" || d.type !== "link-click" || d.v !== 2) return null;
-  if (!(typeof d.match === "string" && listed.includes(d.match)) && !(allowUnmatched && d.match == null)) return null;
+  if (!(typeof d.match === "string" && listed.includes(d.match)) && !(allowUnmatched && d.match === null)) return null;
   if (!str(d.raw, 2048) || !str(d.href, 2048) || !KINDS.includes(d.kind)) return null;
   if (d.label != null && typeof d.label !== "string") return null;
   if (d.path != null && !(str(d.path, 300) && /^\/(?!\/)/.test(d.path))) return null;

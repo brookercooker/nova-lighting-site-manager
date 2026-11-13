@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { frameOrigin, isLinkCheckReady, linkCheckList, parseLinkClick, postLinkCheck, type LinkCheckEntry, type LinkClick } from "./linkCheck";
+import { publicLinkAddress } from "../linkDisplay";
 import { shownPreviewFrame } from "./previewNavigate";
 import { matchChangedLink } from "./linkCheck";
 import { useDesignChat } from "./DesignChatContext";
@@ -36,23 +37,26 @@ export function useLinkCheckBridge(root: RefObject<HTMLElement>, active: boolean
   useEffect(() => {
     if (!active) return;
     const frame = () => shownPreviewFrame(root.current ?? document);
-    let supported = false;
-    sentTo.current = frame();
-    postLinkCheck(sentTo.current, true, linksRef.current);
     const receive = (event: MessageEvent) => {
       const f = frame();
       if (!f) return;
       const d = event.data;
       // A reload announces preview-ready again; resend the full list.
-      if (d?.source === "nova-site" && d.type === "preview-ready" && event.source === f.contentWindow && event.origin === frameOrigin(f)) { supported = false; postLinkCheck(f, true, linksRef.current); sentTo.current = f; return; }
-      if (isLinkCheckReady(event, f)) { supported = true; return; }
-      if (!supported) return;
+      if (d?.source === "nova-site" && d.type === "preview-ready" && event.source === f.contentWindow && event.origin === frameOrigin(f)) { postLinkCheck(f, true, linksRef.current); sentTo.current = f; return; }
+      if (isLinkCheckReady(event, f)) return;
       const click = parseLinkClick(event, f, linksRef.current.map(l => l.raw), true);
+      // Inspect only the exact shown Public window/origin, and redact credentials.
+      if (import.meta.env.DEV && event.source === f.contentWindow && event.origin === frameOrigin(f) && d?.source === "nova-site" && d.type === "link-click") {
+        const address = (v: unknown) => typeof v === "string" ? publicLinkAddress(v).replace(/([?&])[^=&#]*(?:token|secret|auth|key)[^=&#]*=[^&#]*/gi, "$1[redacted]").slice(0, 2048) : typeof v;
+        console.debug("[review-link] received link-click", { v: d.v, match: d.match === null ? null : address(d.match), raw: address(d.raw), href: address(d.href), kind: typeof d.kind === "string" ? d.kind.slice(0, 30) : typeof d.kind, path: address(d.path), accepted: !!click });
+      }
       if (!click) return;
       if (clickRef.current) clickRef.current(click);
       else walk.selectLink(click.match ?? null);
     };
     window.addEventListener("message", receive);
+    sentTo.current = frame();
+    postLinkCheck(sentTo.current, true, linksRef.current);
     return () => {
       window.removeEventListener("message", receive);
       postLinkCheck(sentTo.current, false);
