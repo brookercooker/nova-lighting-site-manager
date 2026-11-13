@@ -1,6 +1,6 @@
 # Site Manager (src/pages/admin) rules
 - Library List/Grid uses shared LibraryListRow actions and libraryView scoped preferences; parent selection/filter/paging state stays layout-independent, and LibraryWindow retains grid geometry while releasing distant media.
-- Media/object grids use their library content container: one column below 340px, two from 340px, three from 900px (maximum); thresholds reserve the existing 12px gap and phone margins for at least 160px cards, without changing List or Pages grids.
+- Media/object grids use their library content container: one column below 340px, then two/three/four/five from 340/540/720/900px (maximum five); thresholds reserve the existing 12px gap and phone margins for at least 160px cards, without changing List or Pages grids.
 - Library Edit mode uses the same SelectionBar callbacks in a phone bottom bar with zero-selection actions disabled; Users uses responsive table-as-cards styling to keep a single action/role data path.
 - Library card labels share LibraryCardLabels and libraryLabels for bounded names, overflow and additive filters; card menus use LabelsCell for item assignment, while global management lives only in the header/Filters so actions cannot be confused.
 - Filters, item label editors and chat label menus share memoized LabelSearchList and objectLabelFilter normalization, with local search, bounded native scrolling and capture-phase Escape clearing before overlay dismissal; no new persistent state. Item usage counts read existing scoped label arrays through useLabelUsageCounts.

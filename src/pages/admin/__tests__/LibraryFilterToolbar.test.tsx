@@ -13,12 +13,12 @@ describe("staged library panel",()=>{
     render(<LibraryFilterToolbar scope={scope} noun={scope === "images" ? "Images" : "Videos"} search="" onSearch={()=>{}} value={clearLibraryFilters()} onApply={()=>{}} fields={[]} sort="newest" onSort={()=>{}} sortOptions={[]} count={0} countResults={()=>0} onAdd={()=>{}} onEdit={()=>{}} editing={false} />);
     expect(screen.queryByRole("button", { name: scope === "images" ? "Add Image" : "Add Video" })).toBeNull();
   });
-  it("removes the floating Add command during Edit without changing the desktop Add command",()=>{
+  it("shows one Add New command at the top in and out of Select mode",()=>{
     const props = {scope:"objects" as const,noun:"Objects",search:"",onSearch:()=>{},value:clearLibraryFilters(),onApply:()=>{},fields:[],sort:"newest",onSort:()=>{},sortOptions:[],count:0,countResults:()=>0,onAdd:()=>{},onEdit:()=>{}};
     const {rerender}=render(<LibraryFilterToolbar {...props} editing={false}/>);
-    expect(screen.getAllByRole("button",{name:"Add Object"})).toHaveLength(2);
+    expect(screen.getAllByRole("button",{name:"Add New Object"})).toHaveLength(1);
     rerender(<LibraryFilterToolbar {...props} editing/>);
-    expect(screen.getAllByRole("button",{name:"Add Object"})).toHaveLength(1);
+    expect(screen.getAllByRole("button",{name:"Add New Object"})).toHaveLength(1);
   });
   it("opens the existing manager from the Labels section and scoped header event",()=>{
     render(<Harness/>);fireEvent.click(screen.getByRole("button",{name:"Filter"}));

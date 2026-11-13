@@ -664,20 +664,7 @@ export default function ImagesTab() {
 
 
       <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { setBrokenIds(new Set()); setFailedTileSources({}); invalidate(); toast.success("Images refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="images" noun="Images" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { fileRef.current?.click(); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
-        scope="images"
-        usageCounts={usageCounts}
-        activeFilters={filterTags}
-        onToggleFilter={(t) => setFilterTags((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t])}
-        onClearFilters={() => setFilterTags([])}
-        selectedCount={selected.size}
-        selectedIds={[...selected]}
-        onApplyTag={applyTag}
-        itemLabel="images"
-        filteredCount={filtered.length}
-        onSelectAllFiltered={() => setSelected(new Set(filtered.map((i) => i.id)))}
-      />} />
-<div hidden={listEditing}>      <div
+        <LibraryFilterToolbar top={<div hidden={listEditing}>      <div
         onDrop={onDrop}
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
@@ -704,6 +691,20 @@ export default function ImagesTab() {
         <Button variant="outline" className="mt-2 h-11" disabled={busy} onClick={() => fileRef.current?.click()}>Choose Files</Button>
           <input ref={fileRef} type="file" accept="image/*" multiple hidden aria-label="Upload Images" onChange={onPick} />
       </div>
+</div>} view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { setBrokenIds(new Set()); setFailedTileSources({}); invalidate(); toast.success("Images refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="images" noun="Images" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { fileRef.current?.click(); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
+        scope="images"
+        usageCounts={usageCounts}
+        activeFilters={filterTags}
+        onToggleFilter={(t) => setFilterTags((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t])}
+        onClearFilters={() => setFilterTags([])}
+        selectedCount={selected.size}
+        selectedIds={[...selected]}
+        onApplyTag={applyTag}
+        itemLabel="images"
+        filteredCount={filtered.length}
+        onSelectAllFiltered={() => setSelected(new Set(filtered.map((i) => i.id)))}
+      />} />
+<div hidden={listEditing}>
 
       {justAddedIds.length > 0 && justAddedAt && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm">

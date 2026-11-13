@@ -692,20 +692,7 @@ export default function VideoTab() {
 
 
       <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { invalidate(); toast.success("Videos refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="videos" noun="Videos" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { fileRef.current?.click(); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
-        scope="videos"
-        usageCounts={usageCounts}
-        activeFilters={filterTags}
-        onToggleFilter={(t) => setFilterTags((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t])}
-        onClearFilters={() => setFilterTags([])}
-        selectedCount={selected.size}
-        selectedIds={[...selected]}
-        onApplyTag={applyTag}
-        itemLabel="videos"
-        filteredCount={filtered.length}
-        onSelectAllFiltered={() => setSelected(new Set(filtered.map((v) => v.id)))}
-      />} />
-<div hidden={listEditing} className="space-y-2">        <div
+        <LibraryFilterToolbar top={<div hidden={listEditing} className="space-y-2">        <div
           onDrop={onDrop}
           onDragEnter={onDragEnter}
           onDragOver={onDragOver}
@@ -767,7 +754,20 @@ export default function VideoTab() {
           </div>
         )}
 
-        </div>
+        </div>} view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { invalidate(); toast.success("Videos refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="videos" noun="Videos" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { fileRef.current?.click(); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
+        scope="videos"
+        usageCounts={usageCounts}
+        activeFilters={filterTags}
+        onToggleFilter={(t) => setFilterTags((cur) => cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t])}
+        onClearFilters={() => setFilterTags([])}
+        selectedCount={selected.size}
+        selectedIds={[...selected]}
+        onApplyTag={applyTag}
+        itemLabel="videos"
+        filteredCount={filtered.length}
+        onSelectAllFiltered={() => setSelected(new Set(filtered.map((v) => v.id)))}
+      />} />
+
         <SelectionBar
           editing={listEditing}
           count={selected.size}
