@@ -18,3 +18,5 @@
 - Review link decisions use only their own href, target and stored key/scope fingerprint, never group/page/request revisions or link repinning, so unrelated saves cannot clear or silently renew approval.
 
 - Review link-click listeners register before enabling interception and accept validated v2 clicks without a ready-message gate; explicit match:null opens the unchanged note, while safe dev diagnostics redact credentials. Status stays relay-authoritative because local round trips do not establish live-baseline equivalence.
+
+- Step 2 cards activate preview focus via click/Enter/Space, including closing phone review on repeated selection; inner actions/editors never bubble. Full-width safe verification precedes 44px Confirmed toggles and Correct. Restore deletes only the link override; Remove writes unlinked:true with the existing fingerprint/conflict guard, never hidden or element deletion.

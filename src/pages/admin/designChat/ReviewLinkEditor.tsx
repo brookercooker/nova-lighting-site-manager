@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Save, X } from "lucide-react";
+import { Pencil, Save, X, Undo2, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -12,7 +12,7 @@ import { useDesignChat } from "./DesignChatContext";
 import { useManagerLayout } from "./useManagerLayout";
 import { useChangeLink } from "./linkFix";
 import { walk, useWalk } from "./submitWalkthroughStore";
-import { resolveReviewLink, saveReviewLink, FIND_LINK_ERROR, type ResolvedReviewLink } from "./reviewLinkSave";
+import { resolveReviewLink, saveReviewLink, resetReviewLink, FIND_LINK_ERROR, type ResolvedReviewLink } from "./reviewLinkSave";
 import type { ManagerPage } from "./submitWalkthrough";
 import { publicLinkAddress } from "../linkDisplay";
 
@@ -62,8 +62,24 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
     } catch (e) { setError(e instanceof Error ? e.message : "Your new link couldn't be saved. Please try again."); }
     finally { savingRef.current = false; setSaving(false); }
   };
+  const reset = async (action: "restore" | "remove") => {
+    if (!resolved || savingRef.current) return;
+    const original = resolved.element.originalHref;
+    if (action === "restore" && !original) return;
+    savingRef.current = true; setSaving(true); setError("");
+    try {
+      const lines = await resetReviewLink(resolved, action);
+      const href = action === "restore" ? original ?? edit.link.href : edit.link.href;
+      const kind = /^mailto:/i.test(href) ? "mail" : /^tel:/i.test(href) ? "phone" : href.startsWith("#") ? "anchor" : href.startsWith("/") ? "internal" : "external";
+      walk.savedLink(page.path, { ...edit.link, key: `${edit.group.page?.path ?? ""}|${href}`, href, kind, target: undefined });
+      if (action === "remove") walk.update(s => ({ ...s, savedReviewLinks: s.savedReviewLinks.filter(x => x.link.key !== edit.link.key) }));
+      const { notifyContentEdited } = await import("./contentSync");
+      notifyContentEdited(lines);
+    } catch (e) { setError(e instanceof Error ? e.message : "Your link couldn't be updated. Please try again."); }
+    finally { savingRef.current = false; setSaving(false); }
+  };
   const suggestions = pages.filter(p => validTextLink(p.path) && !isInternalPath(p.path) && (!address || p.name.toLowerCase().includes(address.toLowerCase()) || p.path.toLowerCase().includes(address.toLowerCase()))).slice(0, 12);
-  const content = <div className="min-w-0 space-y-2" aria-label="Edit Link Destination">
+  const content = <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} className="min-w-0 space-y-2" aria-label="Edit Link Destination">
     <div><p className="text-xs text-muted-foreground">Current Destination</p><p className="break-all font-mono text-sm">{publicLinkAddress(resolved?.href ?? edit.link.href)}</p></div>
     <div className="space-y-1"><label htmlFor="review-link-address" className="text-sm">New Destination</label>
       <Input id="review-link-address" className="h-11 text-sm sm:h-8" value={address} aria-invalid={!valid || !!error} aria-describedby={!valid || destinationHint ? "review-link-hint" : error ? "review-link-error" : undefined} disabled={saving}
@@ -75,6 +91,11 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
     {finding && <p role="status" className="text-sm text-muted-foreground">Finding the link on this page…</p>}
     {error && resolved && <p id="review-link-error" role="alert" className="break-words text-sm text-destructive">{error}</p>}
     {!finding && !resolved && <><p role="status" className="text-sm">{resolutionHint}</p><Button type="button" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => { walk.update(s => ({ ...s, reviewEdit: null })); void fallback(edit.link, edit.group, edit.rows, edit.fingerprint); }}><Pencil className="h-4 w-4" aria-hidden />Open in Manual Edit</Button></>}
+    {resolved && <div className="flex flex-wrap justify-between gap-2">
+      <Button type="button" variant="outline" className="min-h-11 h-auto whitespace-normal px-2 text-sm" disabled={saving || !resolved.element.originalHref} onClick={() => void reset("restore")}><Undo2 aria-hidden />Restore Original Link</Button>
+      <Button type="button" variant="ghost" className="min-h-11 h-auto px-2 text-sm" disabled={saving} onClick={() => void reset("remove")}><Unlink aria-hidden />Remove Link</Button>
+    </div>}
+    {resolved && !resolved.element.originalHref && <p className="text-xs text-muted-foreground">The original destination isn't available from this page yet.</p>}
     <div className="grid grid-cols-2 gap-1.5">{(finding || resolved) && <Button type="button" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" disabled={!resolved || saving || !valid} onClick={() => void save()}><Save className="h-4 w-4" aria-hidden />{saving ? "Saving…" : "Save New Link"}</Button>}<Button type="button" variant="outline" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" disabled={saving} onClick={cancel}><X className="h-4 w-4" aria-hidden />Cancel</Button></div>
   </div>;
   return phone ? <Sheet open onOpenChange={o => { if (!o) cancel(); }}><SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto overflow-x-hidden"><SheetHeader className="mb-2"><SheetTitle>Edit Link Destination</SheetTitle><SheetDescription>{page.name}</SheetDescription></SheetHeader>{content}</SheetContent></Sheet>

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ resolve: vi.fn(), save: vi.fn(), notify: vi.fn(), fallback: vi.fn(), phone: false }));
-vi.mock("../reviewLinkSave", () => ({ resolveReviewLink: m.resolve, saveReviewLink: m.save, FIND_LINK_ERROR: "We couldn't pin down which link this is. Use Open in Manual Edit to change it." }));
+const m = vi.hoisted(() => ({ resolve: vi.fn(), save: vi.fn(), reset: vi.fn(), notify: vi.fn(), fallback: vi.fn(), phone: false }));
+vi.mock("../reviewLinkSave", () => ({ resolveReviewLink: m.resolve, saveReviewLink: m.save, resetReviewLink: m.reset, FIND_LINK_ERROR: "We couldn't pin down which link this is. Use Open in Manual Edit to change it." }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ preview: null }) }));
 vi.mock("../useManagerLayout", () => ({ useManagerLayout: () => ({ phone: m.phone }) }));
 vi.mock("../linkFix", () => ({ useChangeLink: () => m.fallback }));
@@ -109,4 +109,23 @@ it("allows a syntactically valid future page without saving automatically", asyn
   fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/future" } });
   expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled();
   expect(m.save).not.toHaveBeenCalled();
+});
+
+it("restores the original override without changing modes or unrelated approvals", async () => {
+  m.resolve.mockResolvedValue({ href: "/contact", blank: false, element: { key: "0.5.0.1", scope: "page", originalHref: "/gallery" } });
+  m.reset.mockResolvedValue(["Homepage: restored original link"]);
+  render(<ReviewLinkEditor pages={pages} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Restore Original Link" }));
+  await waitFor(() => expect(m.notify).toHaveBeenCalled());
+  expect(m.reset).toHaveBeenCalledWith(expect.anything(), "restore");
+  expect(walk.get().savedReviewLinks[0].link.href).toBe("/gallery");
+  expect(walk.get().linkTicked).toEqual(["/|/team"]);
+});
+it("removes only navigation using the existing safe unlink action", async () => {
+  m.reset.mockResolvedValue(["Homepage: removed link"]);
+  render(<ReviewLinkEditor pages={pages} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Remove Link" }));
+  await waitFor(() => expect(m.notify).toHaveBeenCalled());
+  expect(m.reset).toHaveBeenCalledWith(expect.anything(), "remove");
+  expect(walk.get().linkReplaced[link.key]).toBe("own");
 });

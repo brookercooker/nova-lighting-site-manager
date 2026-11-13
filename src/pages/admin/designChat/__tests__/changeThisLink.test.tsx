@@ -27,7 +27,7 @@ beforeEach(() => { vi.clearAllMocks(); walk.reset(); m.editing = false; m.state 
 afterEach(cleanup);
 
 async function changeWrong(h: ReturnType<typeof render>) {
-  fireEvent.click(screen.getByRole("button", { name: "Edit Link Destination" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Correct link:/ }));
   await screen.findByRole("button", { name: "Open in Manual Edit" });
   fireEvent.click(screen.getByRole("button", { name: "Open in Manual Edit" }));
   await waitFor(() => expect(m.start).toHaveBeenCalled());
@@ -38,7 +38,7 @@ describe("Edit Link Destination", () => {
   it("opens the inline panel directly from an unresolved or confirmed row", async () => {
     render(<Host />); toLinks();
     act(() => walk.confirmLink("/a|/gallery", "fp", true));
-    fireEvent.click(screen.getByRole("button", { name: "Edit Link Destination" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Correct link:/ }));
     expect(walk.get().reviewEdit?.link.href).toBe("/gallery");
     expect(m.start).not.toHaveBeenCalled();
     expect(walk.get().fix).toBeNull();

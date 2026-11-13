@@ -84,7 +84,7 @@ describe("walkthrough auto-open and link lines", () => {
     m.data.links.groups = [{ page: { name: "Blog", path: "/b" }, label: "Blog", links: [{ ...link, key: "/b|/gallery" }] }];
     render(<Host />);
     post.mockClear(); m.show.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Show on Page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Link to Inspiration Gallery on the page" }));
     expect(m.show).toHaveBeenLastCalledWith("/b");
     expect(walk.get().checking?.key).toBe("/b|/gallery");
     expect(post).not.toHaveBeenCalled();

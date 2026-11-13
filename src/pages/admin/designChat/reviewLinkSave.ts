@@ -56,3 +56,13 @@ export async function saveReviewLink(resolved: ResolvedReviewLink, href: string,
   if (error) { mismatch("save.updated_at", { failed: true }); throw new Error(error.message); }
   return inlineChangeLines(resolved.name, resolved.edits, next, { [resolved.element.key]: { text: resolved.element.label ?? "", tag: "a" } });
 }
+/** Restore deletes only the destination override; unlink suppresses navigation, never hides the element. */
+export async function resetReviewLink(resolved: ResolvedReviewLink, action: "restore" | "remove"): Promise<string[]> {
+  const key = `link:${resolved.element.key}`;
+  const next = { ...resolved.edits };
+  if (action === "restore") delete next[key];
+  else next[key] = JSON.stringify({ unlinked: true });
+  const { error } = await saveRow(resolved.table, { inline_edits: next, updated_at: new Date().toISOString() }, resolved.id, resolved.updatedAt);
+  if (error) throw new Error(error.message);
+  return inlineChangeLines(resolved.name, resolved.edits, next, { [resolved.element.key]: { text: resolved.element.label ?? "", tag: "a" } });
+}

@@ -35,7 +35,7 @@ const confirmLinks = () => {
     const controls = within(row);
     const open = controls.queryByRole("link", { name: "Open Link to Verify" });
     if (open) fireEvent.click(open);
-    const box = controls.queryByRole("checkbox", { name: /^Looks right\s*:/ });
+    const box = controls.queryByRole("button", { name: /^Confirmed:/ });
     if (box) fireEvent.click(box);
   }
 };
@@ -86,7 +86,7 @@ describe("Submit for Review walkthrough", () => {
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
     confirmLinks();
-    expect(within(dialog()).getByText("Confirmed")).toBeInTheDocument();
+    expect(within(dialog()).getAllByText("Confirmed")[0]).toBeInTheDocument();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("checkbox", { name: "I checked the links that changed." })).toBeChecked();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, href: "/changed" }] }] } };
