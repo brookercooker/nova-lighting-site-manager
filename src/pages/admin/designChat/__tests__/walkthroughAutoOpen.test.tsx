@@ -99,6 +99,21 @@ describe("walkthrough auto-open and link lines", () => {
     expect(walk.get().step).toBe("pages");
     expect(walk.get().ticked).toEqual([]);
   });
+  it("enables Next after both page approvals once up-front link collection completes", () => {
+    m.data.rows = [page("/a", "About"), page("/b", "Blog")];
+    m.data.links = { status: "loading" };
+    const h = render(<Host />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(walk.get().ticked).toEqual(["page:/a", "page:/b"]);
+    expect(screen.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+    m.data = { ...m.data, links: { status: "ok", groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [link] }], unread: 0, partial: false, truncated: false } };
+    h.rerender(<Host />);
+    expect(screen.getByRole("button", { name: "Next", exact: true })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Next", exact: true }));
+    expect(walk.get().step).toBe("links");
+    expect(walk.get().ticked).toEqual(["page:/a", "page:/b"]);
+  });
   it("waits for the pages list", () => {
     m.data.pagesStatus = "loading";
     const h = render(<Host />);

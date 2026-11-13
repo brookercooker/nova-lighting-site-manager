@@ -3,11 +3,12 @@ import { QueryClient, QueryClientProvider, type QueryObserverOptions } from "@ta
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchReviewPages, useWalkthroughData, mergeSavedReviewLinks, enrichReviewLinks, dropOriginalDestinations } from "../useWalkthroughData";
 import type { ReactNode } from "react";
+import { walk } from "../submitWalkthroughStore";
 
-const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn(), inventory: vi.fn(), nets: vi.fn() }));
+const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn(), inventory: vi.fn(), nets: vi.fn(), embed: "" }));
 vi.mock("../linkInventory", async importOriginal => ({...await importOriginal<typeof import("../linkInventory")>(), requestInventory: m.inventory, loadNetLinks: m.nets}));
 vi.mock("../helper", () => ({ RELAY: "https://relay.example", relayHeaders: m.headers }));
-vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ preview: { frames: [{ id: "draft", url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/?__lovable_token=test" }], shownId: "draft" } }) }));
+vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ preview: { frames: [{ id: "draft", url: m.embed }], shownId: "draft" } }) }));
 vi.mock("@/prototype/client", () => ({ supabase: { from: m.from } }));
 vi.mock("../../siteManifest", () => ({ loadSiteManifest: async () => ({}), codePagePaths: () => [] }));
 const body = { ok: true, rows: [{ name: "Experiment", path: "/draft/experiment", how: ["chat"], requestIds: ["1"] }], components: [], objects: [], sitewide: { files: [] } };
@@ -20,6 +21,7 @@ it("pins two same-destination links by unique wording and keeps ambiguous card r
   expect(dropOriginalDestinations(result).groups[0].links.map(l => l.key)).toEqual(["b", "c"]);
 });
 beforeEach(() => {
+  m.embed = "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/?__lovable_token=test";
   m.nets.mockImplementation(async (paths: string[]) => Object.fromEntries(paths.map(path => [path, []])));
   m.inventory.mockResolvedValue(null);
   m.headers.mockResolvedValue({ Authorization: "Bearer test-staff" });
@@ -31,6 +33,32 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("keeps completed collection ready when page-check controls mount another reader", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const first = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(first.result.current.links.status).toBe("ok"));
+    const calls = m.nets.mock.calls.length;
+    m.nets.mockImplementation(() => new Promise(() => {}));
+    renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(m.nets).toHaveBeenCalledTimes(calls);
+    expect(first.result.current.links.status).toBe("ok");
+  });
+  it("does not restart collection when the shown preview switches between the two checked pages", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
+    const calls = m.nets.mock.calls.length;
+    m.nets.mockImplementation(() => new Promise(() => {}));
+    m.embed = m.embed.replace(".app/", ".app/contact");
+    hook.rerender();
+    expect(hook.result.current.links.status).toBe("ok");
+    expect(m.nets).toHaveBeenCalledTimes(calls);
+  });
   it("holds fresh review links until changed-page discovery and every inventory finish without viewing pages", async () => {
     let discover: (value: Response) => void = () => {};
     let collect: (value: Record<string, unknown[]>) => void = () => {};
@@ -174,6 +202,7 @@ describe("review pages fetch", () => {
     hook.rerender({ value: { ...state, draft: { requests: [...state.draft.requests, { id: "2", request: "Another change" }] } } });
     await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith("review-pages"))).toHaveLength(2));
     hook.unmount();
+    walk.open("panel");
     renderHook(() => useWalkthroughData(state, true), { wrapper });
     await waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.endsWith("review-pages"))).toHaveLength(3));
   });

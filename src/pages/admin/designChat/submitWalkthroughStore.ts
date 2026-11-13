@@ -11,6 +11,7 @@ export type LinkFix = { key: string; fingerprint: string; href?: string; path: s
 export type WalkStep = "pages" | "links" | "checklist";
 export type Checking = { key: string; kind: "page" | "link"; name: string } | null;
 export type WalkState = {
+  reviewSession?: number;
   groupCompleted: Record<string, boolean>;
   groupExpansion: Record<string, boolean>;
   openingLink: { key: string; path: string; name: string; href: string; elementKey?: string; scope?: string; inventoryIndex?: number; entries?: import("./linkCheck").LinkCheckEntry[]; failed?: boolean } | null;
@@ -64,7 +65,7 @@ export const walk = {
   update(fn: (s: WalkState) => WalkState) { const legacy = fn(state) as WalkState & { linkWrong?: unknown }; const { linkWrong: _ignored, ...next } = legacy; state = next.checking && next.autoOpen ? { ...next, autoOpen: false } : next; emit(); },
   subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; },
   mount(id: string, fallback: boolean) { hosts.set(id, fallback); return () => { hosts.delete(id); }; },
-  open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null, autoOpen: true, checks: [] })); },
+  open(id: string) { walk.update((s) => ({ ...s, reviewSession: (s.reviewSession ?? 0) + 1, open: true, host: id, checking: null, autoOpen: true, checks: [] })); },
   close() { walk.update((s) => ({ ...s, open: false })); },
   keepEditing() { walk.update(s => ({ ...s, openingLink: null, open: false, checking: null, step: "pages", selectedLink: null, linkNote: null, fix: null, reviewEdit: null })); },
   editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, selectedLink: null, linkNote: null, step: "links" })); },
