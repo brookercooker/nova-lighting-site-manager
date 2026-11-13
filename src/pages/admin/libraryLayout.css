@@ -48,7 +48,7 @@
 .nova-library-actions button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 .nova-library-actions:focus-within { opacity: 1; }
 .nova-object-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 100px; }
-.nova-filter-options { display:flex; flex-wrap:nowrap !important; gap:6px; overflow-x:auto; scrollbar-width:none; max-width:100%; mask-image:linear-gradient(to right, hsl(var(--foreground)) 95%, transparent); }
+.nova-filter-options { display:flex; flex-wrap:wrap !important; gap:6px; max-width:100%; min-width:0; }
 .nova-filter-options::-webkit-scrollbar { display:none; }
 .nova-filter-label-dot { width:8px; height:8px; border-radius:50%; background:var(--nova-label-dot); flex-shrink:0; }
 .nova-filter-label-selected { background:var(--nova-label-bg) !important; border-color:var(--nova-label-border) !important; color:var(--nova-label-text) !important; }
@@ -75,7 +75,15 @@
   [data-top-bar] [data-capture-primary] { margin-left:0; padding-inline:4px; gap:4px; }
 }
 
-.nova-label-search-chip { background:var(--nova-label-bg); border-color:var(--nova-label-border); color:var(--nova-label-text); }
+.nova-label-search-chip { background:hsl(var(--background)); border-color:hsl(var(--border)); color:hsl(var(--foreground)); }
+.nova-label-selected, .nova-label-selected:hover { background:hsl(var(--tag-selected)) !important; border-color:hsl(var(--tag-selected)) !important; color:hsl(var(--tag-selected-foreground)) !important; }
+.nova-library-content .nova-label-result[role="checkbox"] { width:100%; height:44px; border:0; box-shadow:none; }
+.nova-label-management > aside { width:100%; min-width:0; position:static; }
+.nova-label-management > aside > div { border:0; background:transparent; }
+.nova-label-management > aside > div > div { padding-inline:0; }
+.nova-label-management > aside > div > div > div > .group { margin-inline:0; gap:0; padding-block:0; min-height:44px; }
+.nova-label-management > aside > div > div > div > .group > span:first-child { display:none; }
+.nova-label-management .group > div:last-child { gap:0; }
 
 .nova-library-items-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(141.333px,calc((100% - 12px)/2)),1fr)); gap:12px; padding-bottom:160px; min-width:0; }
 @media(max-width:639px) { .nova-library-items-grid { margin-inline:4px; } }

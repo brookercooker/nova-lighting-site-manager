@@ -6,6 +6,16 @@ import { labelCount, libraryCount, matchingLabels, labelMatchParts } from "../la
 afterEach(cleanup);
 const labels = Array.from({ length: 120 }, (_, i) => ({ path: `label-${i}`, name: `Label ${i}`, color_index: i % 16 }));
 describe("shared label search", () => {
+  it("retains independent selected label state and counts in chips and searched rows", () => {
+    render(<LabelSearchList labels={labels} selected={["label-9"]} counts={{"label-9":12,"label-8":20}} onToggle={()=>{}} />);
+    expect(screen.getByRole("button",{name:"Remove label-9"})).toHaveAttribute("aria-pressed","true");
+    expect(screen.getByRole("button",{name:"Remove label-9"})).toHaveTextContent("12");
+    expect(screen.getByRole("button",{name:"Label 8"})).toHaveAttribute("aria-pressed","false");
+    fireEvent.change(screen.getByRole("textbox",{name:"Search Labels"}),{target:{value:"Label"}});
+    expect(screen.getAllByRole("checkbox")[0]).toHaveAccessibleName("label-9");
+    expect(screen.getAllByRole("checkbox")[0]).toHaveAttribute("aria-checked","true");
+    expect(screen.getAllByRole("checkbox")[1]).toHaveAccessibleName("label-8");
+  });
   it("uses singular item/result/label counts and no-label wording", () => {
     expect(labelCount(0)).toBe("No labels"); expect(labelCount(1)).toBe("1 label");
     for (const noun of ["objects", "pages", "images", "videos", "landing pages", "results"]) expect(libraryCount(1, noun)).toBe(`1 ${noun.slice(0, -1)}`);

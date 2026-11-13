@@ -28,6 +28,14 @@ vi.mock("../WorkStatusPopover", () => ({ default: () => null }));
 
 beforeEach(() => { cleanup(); state.rows = []; state.error = null; state.notify.mockClear(); state.load.mockClear(); state.choose.mockClear(); state.start.mockClear(); });
 describe("Pages list synchronization", () => {
+  it("switches Static Pages, Landing Pages and Link Audit through the visible tabs", () => {
+    render(<MemoryRouter initialEntries={["/manage/pages"]}><PagesTab /></MemoryRouter>);
+    expect(screen.getByRole("tab",{name:"Static Pages"})).toHaveAttribute("aria-selected","true");
+    fireEvent.click(screen.getByRole("tab",{name:"Landing Pages"}));
+    expect(screen.getByRole("tab",{name:"Landing Pages"})).toHaveAttribute("aria-selected","true");
+    fireEvent.click(screen.getByRole("tab",{name:"Link Audit"}));
+    expect(screen.getByRole("tab",{name:"Link Audit"})).toHaveAttribute("aria-selected","true");
+  });
   it("treats whitespace-only search as empty without removing pages", async () => {
     state.rows = [{ id: "home", name: "Homepage", path: "/", tags: [], build_status: "ready", archived_at: null }];
     render(<MemoryRouter><PagesTab /></MemoryRouter>);

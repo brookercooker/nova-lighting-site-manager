@@ -192,7 +192,7 @@ export default function TagsPanel({
             </PopoverContent>
           </Popover>
 
-          <span className={`min-w-0 break-words text-xs flex-1 ${active ? "font-medium" : ""}`}>{n.row.name}</span>
+          <span title={n.row.path} className={`min-w-0 truncate text-xs flex-1 ${active ? "font-medium" : ""}`}>{n.row.name}</span>
 
           <div className="flex items-center gap-2 shrink-0">
             {selectedCount > 0 && (
@@ -223,7 +223,7 @@ export default function TagsPanel({
             >
               <Trash2 className="w-3 h-3" />
             </Button>
-            <span className={`text-[10px] tabular-nums ml-1 ${active ? "text-[hsl(30_25%_35%)]" : "text-muted-foreground"} group-hover:hidden`}>
+            <span className="order-first text-[10px] tabular-nums text-muted-foreground">
               {hasChildren ? rollup : (usageCounts[n.row.path] ?? 0)}
             </span>
           </div>
@@ -309,7 +309,7 @@ export default function TagsPanel({
               No labels yet
             </div>
           )}
-          {tree.map((n) => renderNode(n, 0))}
+          {rows.map(row => renderNode({ row, children: [] }, 0))}
         </div>
 
         <div className="border-t p-2">

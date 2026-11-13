@@ -16,6 +16,7 @@ import { libraryCount } from "./labelSearch";
 import { registerLabelPath, useInvalidateLabels } from "./useAllLabels";
 import { shortLabelName } from "./libraryLabels";
 import LibraryViewToggle from "./LibraryViewToggle";
+import UsedOnChoices from "./UsedOnChoices";
 import type { LibraryView } from "./libraryView";
 
 type Option = { v: string; label: string };
@@ -43,7 +44,7 @@ export default function LibraryFilterToolbar({ scope, noun, search, onSearch, va
   const labelColor = (path: string) => colorFor(path, labels.find(l => l.path === path)?.color_index);
   const choices = (title: string, options: Option[], selected: string, onSelect: (v: string) => void) => <div>
     <h3 className="mb-1 font-sans text-[10px] font-semibold uppercase text-muted-foreground">{title}</h3>
-    <div role="group" aria-label={title} className="flex min-w-0 flex-wrap gap-1.5">{options.map(o => <Button key={o.v} type="button" variant={selected === o.v ? "default" : "outline"} aria-pressed={selected === o.v} className="h-11 shrink-0 rounded-full px-3 text-xs" onClick={() => onSelect(o.v)}>{o.label}</Button>)}</div>
+    <div role="group" aria-label={title} className="flex min-w-0 flex-wrap gap-1.5">{options.map(o => <Button key={o.v} type="button" variant={selected === o.v ? "default" : "outline"} aria-pressed={selected === o.v} title={o.label} className="h-11 min-w-0 max-w-full rounded-full px-3 text-xs" onClick={() => onSelect(o.v)}><span className="truncate">{o.label}</span></Button>)}</div>
   </div>;
   const panel = <>
     <div className="flex h-14 shrink-0 items-center justify-between border-b px-4"><h2 className="font-sans text-base font-semibold">Filters</h2><Button variant="ghost" className="h-11 w-11 p-0" aria-label="Close Filters" onClick={() => changeOpen(false)}><X className="h-4 w-4" /></Button></div>
@@ -55,7 +56,7 @@ export default function LibraryFilterToolbar({ scope, noun, search, onSearch, va
         {labelError && <p role="alert" className="text-xs text-destructive">{labelError}</p>}
         <Button variant="link" className="h-11 px-0 text-xs text-muted-foreground" onClick={() => { setOpen(false); setManaging(true); }}>Manage Labels</Button>
       </div>
-      {extraLabel && choices(extraLabel, extraOptions, draft.extra, v => patch({ extra: v }))}
+      {extraLabel === "Used On" ? <UsedOnChoices options={extraOptions} selected={draft.extra} onSelect={v => patch({ extra: v })} /> : extraLabel && choices(extraLabel, extraOptions, draft.extra, v => patch({ extra: v }))}
       {choices("Search In", fields, draft.searchField, v => patch({ searchField: v, ...(v === "date_taken" ? { timeRange: "custom" } : {}) }))}
       <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-medium">Show Archived Only<Switch checked={draft.archived} onCheckedChange={v => patch({ archived: v })} aria-label="Show Archived Only" /></label>
     </div>
@@ -69,10 +70,10 @@ export default function LibraryFilterToolbar({ scope, noun, search, onSearch, va
         {phone ? <><Dialog open={open} onOpenChange={changeOpen}><DialogContent aria-describedby={undefined} onCloseAutoFocus={e => { e.preventDefault(); filterRef.current?.focus(); }} className="nova-library-filter-sheet"><DialogTitle className="sr-only">Filters</DialogTitle>{panel}</DialogContent></Dialog>{trigger}</> : <Popover modal open={open} onOpenChange={changeOpen}><PopoverTrigger asChild>{trigger}</PopoverTrigger><PopoverContent align="end" aria-label="Filters" onCloseAutoFocus={e => { e.preventDefault(); filterRef.current?.focus(); }} className="flex max-h-[85vh] w-[400px] max-w-[calc(100vw-24px)] flex-col overflow-hidden p-0">{panel}</PopoverContent></Popover>}
         {!onViewChange && sortMenu}<Button className="hidden h-11 shrink-0 sm:flex" onClick={onAdd}><Plus className="h-4 w-4" />Add {noun.replace(/s$/, "")}</Button>
       </div>
-      {chips.length > 0 && <div className="nova-filter-options mt-1" aria-label="Active Filters">{chips.map(c => <Button key={c.id} variant="outline" className="h-11 max-w-full shrink-0 gap-1 rounded-full px-2 text-xs" title={c.label} aria-label={`${c.label} Remove`} onClick={() => onApply(c.clear(value))}>{c.labelPath && <span className="nova-filter-label-dot" style={{ "--nova-label-dot": labelColor(c.labelPath).swatch } as React.CSSProperties} />}{c.labelPath ? shortLabelName(labels.find(l => l.path === c.labelPath)?.name ?? c.label) : c.label}<X className="h-3 w-3" /><span className="sr-only">Remove</span></Button>)}<Button variant="link" className="h-10 shrink-0 px-1 text-xs" onClick={() => onApply(clearLibraryFilters())}>Clear All</Button></div>}
+      {chips.length > 0 && <div className="nova-filter-options mt-1" aria-label="Active Filters">{chips.map(c => <Button key={c.id} variant="outline" className={`h-11 min-w-0 max-w-full gap-1 rounded-full px-2 text-xs ${c.labelPath ? "nova-label-selected" : ""}`} title={c.label} aria-label={`${c.label} Remove`} onClick={() => onApply(c.clear(value))}>{c.labelPath && <span className="nova-filter-label-dot" style={{ "--nova-label-dot": labelColor(c.labelPath).swatch } as React.CSSProperties} />}<span className="truncate">{c.labelPath ? shortLabelName(labels.find(l => l.path === c.labelPath)?.name ?? c.label) : c.label}</span><X className="h-3 w-3 shrink-0" /><span className="sr-only">Remove</span></Button>)}<Button variant="link" className="h-10 shrink-0 px-1 text-xs" onClick={() => onApply(clearLibraryFilters())}>Clear All</Button></div>}
       <div className={`flex ${onViewChange ? "h-12" : "h-10"} min-w-0 items-center gap-1 text-xs text-muted-foreground`}>{navigation}<span className="truncate">{libraryCount(count, noun.toLowerCase())}{!onViewChange && ` · ${sortOptions.find(o => o.v === sort)?.label}`}</span><div className="flex-1" />{onViewChange && view && <>{sortMenu}<LibraryViewToggle value={view} onChange={onViewChange} /></>}{action}<Button variant="ghost" className="h-10 shrink-0 px-2 text-xs" onClick={onEdit}><Pencil className="h-3 w-3" />{editing ? "Done" : "Edit"}</Button></div>
     </div>
-    <Dialog open={managing} onOpenChange={setManaging}><DialogContent aria-describedby={undefined} className="max-h-[85dvh] overflow-y-auto"><DialogTitle>Manage Labels</DialogTitle>{editTools}</DialogContent></Dialog>
+    <Dialog open={managing} onOpenChange={setManaging}><DialogContent aria-describedby={undefined} className="nova-label-management max-h-[85dvh] overflow-y-auto"><DialogTitle>Manage Labels</DialogTitle>{editTools}</DialogContent></Dialog>
     <Button onClick={onAdd} className="fixed bottom-20 right-4 z-40 h-12 rounded-full shadow-lg sm:hidden"><Plus className="h-4 w-4" />Add {noun.replace(/s$/, "")}</Button>
   </>;
 }
