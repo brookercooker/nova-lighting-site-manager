@@ -47,7 +47,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 export const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 export const EMBED_FN = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/lovable-embed-url` : "";
 
-export type Entry = { role: "user" | "assistant" | "note" | "error"; text: string; ts?: number };
+export type Entry = { role: "user" | "assistant" | "note" | "error"; text: string; ts?: number; id?: string | number };
 
 export type Finding = {
   id: string;

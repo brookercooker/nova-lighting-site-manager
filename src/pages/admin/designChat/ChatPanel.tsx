@@ -58,6 +58,8 @@ export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgre
   const { text, setText, selection } = chatDraft ?? fallbackDraft;
   const [now, setNow] = useState(() => Date.now());
   const [dragging, setDragging] = useState(false);
+  const [offlineDismissed, setOfflineDismissed] = useState(false);
+  useEffect(() => { if (!offline) setOfflineDismissed(false); }, [offline]);
   const { hint, setHint } = useHint();
   const attentionCallback = useRef(onAttention); attentionCallback.current = onAttention;
   useEffect(() => { if (hint.bad && hint.text) attentionCallback.current?.(); }, [hint.bad, hint.text]);
@@ -437,9 +439,10 @@ export default function ChatPanel({ opening = 0, onDraw, onAttention, saveProgre
               <Mic className="h-4 w-4" />
             </Button>
           )}
-          {(offline || hint.text) && <div role="status" className={cn("order-last basis-full min-w-0 flex flex-wrap items-center gap-x-2 text-xs break-words", offline || hint.bad ? "text-destructive" : "text-muted-foreground")}>
+          {(offline ? !offlineDismissed : hint.text) && <div role="status" className={cn("order-last basis-full min-w-0 flex flex-wrap items-center gap-x-2 text-xs break-words", offline || hint.bad ? "text-destructive" : "text-muted-foreground")}>
             <span className="min-w-0">{offline ? "Can't reach the design service right now. It will keep trying." : hint.text}</span>
             {offline && <Button type="button" variant="link" size="sm" className="min-h-9 h-auto px-0 text-xs text-destructive" onClick={retryNow}>Try Again</Button>}
+            {(offline || hint.bad) && <DismissErrorButton phone={phone} onDismiss={() => { if (offline) setOfflineDismissed(true); else setHint(""); }} />}
           </div>}
           <Button type="submit" disabled={busy && !changing || offline || attachments.uploading || requestRetry?.sending} className="ml-auto gap-2">
             <Send className="h-4 w-4" /> {changing ? "Queue it" : "Send"}

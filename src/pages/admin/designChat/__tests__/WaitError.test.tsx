@@ -4,6 +4,18 @@ import WaitProgress from "../WaitProgress";
 import StageRibbon from "../StageRibbon";
 import { useWaitProgress } from "../useWaitProgress";
 afterEach(() => { cleanup(); sessionStorage.clear(); vi.useRealTimers(); });
+it.each([WaitProgress, StageRibbon])("dismiss clears the failed indicator without touching relay state", Surface => {
+  const state = { busy: false, job: { kind: "change", status: "failed", startedAt: 1000 }, history: [], previewVersion: 1 };
+  function ErrorSurface() {
+    const { request } = useWaitProgress(state);
+    return <Surface thin progress={request} />;
+  }
+  render(<ErrorSurface />);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(state.job.status).toBe("failed");
+  expect(state.busy).toBe(false);
+});
 it.each([WaitProgress, StageRibbon])("shares hover/focus pause, retry and dismissal in every error surface", Surface => {
   vi.useFakeTimers(); vi.setSystemTime(10000);
   const retry = vi.fn();

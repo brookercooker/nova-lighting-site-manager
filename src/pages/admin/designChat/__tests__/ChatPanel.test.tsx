@@ -5,6 +5,7 @@ import ChatPanel from "../ChatPanel";
 import { useChatDraft } from "../useChatDraft";
 import { useSaveProgress } from "../useSaveProgress";
 import WaitProgress from "../WaitProgress";
+import { resetErrorDismissals } from "../chatErrors";
 
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
@@ -32,9 +33,11 @@ const mocks = vi.hoisted(() => ({
   job: undefined as any,
   retry: undefined as any,
   wait: undefined as any,
+  publish: undefined as any,
+  reviewDraft: undefined as any,
 }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({
-  state: { busy: mocks.busy, job: mocks.job, history: mocks.history }, offline: mocks.offline, refreshSoon: mocks.refresh, retryNow: mocks.retryNow,
+  state: { busy: mocks.busy, job: mocks.job, history: mocks.history, publish: mocks.publish, draft: mocks.reviewDraft }, offline: mocks.offline, refreshSoon: mocks.refresh, retryNow: mocks.retryNow,
   chatDraft: mocks.draft,
   requestRetry: mocks.retry, waitProgress: mocks.wait,
   workingPage: null, clearWorkingPage: vi.fn(), editing: mocks.editing,
@@ -50,6 +53,8 @@ vi.mock("../useManagerLayout", () => ({ useManagerLayout: () => ({ phone: mocks.
 vi.mock("../ModeSwitchContext", () => ({ useModeSwitch: () => ({ requestChat: mocks.guard, requestManual: async (open: () => void) => open() }) }));
 vi.mock("@/prototype/client", () => ({ supabase: {
   from: () => ({ insert: mocks.insert }),
+  auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
+  rpc: async () => ({ data: false }),
 } }));
 vi.mock("../EditorSlot", () => ({ useEditorSlot: () => ({ saveAll: vi.fn() }) }));
 vi.mock("../helper", () => ({
@@ -63,6 +68,7 @@ vi.mock("../useVoice", () => ({ useVoice: () => ({ supported: true, stop: mocks.
 vi.mock("../ApprovalCard", () => ({ default: () => null }));
 
 beforeEach(() => {
+  localStorage.clear(); resetErrorDismissals();
   vi.clearAllMocks();
   mocks.post.mockResolvedValue({ ok: true, data: {} });
   mocks.candidate = null;
@@ -75,10 +81,58 @@ beforeEach(() => {
   mocks.offline = false;
   mocks.syncPending = false; mocks.syncFailed = false; mocks.busy = false; mocks.job = undefined; mocks.retry = undefined; mocks.wait = undefined;
   mocks.guard.mockResolvedValue(false);
+  mocks.publish = undefined; mocks.reviewDraft = undefined;
   mocks.insert.mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "registered", name: "Race Test Page", path: "/race-test-page" }, error: null }) }) });
 });
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+it("dismisses only the tapped numeric error in the real phone ChatPanel and retains the other across polls", async () => {
+  mocks.phone = true; mocks.busy = true;
+  mocks.history = [{ role: "error", id: 446, text: "First error", ts: 1 }, { role: "error", id: 394, text: "Second error", ts: 2 }];
+  const view = render(<MemoryRouter><ChatPanel /></MemoryRouter>);
+  await act(async () => {});
+  fireEvent.click(screen.getAllByRole("button", { name: "Dismiss Error" })[0]);
+  expect(screen.queryByText(/First error/)).toBeNull();
+  expect(screen.getByText(/Second error/)).toBeVisible();
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  mocks.history = mocks.history.map(e => ({ ...e }));
+  view.rerender(<MemoryRouter><ChatPanel /></MemoryRouter>);
+  expect(screen.queryByText(/First error/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss Error" }));
+  expect(screen.queryByText(/Second error/)).toBeNull();
+  expect(JSON.parse(localStorage.getItem("nova:dismissed-errors:u1") ?? "null")).toEqual(["446", "394"]);
+  expect(mocks.post).not.toHaveBeenCalled();
+});
+it("dismisses the offline presentation across polls while Send remains disabled", () => {
+  mocks.offline = true;
+  const view = render(<MemoryRouter><ChatPanel /></MemoryRouter>);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss Error" }));
+  view.rerender(<MemoryRouter><ChatPanel /></MemoryRouter>);
+  expect(screen.queryByText("Can't reach the design service right now. It will keep trying.")).toBeNull();
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  expect(mocks.retryNow).not.toHaveBeenCalled();
+});
+it("dismisses a composer error without sending or clearing the request", async () => {
+  mocks.post.mockResolvedValue({ ok: false, error: "Composer failure" });
+  render(<MemoryRouter><ChatPanel /></MemoryRouter>);
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Keep my request" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText("Composer failure");
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss Error" }));
+  expect(screen.queryByText("Composer failure")).toBeNull();
+  expect(screen.getByRole("textbox")).toHaveValue("Keep my request");
+  expect(mocks.post).toHaveBeenCalledOnce();
+});
+it("dismisses ReviewProblems across identical polls without changing blocked review state", async () => {
+  mocks.publish = { open: 2, status: "blocked" }; mocks.reviewDraft = { review: { state: "failure" } };
+  const view = render(<MemoryRouter><ChatPanel /></MemoryRouter>);
+  await act(async () => {});
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss Error" }));
+  view.rerender(<MemoryRouter><ChatPanel /></MemoryRouter>);
+  expect(screen.queryByText("These changes need to be reviewed by a developer.")).toBeNull();
+  expect(mocks.publish).toEqual({ open: 2, status: "blocked" });
+  expect(mocks.post).not.toHaveBeenCalled();
+});
 it.each([false, true])("offers connection retry without sending when phone=%s", (phone) => {
   mocks.phone = phone; mocks.offline = true;
   render(<MemoryRouter><ChatPanel /></MemoryRouter>);

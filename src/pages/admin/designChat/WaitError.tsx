@@ -18,7 +18,7 @@ export default function WaitError({ progress, className }: { progress: WaitView;
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="min-w-0 flex-1 text-xs">{typeof progress.label === "string" ? <ErrorText text={progress.label} /> : progress.label}</span>
       {progress.errorControls?.retry && <Button type="button" variant="link" size="sm" className="h-8 p-0 text-xs" disabled={progress.errorControls.disabled} onClick={progress.errorControls.retry}>Try Again</Button>}
-      {progress.errorControls && <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Dismiss" onClick={progress.errorControls.dismiss}><X className="h-3.5 w-3.5" /></Button>}
+      {progress.errorControls && <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Dismiss" onClick={progress.errorControls.dismiss}><X className="h-3.5 w-3.5" /></Button>}
     </div>
     {progress.errorControls?.note && <p className="text-xs">{progress.errorControls.note}</p>}
     <div role="progressbar" aria-label={progress.label} aria-valuetext={progress.label} className="h-[6px] overflow-hidden rounded-full bg-destructive/15"><div className="h-full bg-destructive" style={{ width: `${progress.value * 100}%` }} /></div>

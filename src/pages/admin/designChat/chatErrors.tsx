@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import { RELAY, relayHeaders, type Entry } from "./helper";
 
 /** Error lines from the relay may carry an id and hasDetail (newer relays); older ones have neither. */
-export type ErrorEntry = Entry & { id?: string; hasDetail?: boolean };
+export type ErrorEntry = Entry & { hasDetail?: boolean };
+export const idKey = (e: Pick<Entry, "id">): string | null => e.id == null || e.id === "" ? null : String(e.id);
 
 /* ---------- Dismissals: per person, presentation only (never touches busy/blocked/Submit state) ---------- */
 export const DISMISS_CAP = 200;
@@ -19,24 +20,29 @@ let version = 0;
 const emit = () => { version++; listeners.forEach(l => l()); };
 const storageKey = (person: string) => `nova:dismissed-errors:${person}`;
 function read(person: string): string[] {
+  let saved: string[] = [];
   try {
     const raw = localStorage.getItem(storageKey(person));
-    if (raw !== null) { const v = JSON.parse(raw); if (Array.isArray(v)) return v.filter(x => typeof x === "string"); }
+    if (raw !== null) { const v = JSON.parse(raw); if (Array.isArray(v)) saved = v.filter(x => typeof x === "string" || typeof x === "number").map(String); }
   } catch { /* storage unavailable: use memory */ }
-  return memory.get(person) ?? [];
+  return [...new Set([...saved, ...(memory.get(person) ?? [])])].slice(-DISMISS_CAP);
 }
 /** Session key for an error with no id (older relay). */
 export const sessionErrorKey = (e: Entry) => `${e.ts ?? ""}|${e.text}`;
 export function dismissError(person: string, e: ErrorEntry) {
-  if (e.id) {
-    const next = [...read(person).filter(x => x !== e.id), e.id].slice(-DISMISS_CAP);
+  const id = idKey(e);
+  if (id !== null) {
+    const next = [...read(person).filter(x => x !== id), id].slice(-DISMISS_CAP);
     memory.set(person, next);
-    try { localStorage.setItem(storageKey(person), JSON.stringify(next)); } catch { /* memory fallback */ }
+    if (person !== "anon") {
+      try { localStorage.setItem(storageKey(person), JSON.stringify(next)); } catch { /* memory fallback */ }
+    }
   } else session.add(sessionErrorKey(e));
   emit();
 }
 export function isErrorDismissed(person: string, e: ErrorEntry): boolean {
-  return e.id ? read(person).includes(e.id) : session.has(sessionErrorKey(e));
+  const id = idKey(e);
+  return id !== null ? read(person).includes(id) || (memory.get("anon") ?? []).includes(id) : session.has(sessionErrorKey(e));
 }
 /** Test-only reset of in-memory state. */
 export function resetErrorDismissals() { memory.clear(); session.clear(); emit(); }
@@ -62,6 +68,15 @@ export function useChatPerson(): { person: string; isAdmin: boolean } {
 /** Re-renders when dismissals change; returns a filter for error entries. */
 export function useErrorDismissals(person: string) {
   useSyncExternalStore(l => { listeners.add(l); return () => { listeners.delete(l); }; }, () => version, () => version);
+  useEffect(() => {
+    const pending = memory.get("anon");
+    if (person === "anon" || !pending?.length) return;
+    const next = [...new Set([...read(person), ...pending])].slice(-DISMISS_CAP);
+    memory.set(person, next);
+    memory.delete("anon");
+    try { localStorage.setItem(storageKey(person), JSON.stringify(next)); } catch { /* memory fallback */ }
+    emit();
+  }, [person]);
   return {
     hidden: (e: ErrorEntry) => e.role === "error" && isErrorDismissed(person, e),
     dismiss: (e: ErrorEntry) => dismissError(person, e),
@@ -84,11 +99,12 @@ async function fetchErrorDetails(): Promise<Record<string, string>> {
   return d && typeof d === "object" ? Object.fromEntries(Object.entries(d).filter(([, v]) => typeof v === "string")) as Record<string, string> : {};
 }
 /** Mount only for admins and only on lines with hasDetail, so the route is never called for anyone else. */
-export function ErrorDetails({ id }: { id?: string }) {
+export function ErrorDetails({ id }: { id?: string | number }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const q = useQuery({ queryKey: ["chat", "error-details"], queryFn: fetchErrorDetails, staleTime: 30_000, retry: false });
-  const text = id ? q.data?.[id] : undefined;
+  const key = idKey({ id });
+  const text = key !== null ? q.data?.[key] : undefined;
   return <div className="mt-1 text-xs">
     <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? "Hide Details" : "Show Details"}</Button>
     {open && (q.isLoading ? <p className="text-muted-foreground">Loading…</p>
