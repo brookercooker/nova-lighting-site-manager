@@ -4,6 +4,15 @@ import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 /** Link inventory (Public companion, v1): the links a rendered page really has, used for a true draft-vs-live Links step. */
 export type InventoryLink = { key: string; scope: string; href: string; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; originalHref?: string; fingerprint?: string };
 export type Inventory = { path: string; links: InventoryLink[] };
+/** Retain display facts only for the same reported identity and destination; fresh membership always wins. */
+export function retainInventoryMetadata(fresh: Inventory | null, previous?: Inventory): Inventory | null {
+  if (!fresh) return previous ?? null;
+  if (!previous || normPath(previous.path) !== normPath(fresh.path)) return fresh;
+  return { ...fresh, links: fresh.links.map(link => {
+    const prior = previous.links.find(p => p.scope === link.scope && p.key === link.key && p.href === link.href);
+    return prior ? { ...link, label: link.label || prior.label, visibleText: link.visibleText || prior.visibleText, ariaLabel: link.ariaLabel || prior.ariaLabel, image: link.image || prior.image, originalHref: link.originalHref || prior.originalHref } : link;
+  }) };
+}
 export const MAX_INVENTORY = 500;
 export const INVENTORY_TIMEOUT_MS = 3000;
 /** Ask the already-synchronized preview first; never read its cross-origin DOM or accept sibling replies. */

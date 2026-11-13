@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { domainOf, registeredDomain, hostWarnings, mismatch, groupRisks, riskRank, differingCharacters } from "../linkRisk";
+import { domainOf, registeredDomain, hostWarnings, mismatch, groupRisks, riskRank, differingCharacters, strongestRisk } from "../linkRisk";
 import { walk } from "../submitWalkthroughStore";
 import type { ReviewLink } from "../submitWalkthrough";
 const link = (key: string, href: string, originalHref?: string): ReviewLink => ({ key, href, originalHref, kind: href.startsWith("/") ? "internal" : "external", label: key, requestIds: [], status: null });
@@ -26,3 +26,4 @@ describe("review destination rules", () => {
   it("retains group preferences across reload without restoring an editor", () => { walk.reset(); walk.update(s => ({ ...s, groupExpansion: { footer: true, home: false } })); walk.restoreSession(); expect(walk.get().groupExpansion).toEqual({ footer: true, home: false }); expect(walk.get().reviewEdit).toBeNull(); walk.reset(); });
   it("never treats email or phone as a trusted web domain", () => { expect(domainOf("mailto:a@example.com")).toBeNull(); expect(domainOf("tel:1234567890")).toBeNull(); });
 });
+it("prioritizes the named swap over mismatch without dropping secondary reasons", () => { const flags=groupRisks({page:null,label:"Homepage",links:[link("a","/gallery","/contact"),link("b","/contact","/gallery")]},{a:"BOOK A CONSULTATION",b:"Explore Gallery"},[],[]).b; expect(strongestRisk(flags)?.reason).toBe("Looks swapped with BOOK A CONSULTATION"); expect(flags.some(f=>f.kind==="mismatch")).toBe(true); });

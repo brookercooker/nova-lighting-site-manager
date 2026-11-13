@@ -58,10 +58,15 @@ export function groupRisks(group: LinkGroup, names: Record<string, string>, know
     const others = group.links.filter(o => o.key !== l.key && !(l.scope?.startsWith("object:") && l.scope === o.scope && l.elementKey === o.elementKey));
     const swap = others.find(o => l.originalHref && o.originalHref && l.originalHref !== l.href && l.href === o.originalHref && o.href === l.originalHref);
     const duplicate = others.find(o => o.href === l.href);
-    if (swap) flags.push({ kind: "swap", reason: "These two look swapped", otherKey: swap.key });
+    if (swap) flags.push({ kind: "swap", reason: `Looks swapped with ${names[swap.key] ?? "another link"}`, otherKey: swap.key });
     if (duplicate) flags.push({ kind: "duplicate", reason: `Same destination as: ${names[duplicate.key] ?? "another link"}`, otherKey: duplicate.key });
     return [l.key, flags];
   }));
+}
+/** One primary advisory; all other reasons remain available without stacked banners. */
+export function strongestRisk(flags: RiskFlag[]): RiskFlag | undefined {
+  const order: RiskFlag["kind"][] = ["swap", "lookalike", "punycode", "insecure", "mismatch", "duplicate"];
+  return [...flags].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))[0];
 }
 export function riskRank(link: ReviewLink, pages: ManagerPage[], flags: RiskFlag[]) {
   if (link.status?.state === "broken" || link.kind === "internal" && !pages.some(p => p.path === link.href.split(/[?#]/)[0])) return 0;

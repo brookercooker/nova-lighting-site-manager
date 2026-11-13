@@ -18,14 +18,16 @@ import type { ManagerPage } from "./submitWalkthrough";
 import { publicLinkAddress } from "../linkDisplay";
 import { linkText } from "./linkCheck";
 import { SharedPageUsage } from "./SharedPageUsage";
+import { hostWarnings } from "./linkRisk";
+import { ReviewRiskFlags } from "./ReviewLinkRiskDetails";
 
 /** One local draft per panel opening; native field undo remains local until the explicit save. */
-export function ReviewLinkEditor({ pages }: { pages: ManagerPage[] }) {
+export function ReviewLinkEditor({ pages, knownDomains = [], trustedDomains = [] }: { pages: ManagerPage[]; knownDomains?: string[]; trustedDomains?: string[] }) {
   const s = useWalk();
   const edit = s.reviewEdit;
-  return edit ? <ReviewLinkForm key={edit.link.key} edit={edit} pages={pages} /> : null;
+  return edit ? <ReviewLinkForm key={edit.link.key} edit={edit} pages={pages} knownDomains={knownDomains} trustedDomains={trustedDomains} /> : null;
 }
-function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof useWalk>["reviewEdit"]>; pages: ManagerPage[] }) {
+function ReviewLinkForm({ edit, pages, knownDomains, trustedDomains }: { edit: NonNullable<ReturnType<typeof useWalk>["reviewEdit"]>; pages: ManagerPage[]; knownDomains: string[]; trustedDomains: string[] }) {
   const { phone } = useManagerLayout();
   const { preview } = useDesignChat();
   const fallback = useChangeLink();
@@ -100,17 +102,17 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
       <Input id="review-link-address" className="h-11 text-sm sm:h-8" value={address} aria-invalid={!valid || !!error} aria-describedby={!valid || destinationHint ? "review-link-hint" : error ? "review-link-error" : undefined} disabled={saving}
         onFocus={() => setSuggesting(true)} onChange={e => { setAddress(e.target.value); setSuggesting(true); if (resolved) setError(""); }} onKeyDown={e => { if (e.key === "Escape") setSuggesting(false); }} />
       {destinationHint && <p id="review-link-hint" role="status" className="text-xs text-muted-foreground">{destinationHint}</p>}
+      <div aria-live="polite"><ReviewRiskFlags flags={hostWarnings(destination.trim(), knownDomains, trustedDomains)} onJump={() => {}} /></div>
       {suggesting && suggestions.length > 0 && <div aria-label="Page Suggestions" className="max-h-48 overflow-y-auto overscroll-contain border bg-popover p-1">{suggestions.map(p => <Button type="button" key={p.path} variant="ghost" className="h-auto min-h-11 sm:min-h-8 w-full justify-start whitespace-normal break-words text-left" disabled={saving} onMouseDown={e => e.preventDefault()} onClick={() => { setAddress(p.path); setSuggesting(false); if (resolved) setError(""); }}>{p.name}</Button>)}</div>}
     </div>
     <label className="flex min-h-11 sm:min-h-8 items-center justify-between gap-3 text-sm">Open in New Tab<Switch aria-label="Open in New Tab" checked={blank} disabled={!resolved || saving} onCheckedChange={setBlank} /></label>
     {finding && <span role="status" aria-label="Loading"><Loader2 aria-hidden className="h-4 w-4 animate-spin motion-reduce:animate-none text-muted-foreground" /></span>}
     {error && resolved && <p id="review-link-error" role="alert" className="break-words text-sm text-destructive">{error}</p>}
     {!finding && !resolved && <><p role="status" className="text-sm">{resolutionHint}</p><Button type="button" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => { walk.update(s => ({ ...s, reviewEdit: null })); void fallback(edit.link, edit.group, edit.rows, edit.fingerprint); }}><Pencil className="h-4 w-4" aria-hidden />Open in Manual Edit</Button></>}
-    {resolved && <div className="grid grid-cols-1 gap-2">
+    {resolved?.element.originalHref && <div className="grid grid-cols-1 gap-2">
       <Button type="button" variant="outline" className="h-11 w-full whitespace-nowrap px-2 text-sm" disabled={saving || !resolved.element.originalHref} onClick={() => void reset("restore")}><Undo2 aria-hidden />Restore Original Link</Button>
       <Button type="button" variant="destructive" className="h-11 w-full whitespace-nowrap px-2 text-sm" disabled={saving || removed || !resolved.element.originalHref} onClick={() => setConfirmRemove(true)}><Unlink aria-hidden />Remove Link</Button>
     </div>}
-    {resolved && !resolved.element.originalHref && <p className="text-xs text-muted-foreground">The original destination isn't available from this page yet.</p>}
     <div className="grid grid-cols-1 gap-2">{(finding || resolved) && <Button type="button" className="h-11 w-full whitespace-nowrap px-2 text-sm" disabled={!resolved || saving || !valid} onClick={() => void save()}><Save className="h-4 w-4" aria-hidden />{saving ? "Saving…" : "Save New Link"}</Button>}<Button type="button" variant="outline" className="h-11 w-full whitespace-nowrap px-2 text-sm" disabled={saving} onClick={cancel}><X className="h-4 w-4" aria-hidden />Cancel</Button></div>
     <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove Link</AlertDialogTitle><AlertDialogDescription>Remove this link: “{publicLinkAddress(linkText(edit.link, pages))}”? The text stays on the page but it will no longer be clickable. You can restore the original link later.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="h-11">Cancel</AlertDialogCancel><AlertDialogAction className="h-11" onClick={() => void reset("remove")}>Remove Link</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </div>;

@@ -35,6 +35,14 @@ it("never offers trust on a confirmed lookalike", () => {
   act(() => walk.confirmLink("a", ownLinkPrint(m.data.links.groups[0].links[0]), true));
   expect(screen.queryByRole("button", { name: "Trust lnstagram.com" })).toBeNull();
 });
+it("Design Check keeps shared facts without source authors or duplicate approval chips", () => {
+  m.data.rows = [{key:"page:/about",page:{name:"About",path:"/about"},how:"Changed by the builder · Edited by hand · Shared piece: Footer",by:"staff",fingerprint:"v1"}];
+  walk.update(s=>({...s,step:"pages",viewed:["page:/about"],ticked:["page:/about"],approvals:{"page:/about":"v1"}}));
+  render(<SubmitWalkthroughPanel onKeepEditing={()=>{}} />);
+  expect(screen.getByText("Shared piece: Footer")).toBeInTheDocument();
+  expect(screen.getAllByText("Approved")).toHaveLength(1);
+  expect(screen.queryByText(/Edited by hand|Changed by the builder|by staff/)).toBeNull();
+});
 it("does not auto-collapse a completed group the reviewer opened by hand", () => {
   m.data.links.groups[0].links = [a];
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
@@ -47,6 +55,7 @@ it("does not auto-collapse a completed group the reviewer opened by hand", () =>
 it("duplicate jump expands and selects the related row without opening a destination", () => {
   m.data.links.groups[0].links = [a, { ...a, key: "d", label: "More Stories" }];
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
-  fireEvent.click(screen.getByRole("button", { name: "Same destination as: More Stories" }));
+  fireEvent.click(screen.getByText("Same destination as: More Stories"));
+  fireEvent.click(screen.getAllByRole("button", {name:"Show Related Link"})[0]);
   expect(walk.get().selectedLink?.key).toBe("d"); expect(walk.get().verificationOpened).toEqual({});
 });

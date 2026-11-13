@@ -226,12 +226,11 @@ function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: Walkthrou
     return <li key={r.key} data-walk-row={r.key} className={cn("min-w-0 rounded-md border p-3 space-y-2", s.checking?.key === r.key && "border-primary bg-primary/5")}>
       <div className="flex items-start gap-1">
         <Button type="button" variant="link" className="h-auto min-h-9 min-w-0 flex-1 justify-start whitespace-normal p-0 text-left text-sm font-semibold text-foreground" onClick={() => onView(r)}>{rowName(r)}</Button>
-        <Badge variant="secondary" className="mt-2 shrink-0 text-[10px]" aria-live="polite">{approved ? "Approved" : "Not Reviewed"}</Badge>
         {tab && <NewTab href={tab} onOpen={() => walk.update(w => ({ ...w, viewed: add(w.viewed, r.key), checking: { key: r.key, kind: "page", name: rowName(r) } }))} />}
       </div>
       <p className="break-all font-mono text-xs text-muted-foreground">{rowPath(r)}</p>
       {r.guess && <p className="text-xs text-muted-foreground">(best guess)</p>}
-      {(r.how || r.by) && <p className="break-words text-xs text-muted-foreground">{[r.how, r.by ? `by ${r.by}` : ""].filter(Boolean).join(" · ")}</p>}
+      {r.how?.split(" · ").filter(part => part.startsWith("Shared piece:")).map(part => <p key={part} className="break-words text-xs text-muted-foreground">{part}</p>)}
       {r.shared && <SharedPageUsage pages={r.shared.pages} />}
       {s.changed.includes(r.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
       {r.key === OTHER_KEY && <Button type="button" variant="link" className="h-9 p-0" onClick={() => onView(r)}>Open Site</Button>}
@@ -296,12 +295,13 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
     row?.querySelector<HTMLElement>("[data-verify-link]")?.focus({ preventScroll: true });
   }, [s.selectedLink, data.links.status, changeFingerprint(expanded)]);
   if (data.links.status === "failed") return <p role="status" className="text-sm">Links couldn't be listed right now.</p>;
-  if (data.links.status !== "ok") return <p className="text-sm text-muted-foreground">Listing the changed links…</p>;
+  if (data.links.status !== "ok") return <p role="status" className="text-sm text-muted-foreground">Checking links…</p>;
   const { unread, partial, truncated } = data.links;
   const groups = orderedGroups;
   return (
     <div ref={listRef} className="space-y-4">
       <TrustedDomainList trust={trust} />
+      {data.inventoryUnavailable && <div className="text-xs text-muted-foreground" role="status">Link details couldn't be checked.<Button variant="link" className="h-11 px-2" onClick={data.retryInventory}>Retry</Button></div>}
       <div className="grid grid-cols-2 gap-2"><Button variant="ghost" className="h-11 px-2 text-xs" onClick={() => { manuallyOpened.current.clear(); setExpanded(() => Object.fromEntries(groups.map(g => [groupId(g), false]))); }}>Collapse All</Button><Button variant="ghost" className="h-11 px-2 text-xs" onClick={() => { groups.forEach(g => manuallyOpened.current.add(groupId(g))); setExpanded(() => Object.fromEntries(groups.map(g => [groupId(g), true]))); }}>Expand All</Button></div>
       {s.linkNote && <p role="status" className="rounded-md border bg-secondary p-3 text-sm">{s.linkNote}</p>}
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}
@@ -356,7 +356,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                     <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : opening ? `Opening ${s.openingLink?.name}…` : st === "done" ? "Approved" : !opened ? "Open link to confirm" : ""}</p>
                   </>}
                   {st === "done" && host && trust.isAdmin && !trust.domains.includes(host) && !flags.some(f => ["lookalike", "punycode", "insecure"].includes(f.kind)) && <Button variant="outline" className="h-auto min-h-11 w-full whitespace-normal break-all px-2 text-xs" disabled={trust.pending} onClick={e => { e.stopPropagation(); void trust.change(host); }}>Trust {host}</Button>}
-                  {s.reviewEdit?.link.key === l.key && <div data-review-editor onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}><ReviewLinkEditor pages={data.pages} /></div>}
+                  {s.reviewEdit?.link.key === l.key && <div data-review-editor onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}><ReviewLinkEditor pages={data.pages} knownDomains={known} trustedDomains={trust.domains} /></div>}
                 </li>
               );
             })}

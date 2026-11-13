@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
 import { useWalk } from "./submitWalkthroughStore";
 import { addSharedChromeRows, mergeSharedReviewLinks, stableReviewEdits, type SharedReviewObject } from "./sharedReviewLinks";
-import { liveSiteBase, loadNetLinks, netReviewLinks, requestFrameInventory, requestInventory, type InventoryLink } from "./linkInventory";
+import { liveSiteBase, loadNetLinks, netReviewLinks, requestFrameInventory, requestInventory, retainInventoryMetadata, type InventoryLink } from "./linkInventory";
 import { shownPreviewFrame } from "./previewNavigate";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { supabase } from "@/prototype/client";
@@ -12,7 +12,7 @@ import { RELAY, relayHeaders, type RelayState } from "./helper";
 import { changeFingerprint, normPath, changedPages, countHandEdits, dropRevertedHandEdits, mergeReviewLinks, parseReviewLinks, parseReviewPages, relayChangedPages, type ChangedRow, type ManagerPage, type PageRef, type ReviewLinks, type ReviewPages } from "./submitWalkthrough";
 
 export type LinksResult = { status: "loading" } | { status: "failed" } | ({ status: "ok" } & ReviewLinks);
-export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; inventoryLinks?: InventoryLink[]; pagesStatus?: "loading" | "failed" | "ok" };
+export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; inventoryLinks?: InventoryLink[]; inventoryUnavailable?: boolean; retryInventory?: () => void; pagesStatus?: "loading" | "failed" | "ok" };
 
 /** Pages using each shared object, from the same object_page_usages table the Objects tab's Used On reads. */
 async function fetchObjectPages(names: string[]): Promise<{ usages: Record<string, PageRef[]>; shared: SharedReviewObject[] }> {
@@ -110,15 +110,19 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const sharedLabels = useQuery({ queryKey: ["walkthrough", "shared-labels", sig, sharedPaths], enabled: enabled && sharedPaths.length > 0, retry: false, queryFn: async () => {
     const frame = shownPreviewFrame();
     let base: string;
-    try { base = publicPreviewBase(frame?.src); } catch { return []; }
+    try { base = publicPreviewBase(frame?.src); } catch { return { links: [] as (InventoryLink & { inventoryPath: string })[], unavailable: true }; }
     const inventories = await Promise.all(sharedPaths.map(async path => {
       const url = publicPreviewPage(base, path);
-      return (frame ? await requestFrameInventory(frame, url) : null) ?? await requestInventory(url);
+      const fresh = (frame ? await requestFrameInventory(frame, url) : null) ?? await requestInventory(url);
+      const cacheKey = ["review-inventory-cache", new URL(base).origin, normPath(path)];
+      const retained = retainInventoryMetadata(fresh, client.getQueryData<import("./linkInventory").Inventory>(cacheKey));
+      if (fresh) client.setQueryData(cacheKey, retained);
+      return { fresh: !!fresh, inventory: retained };
     }));
-    return inventories.flatMap(item => item ? item.links.map(link => ({ ...link, inventoryPath: item.path })) : []);
+    return { links: inventories.flatMap(({ inventory: item }) => item ? item.links.map(link => ({ ...link, inventoryPath: item.path })) : []), unavailable: inventories.some(item => !item.fresh) };
   } });
   const labelled = merged ? { ...merged, groups: merged.groups.map(group => ({ ...group, links: group.links.map(link => {
-    const item = sharedLabels.data?.find(item => item.scope === link.scope && item.key === link.elementKey && (group.shared || normPath(item.inventoryPath) === normPath(group.page?.path ?? "/")));
+    const item = sharedLabels.data?.links.find(item => item.scope === link.scope && item.key === link.elementKey && (group.shared || normPath(item.inventoryPath) === normPath(group.page?.path ?? "/")));
     return item ? { ...link, originalHref: item.originalHref ?? link.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
   }) })) } : null;
   const siteInventory = useQuery({ queryKey: ["walkthrough", "site-hosts", pages.data?.map(p => p.path)], enabled: enabled && walkState.step === "links" && !!pages.data?.length, staleTime: 300_000, retry: false, queryFn: async () => {
@@ -131,7 +135,8 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     return all;
   } });
   const inventoryPending = !!live && changedPaths.length > 0 && enabled && inventory.isFetching;
-  const linkResult: LinksResult = links.isError || objects.isError ? { status: "failed" } : labelled && !links.isFetching && !pages.isFetching && !objects.isFetching && !inventoryPending ? { status: "ok", ...labelled } : { status: "loading" };
+  const metadataPending = enabled && sharedPaths.length > 0 && (sharedLabels.isPending || sharedLabels.isFetching);
+  const linkResult: LinksResult = links.isError || objects.isError ? { status: "failed" } : labelled && !links.isFetching && !pages.isFetching && !objects.isFetching && !inventoryPending && !metadataPending ? { status: "ok", ...labelled } : { status: "loading" };
   const pagesStatus = reviewPages.isError || objects.isError || pages.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
   const fingerprintedRows = rows.map((row) => {
     const path = row.page?.path;
@@ -144,7 +149,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, sha: r.sha, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: stableReviewEdits(page?.inlineEdits), content: page?.content ?? null, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
   });
   const withSaved: LinksResult = linkResult.status === "ok" ? { ...mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), status: "ok" } : linkResult;
-  return { inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data ?? [])], rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
+  return { inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data?.links ?? [])], inventoryUnavailable: sharedLabels.data?.unavailable || sharedLabels.isError, retryInventory: () => { void sharedLabels.refetch(); }, rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
 }
 
 /** Saved rows bridge relay lag only; an authoritative net inventory wins, including an empty net result. */

@@ -31,7 +31,7 @@ export function TrustedDomainList({ trust }: { trust: ReturnType<typeof useTrust
   const [open, setOpen] = useState(false);
   if (!trust.isAdmin) return null;
   return <div className="min-w-0 border-y py-1">
-    <Button variant="ghost" className="h-11 w-full justify-start" aria-expanded={open} onClick={() => setOpen(v => !v)}><ShieldCheck aria-hidden />Trusted Domains</Button>
+    <Button variant="ghost" className="h-11 w-full justify-start" aria-expanded={open} onClick={() => setOpen(v => !v)}><ShieldCheck aria-hidden />Trusted Domains ({trust.domains.length})</Button>
     {open && <ul className="max-h-48 overflow-y-auto">{trust.domains.map(domain => <li key={domain} className="flex min-w-0 items-center justify-between gap-2"><span className="break-all text-sm">{domain}</span><Button variant="ghost" className="h-11 w-11 shrink-0" disabled={trust.pending} aria-label={`Remove Trusted Domain: ${domain}`} onClick={() => void trust.change(domain, true)}><Trash2 aria-hidden /></Button></li>)}{!trust.domains.length && <li className="text-xs text-muted-foreground">No domains have been trusted yet.</li>}</ul>}
     {trust.error && <p role="alert" className="break-words text-xs text-destructive">{trust.error}</p>}
   </div>;

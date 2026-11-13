@@ -53,7 +53,7 @@ describe("internal link status", () => {
   const pages = [{ name: "Ready", path: "/r", build_status: "ready" }, { name: "Draft", path: "/d", build_status: "draft" }];
   it("uses the Manager page list", () => {
     expect(internalLinkChip("/r?x=1", pages).text).toBe("Page found");
-    expect(internalLinkChip("/d", pages).text).toBe("Page isn't published yet");
+    expect(internalLinkChip("/d", pages).text).toBe("Draft");
     expect(internalLinkChip("/nope", pages)).toEqual({ text: "Page not found", tone: "bad" });
   });
 });

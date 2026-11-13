@@ -4,12 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchReviewPages, useWalkthroughData, mergeSavedReviewLinks } from "../useWalkthroughData";
 import type { ReactNode } from "react";
 
-const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn() }));
+const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn(), inventory: vi.fn() }));
+vi.mock("../linkInventory", async importOriginal => ({...await importOriginal<typeof import("../linkInventory")>(), requestInventory: m.inventory}));
 vi.mock("../helper", () => ({ RELAY: "https://relay.example", relayHeaders: m.headers }));
 vi.mock("@/prototype/client", () => ({ supabase: { from: m.from } }));
 vi.mock("../../siteManifest", () => ({ loadSiteManifest: async () => ({}), codePagePaths: () => [] }));
 const body = { ok: true, rows: [{ name: "Experiment", path: "/draft/experiment", how: ["chat"], requestIds: ["1"] }], components: [], objects: [], sitewide: { files: [] } };
 beforeEach(() => {
+  m.inventory.mockResolvedValue(null);
   m.headers.mockResolvedValue({ Authorization: "Bearer test-staff" });
   m.from.mockImplementation((table: string) => {
     const result = { data: table === "pages" ? [{ name: "Manager Experiment", path: "/draft/experiment", build_status: "draft" }] : [], error: null };
@@ -114,4 +116,22 @@ describe("review pages fetch", () => {
     const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
     await waitFor(() => expect(hook.result.current.rows.find((r) => r.page?.path === "/contact")?.how).toBe("Shared piece: MailchimpForm"));
   });
+});
+it("waits for inventory, caches page wording/originals across changed requests, and exposes failed refresh", async () => {
+ m.from.mockImplementation((table:string)=>{const result={data:table==="pages"?[{name:"Homepage",path:"/",build_status:"ready",inline_edits:{"link:0":'{"href":"/gallery"}'}}]:[],error:null}; const q:any={select:()=>q,is:()=>Promise.resolve(result),in:()=>Promise.resolve(result)};return q;});
+ vi.stubGlobal("fetch",vi.fn(async (url:string)=>new Response(JSON.stringify(url.endsWith("review-pages")?{...body,rows:[{name:"Homepage",path:"/",how:["content"],requestIds:["1"]}]}:{ok:true,groups:[]}))));
+ let finish:(v:unknown)=>void=()=>{};
+ m.inventory.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+ const wrapper=({children}:{children:ReactNode})=><QueryClientProvider client={client}>{children}</QueryClientProvider>;
+ const hook=renderHook(({version})=>useWalkthroughData({previewVersion:version} as any,true),{wrapper,initialProps:{version:1}});
+ await waitFor(()=>expect(m.inventory).toHaveBeenCalled());
+ expect(hook.result.current.links.status).toBe("loading");
+ finish({path:"/",links:[{key:"0",scope:"page",href:"/gallery",label:"BOOK A CONSULTATION",originalHref:"/contact"}]});
+ await waitFor(()=>expect(hook.result.current.links.status).toBe("ok"));
+ hook.rerender({version:2});
+ await waitFor(()=>expect(hook.result.current.links.status).toBe("ok"));
+ const result=hook.result.current.links;if(result.status!=="ok")throw new Error("not ready");
+ expect(result.groups[0].links[0]).toMatchObject({label:"BOOK A CONSULTATION",originalHref:"/contact"});
+ expect(hook.result.current.inventoryUnavailable).toBe(true);
 });

@@ -154,3 +154,17 @@ it("canceling removal does not write or change approvals", async () => {
   expect(m.reset).not.toHaveBeenCalled();
   expect(walk.get().linkTicked).toEqual(["/|/team"]);
 });
+
+it.each([['https://lnstagram.com','Looks like instagram.com'],['https://gooogle.com','Looks like google.com'],['https://xn--instagrm-7za.com','encoded international'],['http://example.com','does not use https']])("warns while typing %s before any save", async (href, reason) => {
+ render(<ReviewLinkEditor pages={pages} />);
+ await waitFor(() => expect(screen.getByRole("button", {name:"Save New Link"})).toBeEnabled());
+ fireEvent.change(screen.getByLabelText("New Destination"), {target:{value:href}});
+ expect(screen.getByText(new RegExp(reason))).toBeInTheDocument();
+ expect(m.save).not.toHaveBeenCalled();
+});
+it("has no restore action without an authoritative original", async () => {
+ render(<ReviewLinkEditor pages={pages} />);
+ await waitFor(() => expect(screen.getByRole("button", {name:"Save New Link"})).toBeEnabled());
+ expect(screen.queryByRole("button", {name:"Restore Original Link"})).toBeNull();
+ expect(m.reset).not.toHaveBeenCalled();
+});
