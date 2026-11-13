@@ -44,5 +44,5 @@
 - frameScroll records validated page-scroll per normalized path and sends restore-scroll on readiness, frame swap and mode return; hidden previews cannot overwrite editor positions. Build/page navigation cancels superseded preview timers to avoid redundant reloads.
 - User Management uses GET for user lists and POST for actions, and decodes function error responses centrally so failed requests explain their actual cause.
 - Image deletion merges public usage with saved page/object references, confirms single/bulk actions and reuses the five-second deferred delete; remove correct bucket files before rows and stop on storage failure.
-- Read nested AGENTS.md; admin rules cover picker scrolling and authoritative retry snapshots to preserve context.
+- Read nested AGENTS.md for admin picker scrolling and authoritative retry snapshots.
 - Yellow background with black text is ONLY for selected objects, selected images, selected videos, and the preview where selected items are shown above the chat. It is NOT for label chips or filter chips. Labels and filters keep their colour.
