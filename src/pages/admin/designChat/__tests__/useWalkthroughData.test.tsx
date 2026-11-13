@@ -33,6 +33,24 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("retains completed verification when a returning tab refreshes preview credentials", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
+    const calls = m.nets.mock.calls.length;
+    m.nets.mockImplementation(() => new Promise(() => {}));
+    m.embed = m.embed.replace("token=test", "token=renewed");
+    hook.rerender();
+    expect(hook.result.current.links.status).toBe("ok");
+    expect(m.nets).toHaveBeenCalledTimes(calls);
+    m.nets.mockImplementation(async (paths: string[]) => Object.fromEntries(paths.map(path => [path, []])));
+    hook.result.current.retryInventory?.();
+    await waitFor(() => expect(m.nets).toHaveBeenCalledTimes(calls + 1));
+    expect(m.nets.mock.calls.at(-1)?.[4]).toContain("token=renewed");
+    await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
+  });
   it("keeps completed collection ready when page-check controls mount another reader", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

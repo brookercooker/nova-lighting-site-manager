@@ -76,6 +76,8 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const shownUrl = preview?.frames.find(frame => frame.id === preview.shownId)?.url ?? preview?.frames.at(-1)?.url;
   // Page navigation is not a new inventory: keep the signed site base as its identity.
   const embed = useMemo(() => { try { return publicPreviewBase(shownUrl); } catch { return undefined; } }, [shownUrl]);
+  // Credentials authorize requests, but rotating them does not change page content.
+  const inventoryOrigin = embed ? new URL(embed).origin : null;
   const requests = state?.draft?.requests;
   const sig = changeFingerprint(requests ?? []) + ":" + (state?.previewVersion ?? 0) + ":" + (walkState.reviewSession ?? 0);
   const reviewPages = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "review-pages", sig], queryFn: fetchReviewPages, enabled, retry: false, staleTime: Infinity });
@@ -111,10 +113,10 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   // True draft-vs-live comparison when the live site is configured and the frames answer link-inventory; otherwise today's list.
   const live = liveSiteBase() ?? liveSiteBase(state?.liveUrl);
   const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
-  const inventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "inventory", sig, changedPaths, live, embed], queryFn: () => loadNetLinks(changedPaths, live, requestInventory, shownPreviewFrame(), embed), enabled: enabled && changedPaths.length > 0, retry: false, staleTime: Infinity });
+  const inventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "inventory", sig, changedPaths, live, inventoryOrigin], queryFn: () => loadNetLinks(changedPaths, live, requestInventory, shownPreviewFrame(), embed), enabled: enabled && changedPaths.length > 0, retry: false, staleTime: Infinity });
   const merged = useMemo(() => links.data ? mergeSharedReviewLinks(netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data, objects.data]);
   const sharedPaths = [...new Set(merged?.groups.map(group => group.page?.path).filter((path): path is string => !!path) ?? [])].sort();
-  const sharedLabels = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "shared-labels", sig, sharedPaths, embed], enabled: enabled && sharedPaths.length > 0, staleTime: Infinity, retry: false, queryFn: async () => {
+  const sharedLabels = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "shared-labels", sig, sharedPaths, inventoryOrigin], enabled: enabled && sharedPaths.length > 0, staleTime: Infinity, retry: false, queryFn: async () => {
     const frame = shownPreviewFrame();
     let base: string;
     try { base = publicPreviewBase(embed ?? frame?.src); } catch { return { links: [] as (InventoryLink & { inventoryPath: string })[], unavailable: true }; }
