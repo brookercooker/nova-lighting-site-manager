@@ -34,7 +34,7 @@ it.each([320, 375, 1280])("keeps six page-scoped approvals through navigation an
   for (const [i, l] of all.entries()) {
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     fireEvent.click(screen.getByRole("link", { name: `Open link to verify ${l.label}` }));
-    fireEvent.click(screen.getByRole("button", { name: `Approve: ${l.label}` }));
+    fireEvent.click(screen.getByRole("checkbox", { name: `Approve: ${l.label}` }));
     expect(walk.get().verificationOpened[l.key]).toBe(ownLinkPrint(l));
     expect(walk.get().linkTicked).toHaveLength(i + 1);
   }

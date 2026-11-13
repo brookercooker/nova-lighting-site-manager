@@ -10,25 +10,26 @@ vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: m.domains, isAdmin: true, pending: false, error: "", change: m.trust }), TrustedDomainList: () => null }));
 const a: ReviewLink = { key: "a", href: "https://example.com/a", originalHref: "/about", kind: "external", label: "Our Story", requestIds: [], status: null };
 beforeEach(() => {
+  const host = document.createElement("div"); host.id = "link-review-navigation"; document.body.appendChild(host);
   vi.spyOn(window, "open").mockImplementation(() => ({ opener: null, document: document.implementation.createHTMLDocument(), close: vi.fn() }) as unknown as Window);
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   walk.reset(); m.trust.mockClear(); m.domains=[];
   m.data = { rows: [], pages: [{ name: "About", path: "/about", build_status: "ready" }], links: { status: "ok", groups: [{ label: "Homepage", page: { name: "Homepage", path: "/" }, links: [a, { ...a, key: "b", href: "/missing", kind: "internal", label: "Missing" }, { ...a, key: "c", href: "/about", kind: "internal", label: "About" }] }], unread: 0 } };
   walk.update(s => ({ ...s, open: true, step: "links", autoOpen: false }));
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); document.getElementById("link-review-navigation")?.remove(); vi.restoreAllMocks(); });
 const keys = () => Array.from(document.querySelectorAll<HTMLElement>("[data-walk-link]")).map(el => el.dataset.walkLink);
 it("keeps image actions distinct and never grants approval on selection", () => {
   m.data.links.groups[0].links = ["/contact", "/about"].map((href, i) => ({ ...a, key: `image-${i}`, href, kind: "internal", image: { alt: "", src: "" } }));
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
-  for (const href of ["/contact", "/about"]) expect(screen.getByRole("button", { name: `Correct link: Image to ${href}` })).toBeEnabled();
+  for (const href of ["/contact", "/about"]) expect(screen.getByRole("checkbox", { name: `Approve: Image to ${href}` })).toBeDisabled();
   expect(walk.get().verificationOpened).toEqual({});
 });
 it("also distinguishes images sharing the same destination without merging their keys", () => {
   m.data.links.groups[0].links = ["first", "second"].map(key => ({ ...a, key, href: "/about", kind: "internal", image: { alt: "", src: "" } }));
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
-  expect(screen.getByRole("button", { name: "Correct link: Image to /about · 1 of 2" })).toBeEnabled();
-  expect(screen.getByRole("button", { name: "Correct link: Image to /about · 2 of 2" })).toBeEnabled();
+  expect(screen.getByRole("checkbox", { name: "Approve: Image to /about · 1 of 2" })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: "Approve: Image to /about · 2 of 2" })).toBeDisabled();
   expect(keys()).toEqual(["first", "second"]);
 });
 it("links never display a checking bar or grant approvals through it", () => {
@@ -47,13 +48,13 @@ it("sorts missing before external before internal, then leaves confirmed rows in
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
   expect(keys()).toEqual(["b", "a", "c"]);
   fireEvent.click(screen.getByRole("link", { name: "Open link to verify Our Story" }));
-  fireEvent.click(screen.getByRole("button", { name: "Approve: Our Story" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Approve: Our Story" }));
   expect(walk.get().linkTicked).toContain("a"); expect(keys()).toEqual(["b", "a", "c"]);
 });
 it("stored trusted domains never bypass the opening or approval gate", () => {
   m.domains = ["example.com"]; m.data.links.groups[0].links = [a];
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
-  expect(screen.getByRole("button", { name: "Approve: Our Story" })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: "Approve: Our Story" })).toBeDisabled();
   expect(walk.get().linkTicked).toEqual([]);
   expect(m.trust).not.toHaveBeenCalled();
 });
@@ -77,7 +78,7 @@ it("does not auto-collapse a completed group the reviewer opened by hand", () =>
   fireEvent.click(screen.getByRole("button", { name: "Homepage · 0 of 1" }));
   fireEvent.click(screen.getByRole("button", { name: "Homepage · 0 of 1" }));
   fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
-  fireEvent.click(screen.getByRole("button", { name: "Approve: Our Story" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Approve: Our Story" }));
   expect(screen.getByRole("button", { name: "Homepage · 1 of 1" })).toHaveAttribute("aria-expanded", "true");
 });
 it("duplicate destinations are not warnings or approval permission", () => {

@@ -342,7 +342,7 @@ function AdminShell() {
       <div data-manager-tier={layout.tier} className={cn("flex overflow-hidden bg-background", phone ? "flex-col" : "h-screen flex-row")} style={phone ? { height: "calc(100dvh - var(--kb-inset, 0px))" } : undefined}>
         {/* Right: the top bar and whichever tab is open. */}
         <div data-picker-area className={cn("flex min-h-0 min-w-0 flex-1 flex-col", phone && manual && phonePane === "side" && "flex-none")}>
-          <header data-top-bar className={cn("z-30 w-full shrink-0 border-b bg-background", phone && reviewActive && "relative z-[60]", HEADER_HEIGHT_CLASS)}>
+          <header data-top-bar className={cn("z-30 w-full shrink-0 border-b bg-background", reviewActive && "relative z-[70]", HEADER_HEIGHT_CLASS)}>
             <div ref={rowRef} className={cn("flex h-full w-full items-center px-2 sm:gap-3 sm:px-4", phone && !manual ? "gap-0" : "gap-1")}>
               <nav ref={navRef} className={cn("min-w-0 flex flex-nowrap items-center gap-1 overflow-hidden", phone ? "flex-none" : "flex-1")} aria-label="Site Manager Sections">
                 {(!reviewActive ? TABS : []).filter(({ key }) => !phone || !manual || key === "preview").map(({ key, label, Icon }) => {
@@ -396,6 +396,7 @@ function AdminShell() {
               {phone && <PhoneMoreMenu onOpenMenu={() => { if (reviewActive) phoneChat.close(); }} showView={tab === "preview"} isAdmin={isAdmin} onPassword={() => setPwOpen(true)} onReview={() => { if (walk.get().open || walk.get().checking) designChat.setReviewOpen(true); openPhoneChat(); }} onChat={() => { setPhonePane("main"); }} />}
             </div>
           </header>
+          {phone && reviewActive && walkthrough.step === "links" && <div className="relative z-[70] flex shrink-0 justify-end border-b bg-background px-2 py-1"><Button type="button" variant="outline" className="h-11" onClick={keepEditing}><Pencil aria-hidden className="h-4 w-4" />Return to Edit</Button></div>}
           <WaitProgress progress={saveProgress} className="shrink-0 border-b bg-background px-3 py-2" />
           {!phone && !manual && <WaitProgress progress={designChat.waitProgress?.submit} className="shrink-0 border-b bg-background px-3 py-2" />}
           {tab === "preview" && !reviewActive && <PreviewToolbar onManualNavigate={pageNavigation.requestPath} manualDisabled={pageNavigation.disabled} />}

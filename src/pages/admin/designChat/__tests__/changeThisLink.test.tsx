@@ -24,8 +24,8 @@ function setData(links: any[], extra: any[] = []) {
 function Host() { const s = useWalk(); useClearFixOnExit(m.editing); return <>{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<LinkFixBanner /></>; }
 const toLinks = () => act(() => { walk.open("panel"); walk.update(w => ({ ...w, step: "links", ticked: ["page:/a"], autoOpen: false, checking: null })); });
 
-beforeEach(() => { vi.clearAllMocks(); walk.reset(); m.editing = false; m.state = { busy: false, publish: { ok: true, open: 1 }, review: { enabled: true } }; setData([link("/gallery")]); });
-afterEach(cleanup);
+beforeEach(() => { const host = document.createElement("div"); host.id = "link-review-navigation"; document.body.appendChild(host); vi.clearAllMocks(); walk.reset(); m.editing = false; m.state = { busy: false, publish: { ok: true, open: 1 }, review: { enabled: true } }; setData([link("/gallery")]); });
+afterEach(() => { cleanup(); document.getElementById("link-review-navigation")?.remove(); });
 
 async function changeWrong(h: ReturnType<typeof render>) {
   fireEvent.click(screen.getByRole("button", { name: /^Correct link:/ }));

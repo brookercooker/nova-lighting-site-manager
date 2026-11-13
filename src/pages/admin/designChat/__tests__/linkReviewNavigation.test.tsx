@@ -75,3 +75,13 @@ it("shows shared links on a registered usage page", () => {
   expect(m.show).toHaveBeenLastCalledWith("/contact");
   expect(walk.get().openingLink).toMatchObject({ key: "shared", path: "/contact", scope: "object:footer" });
 });
+it("corrects the currently selected link without approving or switching pages", () => {
+  render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
+  fireEvent.click(header().getByRole("button", { name: "Next Link" }));
+  m.show.mockClear();
+  fireEvent.click(header().getByRole("button", { name: "Correct link: second" }));
+  expect(walk.get().reviewEdit?.link.key).toBe("second");
+  expect(walk.get().linkTicked).toEqual([]);
+  expect(m.show).not.toHaveBeenCalled();
+  expect(header().getByText("Link 2 of 2 · Pricing")).toBeInTheDocument();
+});

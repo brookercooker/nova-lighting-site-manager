@@ -187,7 +187,10 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
           walk.selectLink(l.key);
           walk.update(w => ({ ...w, reviewEdit: null, groupExpansion: { ...w.groupExpansion, [g.shared?.id ?? g.page?.path ?? g.label]: true }, openingLink: { key: l.key, path, name: g.page?.name ?? "Homepage", href: l.href, elementKey: l.elementKey, scope: l.scope, inventoryIndex: l.inventoryIndex, entries: data.links.status === "ok" ? linkCheckList(data.links.groups, w.linkTicked, w.linkReplaced) : [] } }));
           openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
-        }} onChange={(l, g) => walk.editLink({ link: l, group: g, rows: p.pageRows, fingerprint: ownLinkPrint(l) })} />}
+        }} onChange={(l, g) => {
+          walk.update(w => ({ ...w, groupExpansion: { ...w.groupExpansion, [g.shared?.id ?? g.page?.path ?? g.label]: true } }));
+          walk.editLink({ link: l, group: g, rows: p.pageRows, fingerprint: ownLinkPrint(l) });
+        }} />}
         {p.step === "checklist" && (
           <ul className="space-y-3" aria-label="Submission Checklist">
             {p.items.map((item) => {
@@ -281,7 +284,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   }
   const orderedGroups = [...rawGroups].sort((a,b) => orderedKeys.current.groups.indexOf(groupId(a))-orderedKeys.current.groups.indexOf(groupId(b))).map(g => ({ ...g, links: [...g.links].sort((a,b) => (orderedKeys.current.links[groupId(g)] ?? []).indexOf(a.key)-(orderedKeys.current.links[groupId(g)] ?? []).indexOf(b.key)) }));
   const reviewLinks = orderedGroups.flatMap(g => g.links.map(l => ({ l, g })));
-  const selectedKey = s.selectedLink?.key ?? (s.checking?.kind === "link" ? s.checking.key : null);
+  const selectedKey = s.reviewEdit?.link.key ?? s.selectedLink?.key ?? (s.checking?.kind === "link" ? s.checking.key : null);
   const currentIndex = Math.max(0, reviewLinks.findIndex(x => x.l.key === selectedKey));
   const current = reviewLinks[currentIndex];
   const started = useRef(false);
@@ -337,6 +340,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9" aria-label="Previous Link" title="Previous Link" disabled={currentIndex === 0} onClick={() => showAt(currentIndex - 1)}><ArrowLeft aria-hidden /></Button>
           {currentTabUrl && <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"><a href={currentTabUrl} target="_blank" rel="noopener noreferrer" aria-label="Open Current Link to Verify" title="Open Current Link to Verify" onClick={e => openReviewIcon(e, currentTabUrl, () => walk.openedVerification(current.l.key, ownLinkPrint(current.l)))}><ExternalLink aria-hidden /></a></Button>}
+          <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9" aria-label={`Correct link: ${publicLinkAddress(reviewActionName(current.l, data.pages))}`} title="Correct Link" onClick={() => onChange(current.l, current.g)}><Pencil aria-hidden /></Button>
         <Button type="button" size="sm" variant={currentHandled ? "outline" : "default"} className="h-11 min-w-0 gap-1 px-2 text-xs shadow-none sm:h-9" disabled={!currentHandled && !currentCanApprove} aria-label="Approve Current Link and Continue" onClick={() => {
           if (!currentHandled && !currentCanApprove) return;
           if (!currentHandled) walk.confirmLink(current.l.key, ownLinkPrint(current.l), true);
@@ -382,7 +386,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
               const friendlyName = sameNames.length > 1 ? `${actionName} · ${sameNames.findIndex(other => other.key === l.key) + 1} of ${sameNames.length}` : actionName;
               return (
                 <li key={l.key} data-walk-link={l.key} role="button" tabIndex={0} aria-label={`Show ${publicLinkAddress(friendlyName)} on the page`}
-                  onClick={e => { if (e.target instanceof Element && e.target.closest("button,a,input,[role='switch'],[data-review-editor]")) return; onShow(l, g); }}
+                  onClick={e => { if (e.target instanceof Element && e.target.closest("button,a,input,label,[role='switch'],[data-review-editor]")) return; onShow(l, g); }}
                   onKeyDown={e => { if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return; e.preventDefault(); onShow(l, g); }}
                   className={cn("space-y-1 min-w-0 rounded-md border bg-background p-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", st === "done" && "text-muted-foreground", (s.selectedLink?.key === l.key || s.checking?.key === l.key) && "border-l-accent border-l-[3px]")}>
                   <div className="relative min-w-0 pr-11"><ReviewLinkTitle link={l} pages={data.pages} />{tabUrl && <Button asChild variant="ghost" size="icon" className="absolute -right-1 -top-2 h-11 w-11 hover:bg-muted"><a data-verify-link aria-label={`Open link to verify ${friendlyName}`} title={`Open link to verify ${friendlyName}`} href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => openReviewIcon(e, tabUrl, () => walk.openedVerification(l.key, own))}><ExternalLink aria-hidden /></a></Button>}</div>
@@ -393,10 +397,9 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                   {missing && <p className="text-xs text-destructive">Page not found</p>}
                   <>
                     {st === "replaced" && <Button variant="link" className="h-11 px-0" onClick={e => { e.stopPropagation(); walk.update(w => ({ ...w, linkReplaced: Object.fromEntries(Object.entries(w.linkReplaced).filter(([k]) => k !== l.key)) })); }}>Review Again</Button>}
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" aria-label={`Approve: ${publicLinkAddress(friendlyName)}`} aria-pressed={st === "done"} disabled={!enabled} aria-describedby={hintId} onClick={e => { e.stopPropagation(); if (enabled) walk.confirmLink(l.key, own, st !== "done"); }}><Check aria-hidden className={cn("h-4 w-4", st === "done" && "rounded-full bg-foreground text-background p-0.5")} />{st === "done" ? "Approved" : "Approve"}</Button>
-                      <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant="default" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" aria-label={`Correct link: ${publicLinkAddress(friendlyName)}`} onClick={e => { e.stopPropagation(); onChange(l, g); }}><Pencil aria-hidden />Correct</Button>
-                    </div>
+                    <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm" onClick={e => e.stopPropagation()}>
+                      <Checkbox data-verify-link={!tabUrl ? true : undefined} aria-label={`Approve: ${publicLinkAddress(friendlyName)}`} checked={st === "done"} disabled={!enabled} aria-describedby={hintId} onCheckedChange={value => { if (enabled) walk.confirmLink(l.key, own, value === true); }} />Approve
+                    </label>
                     <p id={hintId} className="sr-only">{missing ? "This page doesn't exist. Edit the link destination to fix it." : st === "done" ? "Approved" : !opened ? "Open link to confirm" : ""}</p>
                   </>
                   {s.reviewEdit?.link.key === l.key && <div data-review-editor onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}><ReviewLinkEditor pages={data.pages} knownDomains={known} /></div>}

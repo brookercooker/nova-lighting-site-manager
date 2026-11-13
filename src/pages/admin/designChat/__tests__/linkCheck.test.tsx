@@ -25,7 +25,7 @@ beforeEach(() => {
   m.state = { busy: false, publish: { ok: true, open: 1 }, review: { enabled: true } };
   m.data = { rows: [row], pages: [{ name: "Team", path: "/team", build_status: "ready" }], links: { status: "ok", unread: 0, partial: false, truncated: false, groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [team] }] } };
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); document.getElementById("link-review-navigation")?.remove(); });
 
 function frameWith(src = ORIGIN + "/a") {
   const f = document.createElement("iframe");
@@ -81,7 +81,7 @@ const openLinks = () => { act(() => walk.update(s => ({ ...s, open: true, step: 
 describe("inline link verification", () => {
   it("requires opening before ticking and permits unchecking", () => {
     openLinks();
-    const box = screen.getByRole("button", { name: /^Approve:/ });
+    const box = screen.getByRole("checkbox", { name: /^Approve:/ });
     expect(box).toBeDisabled();
     expect(box).toHaveAttribute("aria-describedby");
     fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
@@ -90,7 +90,7 @@ describe("inline link verification", () => {
     expect(walk.get().linkTicked).toEqual([team.key]);
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: /About · 1 of 1/ }));
-    fireEvent.click(screen.getByRole("button", { name: /^Approve:/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^Approve:/ }));
     expect(walk.get().linkTicked).toEqual([]);
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -102,21 +102,21 @@ describe("inline link verification", () => {
     const rows = document.querySelectorAll<HTMLElement>("[data-walk-link]");
     const openedRow = Array.from(rows).find(r => r.dataset.walkLink === team.key);
     const otherRow = Array.from(rows).find(r => r.dataset.walkLink === "other");
-    expect(openedRow && within(openedRow).getByRole("button", { name: /^Approve:/ })).toBeEnabled();
-    expect(otherRow && within(otherRow).getByRole("button", { name: /^Approve:/ })).toBeDisabled();
+    expect(openedRow && within(openedRow).getByRole("checkbox", { name: /^Approve:/ })).toBeEnabled();
+    expect(otherRow && within(otherRow).getByRole("checkbox", { name: /^Approve:/ })).toBeDisabled();
   });
   it("missing pages cannot approve even with a legacy Keep decision", () => {
     m.data.pages = []; openLinks();
     fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
     act(() => { walk.confirmLink(team.key, "fp", true); walk.update(s => ({ ...s, keptMissing: { [team.key]: "old" } })); });
-    expect(screen.getByRole("button", { name: /^Approve:/ })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /^Approve:/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
   it.each([["mail", "mailto:a@b.co"], ["phone", "tel:+15550100"]])("requires opening %s before confirmation", (kind, href) => {
     m.data.links.groups[0].links = [{ ...team, kind, href }]; openLinks();
-    expect(screen.getByRole("button", { name: /^Approve:/ })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /^Approve:/ })).toBeDisabled();
     fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
-    expect(screen.getByRole("button", { name: /^Approve:/ })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: /^Approve:/ })).toBeEnabled();
   });
   it("keeps draft tokens only in safe opening URLs", () => {
     m.preview = { shownId: 4, frames: [{ id: 4, url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/a?__lovable_token=test-credential" }] };
@@ -129,7 +129,7 @@ describe("inline link verification", () => {
   it("clears opening permission when a link fingerprint changes", () => {
     openLinks(); fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
     act(() => walk.reconcile({}, undefined, { [team.key]: "new" }));
-    expect(screen.getByRole("button", { name: /^Approve:/ })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /^Approve:/ })).toBeDisabled();
   });
 });
 
@@ -329,15 +329,16 @@ it.each(["Enter", " "])("card keyboard activation %s opens its page without appr
   expect(walk.get().linkTicked).toEqual([]);
 });
 it("inner verification, confirmation and Correct never activate the card", () => {
-  m.show.mockClear(); openLinks();
+  const host = document.createElement("div"); host.id = "link-review-navigation"; document.body.appendChild(host);
+  openLinks(); m.show.mockClear();
   fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
-  const confirm = screen.getByRole("button", { name: "Approve: Team" });
+  const confirm = screen.getByRole("checkbox", { name: "Approve: Team" });
   fireEvent.click(confirm);
   fireEvent.click(screen.getByRole("button", { name: /About · 1 of 1/ }));
-  const reopened = screen.getByRole("button", { name: "Approve: Team" });
-  expect(reopened).toHaveAttribute("aria-pressed", "true");
+  const reopened = screen.getByRole("checkbox", { name: "Approve: Team" });
+  expect(reopened).toHaveAttribute("aria-checked", "true");
   fireEvent.click(reopened);
-  expect(screen.getByRole("button", { name: "Approve: Team" })).toHaveAttribute("aria-pressed", "false");
+  expect(screen.getByRole("checkbox", { name: "Approve: Team" })).toHaveAttribute("aria-checked", "false");
   fireEvent.click(screen.getByRole("button", { name: "Correct link: Team" }));
   expect(walk.get().reviewEdit?.link.key).toBe(team.key);
   expect(m.show).not.toHaveBeenCalled();
