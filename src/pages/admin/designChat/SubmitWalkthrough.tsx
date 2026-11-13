@@ -171,7 +171,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
   return (
     <>
       <div className="shrink-0 space-y-2 border-b px-3 py-3">
-        <p className="text-xs text-muted-foreground" aria-live="polite">{data.links.status === "loading" ? "Checking changes…" : `Step ${idx + 1} of ${p.steps.length} · ${STEP_TITLE[p.step]}`}</p>
+        <p className="text-xs text-muted-foreground" aria-live="polite">{data.links.status === "loading" ? "Checking changes…" : `Step ${idx + 1} of ${p.steps.length}`}</p>
         <h2 ref={headingRef} tabIndex={-1} className="font-sans text-lg font-semibold outline-none">{STEP_TITLE[p.step]}</h2>
         {p.step === "pages" && <div className="pt-1 text-foreground"><p className="text-[15px] font-semibold leading-6">Before you approve:</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-normal"><li>Check the page on a phone, tablet and computer.</li><li>Confirm that pages using shared objects appear as intended.</li><li>Remove any placeholder text or images.</li></ul></div>}
         {p.step !== "pages" && <p className="text-xs leading-relaxed text-muted-foreground">
