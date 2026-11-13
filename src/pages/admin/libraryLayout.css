@@ -76,3 +76,20 @@
 }
 
 .nova-label-search-chip { background:var(--nova-label-bg); border-color:var(--nova-label-border); color:var(--nova-label-text); }
+
+.nova-library-items-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(141.333px,calc((100% - 12px)/2)),1fr)); gap:12px; padding-bottom:160px; min-width:0; }
+@media(max-width:639px) { .nova-library-items-grid { margin-inline:4px; } }
+.nova-library-grid-window { min-width:0; height:100%; }
+.nova-library-grid-card { position:relative; display:flex; flex-direction:column; height:100%; min-width:0; border:1px solid hsl(var(--border)); border-radius:8px; overflow:hidden; background:hsl(var(--background)); cursor:pointer; }
+.nova-library-grid-card:focus-within { outline:2px solid hsl(var(--ring)); outline-offset:2px; }
+.nova-library-grid-thumb { width:100%; height:auto; aspect-ratio:4/3; flex-shrink:0; border-radius:0; }
+.nova-library-grid-thumb > :not(svg), .nova-library-grid-thumb img { width:100% !important; height:100% !important; object-fit:cover; }
+.nova-library-grid-card .nova-library-row-body { padding:8px; height:114px; flex:none; }
+.nova-library-grid-card .nova-library-row-title { display:block; }
+.nova-library-grid-name { height:36px; white-space:normal; overflow-wrap:anywhere; line-height:18px; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.nova-library-grid-options { position:absolute; top:4px; right:4px; border-radius:50%; background:hsl(var(--background)/.88); color:hsl(var(--foreground)); }
+.nova-library-grid-card .nova-library-row-selection { position:absolute; top:4px; left:4px; z-index:1; width:44px; height:44px; background:hsl(var(--background)/.88); border-radius:50%; }
+.nova-library-grid-chips { display:flex; align-items:center; gap:4px; min-width:0; height:44px; }
+.nova-library-grid-chips .nova-library-row-badges { flex-shrink:0; margin:0; max-width:100%; }
+.nova-library-grid-chips .nova-library-row-badges > span { overflow:hidden; text-overflow:ellipsis; }
+.nova-library-grid-chips .nova-library-card-labels { flex:1; width:0; }

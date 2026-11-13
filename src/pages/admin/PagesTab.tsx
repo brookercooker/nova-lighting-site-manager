@@ -1,3 +1,4 @@
+import { useLibraryView } from "./libraryView";
 import { addLibraryLabelFilter } from "./libraryLabels";
 import { SignedThumbImg } from "./signedThumb";
 import LibraryFilterToolbar from "./LibraryFilterToolbar";
@@ -95,6 +96,7 @@ export default function PagesTab() {
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-mode-switch] [data-mode="manual"]')?.focus());
   };
   const [pages, setPages] = useState<Page[]>([]);
+  const [libraryView, setLibraryView] = useLibraryView("static");
   const [listEditing, setListEditing] = useState(false);
   const [q, setQ] = useState("");
   const [searchField, setSearchField] = useState<Field>("all");
@@ -405,7 +407,7 @@ export default function PagesTab() {
 
 
       <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <LibraryFilterToolbar labelUsageCounts={usageCounts} scope="static" noun="Pages" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Status" extraOptions={[{ v: "all", label: "All Statuses" }, { v: "ready", label: "Ready" }, { v: "draft", label: "Draft" }]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={
+        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} scope="static" noun="Pages" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Status" extraOptions={[{ v: "all", label: "All Statuses" }, { v: "ready", label: "Ready" }, { v: "draft", label: "Draft" }]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={
       <TagsPanel
         scope="static"
         usageCounts={usageCounts}
@@ -441,7 +443,7 @@ export default function PagesTab() {
 
 
 
-        <div className="min-w-0">{filtered.slice(pager.start, pager.end).map((p, idx) => <LibraryListRow key={p.id} labelScope="static" labels={p.tags} onLabelFilter={path => setTagFilters(cur => addLibraryLabelFilter(cur, path))} name={p.name} date={new Date(p.updated_at).toLocaleDateString()} thumbnail={<SignedThumbImg url={p.thumbnail_url} alt={p.name} className="h-14 w-14 object-cover" fallback={<FileText className="h-5 w-5 text-muted-foreground" />} />} badges={<><span>{p.archived_at ? "Archived" : p.build_status === "ready" ? "Ready" : "Draft"}</span></>} onOpen={() => setPreview(p)} onTitle={() => choosePage(p)} selection={listEditing ? <input type="checkbox" checked={selected.has(p.id)} aria-label={`Select ${p.name}`} onChange={() => toggleSelect(p.id, idx, false)} /> : undefined} menu={<><DropdownMenuItem onSelect={() => choosePage(p)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(p.path, "_blank", "noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => { void navigator.clipboard.writeText(buildPageRef({id:p.slug_id,name:p.name,path:p.path})).then(() => toast.success("Reference copied"), () => toast.error("Copy failed")); } }>Copy Reference</DropdownMenuItem><DropdownMenuSeparator /><WorkStatusPopover value={p.build_status} onSave={next => setBuildStatus(p.id,next)} disabled={!!p.archived_at} /><LabelsCell scope="static" value={p.tags} onChange={next => updateTags(p.id,next)} itemName={p.name} />
+        <div data-library-items={libraryView} className={libraryView === "grid" ? "nova-library-items-grid" : "min-w-0"}>{filtered.slice(pager.start, pager.end).map((p, idx) => <LibraryListRow view={libraryView} key={p.id} labelScope="static" labels={p.tags} onLabelFilter={path => setTagFilters(cur => addLibraryLabelFilter(cur, path))} name={p.name} date={new Date(p.updated_at).toLocaleDateString()} thumbnail={<SignedThumbImg url={p.thumbnail_url} alt={p.name} className="h-14 w-14 object-cover" fallback={<FileText className="h-5 w-5 text-muted-foreground" />} />} badges={<><span>{p.archived_at ? "Archived" : p.build_status === "ready" ? "Ready" : "Draft"}</span></>} onOpen={() => setPreview(p)} onTitle={() => choosePage(p)} selection={listEditing ? <input type="checkbox" checked={selected.has(p.id)} aria-label={`Select ${p.name}`} onChange={() => toggleSelect(p.id, idx, false)} /> : undefined} menu={<><DropdownMenuItem onSelect={() => choosePage(p)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(p.path, "_blank", "noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => { void navigator.clipboard.writeText(buildPageRef({id:p.slug_id,name:p.name,path:p.path})).then(() => toast.success("Reference copied"), () => toast.error("Copy failed")); } }>Copy Reference</DropdownMenuItem><DropdownMenuSeparator /><WorkStatusPopover value={p.build_status} onSave={next => setBuildStatus(p.id,next)} disabled={!!p.archived_at} /><LabelsCell scope="static" value={p.tags} onChange={next => updateTags(p.id,next)} itemName={p.name} />
                       <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         Description
                       </DropdownMenuLabel>

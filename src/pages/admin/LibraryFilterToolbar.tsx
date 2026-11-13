@@ -15,9 +15,12 @@ import { LABEL_SEP, MAX_DEPTH, validateLeafName } from "./labelPath";
 import { libraryCount } from "./labelSearch";
 import { registerLabelPath, useInvalidateLabels } from "./useAllLabels";
 import { shortLabelName } from "./libraryLabels";
+import LibraryViewToggle from "./LibraryViewToggle";
+import type { LibraryView } from "./libraryView";
 
 type Option = { v: string; label: string };
-export default function LibraryFilterToolbar({ scope, noun, search, onSearch, value, onApply, fields, sort, onSort, sortOptions, count, countResults, extraLabel, extraOptions = [], onAdd, onEdit, editing, editTools, action, navigation, labelUsageCounts = {} }: {
+export default function LibraryFilterToolbar({ scope, noun, search, onSearch, value, onApply, fields, sort, onSort, sortOptions, count, countResults, extraLabel, extraOptions = [], onAdd, onEdit, editing, editTools, action, navigation, labelUsageCounts = {}, view, onViewChange }: {
+  view?: LibraryView; onViewChange?: (view: LibraryView) => void;
   labelUsageCounts?: Record<string, number>;
   scope: LabelScope; noun: string; search: string; onSearch: (v: string) => void; value: LibraryFilters; onApply: (v: LibraryFilters) => void;
   fields: Option[]; sort: string; onSort: (v: string) => void; sortOptions: Option[]; count: number; countResults: (v: LibraryFilters) => number;
@@ -64,10 +67,10 @@ export default function LibraryFilterToolbar({ scope, noun, search, onSearch, va
     <div data-library-toolbar className="sticky top-0 z-30 min-w-0 bg-background pb-1">
       <div className="flex min-w-0 items-center gap-1.5"><div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" /><Input aria-label={`Search ${noun}`} placeholder={`Search ${noun.toLowerCase()}…`} value={search} onChange={e => onSearch(e.target.value)} className="h-11 min-w-0 rounded-full pl-9 text-sm" /></div>
         {phone ? <><Dialog open={open} onOpenChange={changeOpen}><DialogContent aria-describedby={undefined} onCloseAutoFocus={e => { e.preventDefault(); filterRef.current?.focus(); }} className="nova-library-filter-sheet"><DialogTitle className="sr-only">Filters</DialogTitle>{panel}</DialogContent></Dialog>{trigger}</> : <Popover modal open={open} onOpenChange={changeOpen}><PopoverTrigger asChild>{trigger}</PopoverTrigger><PopoverContent align="end" aria-label="Filters" onCloseAutoFocus={e => { e.preventDefault(); filterRef.current?.focus(); }} className="flex max-h-[85vh] w-[400px] max-w-[calc(100vw-24px)] flex-col overflow-hidden p-0">{panel}</PopoverContent></Popover>}
-        {sortMenu}<Button className="hidden h-11 shrink-0 sm:flex" onClick={onAdd}><Plus className="h-4 w-4" />Add {noun.replace(/s$/, "")}</Button>
+        {!onViewChange && sortMenu}<Button className="hidden h-11 shrink-0 sm:flex" onClick={onAdd}><Plus className="h-4 w-4" />Add {noun.replace(/s$/, "")}</Button>
       </div>
       {chips.length > 0 && <div className="nova-filter-options mt-1" aria-label="Active Filters">{chips.map(c => <Button key={c.id} variant="outline" className="h-11 max-w-full shrink-0 gap-1 rounded-full px-2 text-xs" title={c.label} aria-label={`${c.label} Remove`} onClick={() => onApply(c.clear(value))}>{c.labelPath && <span className="nova-filter-label-dot" style={{ "--nova-label-dot": labelColor(c.labelPath).swatch } as React.CSSProperties} />}{c.labelPath ? shortLabelName(labels.find(l => l.path === c.labelPath)?.name ?? c.label) : c.label}<X className="h-3 w-3" /><span className="sr-only">Remove</span></Button>)}<Button variant="link" className="h-10 shrink-0 px-1 text-xs" onClick={() => onApply(clearLibraryFilters())}>Clear All</Button></div>}
-      <div className="flex h-10 min-w-0 items-center gap-1 text-xs text-muted-foreground">{navigation}<span className="truncate">{libraryCount(count, noun.toLowerCase())} · {sortOptions.find(o => o.v === sort)?.label}</span><ChevronDown className="h-3 w-3 shrink-0" /><div className="flex-1" />{action}<Button variant="ghost" className="h-10 shrink-0 px-2 text-xs" onClick={onEdit}><Pencil className="h-3 w-3" />{editing ? "Done" : "Edit"}</Button></div>
+      <div className={`flex ${onViewChange ? "h-12" : "h-10"} min-w-0 items-center gap-1 text-xs text-muted-foreground`}>{navigation}<span className="truncate">{libraryCount(count, noun.toLowerCase())}{!onViewChange && ` · ${sortOptions.find(o => o.v === sort)?.label}`}</span><div className="flex-1" />{onViewChange && view && <>{sortMenu}<LibraryViewToggle value={view} onChange={onViewChange} /></>}{action}<Button variant="ghost" className="h-10 shrink-0 px-2 text-xs" onClick={onEdit}><Pencil className="h-3 w-3" />{editing ? "Done" : "Edit"}</Button></div>
     </div>
     <Dialog open={managing} onOpenChange={setManaging}><DialogContent aria-describedby={undefined} className="max-h-[85dvh] overflow-y-auto"><DialogTitle>Manage Labels</DialogTitle>{editTools}</DialogContent></Dialog>
     <Button onClick={onAdd} className="fixed bottom-20 right-4 z-40 h-12 rounded-full shadow-lg sm:hidden"><Plus className="h-4 w-4" />Add {noun.replace(/s$/, "")}</Button>
