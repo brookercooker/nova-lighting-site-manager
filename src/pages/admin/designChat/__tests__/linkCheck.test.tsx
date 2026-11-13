@@ -234,6 +234,12 @@ it.each([{ href: "/changed" }, { target: "_blank" }, { elementKey: "0.9" }, { sc
 });
 
 describe("unchanged clicks without a readiness dependency", () => {
+  it("preview selection closes an unrelated editor without saving", () => {
+    walk.editLink({ link: team, group: m.data.links.groups[0], rows: [], fingerprint: "own" });
+    walk.selectLink("other");
+    expect(walk.get().reviewEdit).toBeNull();
+    expect(walk.get().selectedLink?.key).toBe("other");
+  });
   it.each([375, 1280])("real Manager bridge opens the note for exact-frame match:null before ready at %s", width => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
     const f = frameWith();

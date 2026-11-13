@@ -66,3 +66,12 @@ export async function resetReviewLink(resolved: ResolvedReviewLink, action: "res
   if (error) throw new Error(error.message);
   return inlineChangeLines(resolved.name, resolved.edits, next, { [resolved.element.key]: { text: resolved.element.label ?? "", tag: "a" } });
 }
+
+/** Re-read the removed override before offering restore, retaining the authoritative element identity. */
+export async function refreshRemovedReviewLink(resolved: ResolvedReviewLink): Promise<ResolvedReviewLink> {
+  const { data, error } = await (supabase as any).from(resolved.table).select("updated_at,inline_edits").eq("id", resolved.id).maybeSingle();
+  if (error || !data || typeof data.updated_at !== "string") throw new Error("The link was removed, but couldn't be reloaded. Use Manual Edit to restore it.");
+  const edits = data.inline_edits ?? {};
+  if (edits[`link:${resolved.element.key}`] !== JSON.stringify({ unlinked: true })) throw new Error("This link changed after removal. Reopen it in Manual Edit to restore it.");
+  return { ...resolved, updatedAt: data.updated_at, edits, href: "", blank: false };
+}

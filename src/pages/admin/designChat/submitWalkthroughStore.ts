@@ -62,7 +62,7 @@ export const walk = {
   close() { walk.update((s) => ({ ...s, open: false })); },
   keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", selectedLink: null, linkNote: null, fix: null, reviewEdit: null })); },
   editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, selectedLink: null, linkNote: null, step: "links" })); },
-  selectLink(key: string | null) { walk.update(s => ({ ...s, open: true, step: "links", selectedLink: key ? { key, sequence: (s.selectedLink?.sequence ?? 0) + 1 } : null, linkNote: key ? null : "This link wasn't changed, so it doesn't need checking." })); },
+  selectLink(key: string | null) { walk.update(s => ({ ...s, reviewEdit: null, open: true, step: "links", selectedLink: key ? { key, sequence: (s.selectedLink?.sequence ?? 0) + 1 } : null, linkNote: key ? null : "This link wasn't changed, so it doesn't need checking." })); },
   openedVerification(key: string, fingerprint: string) { walk.update(s => ({ ...s, verificationOpened: { ...s.verificationOpened, [key]: fingerprint } })); },
   keepMissing(key: string, own: string, fingerprint: string) {
     if (state.verificationOpened[key] !== own) return;

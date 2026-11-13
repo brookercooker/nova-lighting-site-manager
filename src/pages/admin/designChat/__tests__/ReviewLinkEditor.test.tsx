@@ -1,7 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ resolve: vi.fn(), save: vi.fn(), reset: vi.fn(), notify: vi.fn(), fallback: vi.fn(), phone: false }));
-vi.mock("../reviewLinkSave", () => ({ resolveReviewLink: m.resolve, saveReviewLink: m.save, resetReviewLink: m.reset, FIND_LINK_ERROR: "We couldn't pin down which link this is. Use Open in Manual Edit to change it." }));
+const m = vi.hoisted(() => ({ resolve: vi.fn(), save: vi.fn(), reset: vi.fn(), refreshRemoved: vi.fn(), notify: vi.fn(), fallback: vi.fn(), phone: false }));
+vi.mock("../reviewLinkSave", () => ({ resolveReviewLink: m.resolve, saveReviewLink: m.save, resetReviewLink: m.reset, refreshRemovedReviewLink: m.refreshRemoved, FIND_LINK_ERROR: "We couldn't pin down which link this is. Use Open in Manual Edit to change it." }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ preview: null }) }));
 vi.mock("../useManagerLayout", () => ({ useManagerLayout: () => ({ phone: m.phone }) }));
 vi.mock("../linkFix", () => ({ useChangeLink: () => m.fallback }));
@@ -122,10 +122,26 @@ it("restores the original override without changing modes or unrelated approvals
   expect(walk.get().linkTicked).toEqual(["/|/team"]);
 });
 it("removes only navigation using the existing safe unlink action", async () => {
+  const resolved = { href: "/contact", blank: false, element: { key: "0.5.0.1", scope: "page", originalHref: "/gallery" } };
+  m.resolve.mockResolvedValue(resolved);
+  m.refreshRemoved.mockResolvedValue({ ...resolved, href: "", updatedAt: "after-remove", edits: { "link:0.5.0.1": '{"unlinked":true}' } });
   m.reset.mockResolvedValue(["Homepage: removed link"]);
   render(<ReviewLinkEditor pages={pages} />);
   fireEvent.click(await screen.findByRole("button", { name: "Remove Link" }));
+  expect(m.reset).not.toHaveBeenCalled();
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Remove Link" }));
   await waitFor(() => expect(m.notify).toHaveBeenCalled());
   expect(m.reset).toHaveBeenCalledWith(expect.anything(), "remove");
   expect(walk.get().linkReplaced[link.key]).toBe("own");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Restore Original Link" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Restore Original Link" }));
+  await waitFor(() => expect(m.reset).toHaveBeenCalledWith(expect.objectContaining({ updatedAt: "after-remove" }), "restore"));
+});
+it("canceling removal does not write or change approvals", async () => {
+  m.resolve.mockResolvedValue({ href: "/contact", blank: false, element: { key: "0.5.0.1", scope: "page", originalHref: "/gallery" } });
+  render(<ReviewLinkEditor pages={pages} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Remove Link" }));
+  fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel" }));
+  expect(m.reset).not.toHaveBeenCalled();
+  expect(walk.get().linkTicked).toEqual(["/|/team"]);
 });

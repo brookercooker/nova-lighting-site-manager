@@ -3,7 +3,7 @@ const m = vi.hoisted(() => ({ inventory: null as any, row: null as any, save: vi
 vi.mock("../linkInventory", () => ({ requestInventory: async () => m.inventory, requestFrameInventory: async () => m.inventory }));
 vi.mock("../../saveRow", () => ({ saveRow: m.save }));
 vi.mock("@/prototype/client", () => ({ supabase: { from: (table: string) => { m.table = table; const q = { select: () => q, eq: (key: string, value: string) => { m.filters.push([key, value]); return q; }, maybeSingle: async () => ({ data: m.row, error: null }) }; return q; } } }));
-import { resolveReviewLink, saveReviewLink, resetReviewLink } from "../reviewLinkSave";
+import { resolveReviewLink, saveReviewLink, resetReviewLink, refreshRemovedReviewLink } from "../reviewLinkSave";
 import { validTextLink } from "../../textAdornment";
 beforeEach(() => {
   vi.clearAllMocks(); m.filters = [];
@@ -106,4 +106,13 @@ it("remove writes unlinked:true rather than deleting or hiding the card", async 
   expect(JSON.parse(edits["link:0.5.0.1"])).toEqual({ unlinked: true });
   expect(edits["html:0.1"]).toBe("untouched");
   expect(Object.keys(edits).some(k => k.startsWith("hidden:"))).toBe(false);
+});
+it("restoration after removal uses the freshly read version and preserves other edits", async () => {
+  const resolved = await resolveReviewLink("/", "/contact", null);
+  await resetReviewLink(resolved, "remove");
+  m.row = { ...m.row, updated_at: "after-removal", inline_edits: m.save.mock.calls[0][1].inline_edits };
+  await resetReviewLink(await refreshRemovedReviewLink(resolved), "restore");
+  expect(m.save.mock.calls[1][3]).toBe("after-removal");
+  expect(m.save.mock.calls[1][1].inline_edits).not.toHaveProperty("link:0.5.0.1");
+  expect(m.save.mock.calls[1][1].inline_edits["html:0.1"]).toBe("untouched");
 });

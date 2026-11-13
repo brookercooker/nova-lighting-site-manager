@@ -159,6 +159,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3">
         {p.step === "pages" && (pagesReady ? <PagesStep rows={p.pageRows} data={data} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} /> : <p role="status" className="text-sm text-muted-foreground">{data.pagesStatus === "failed" ? "Changed pages couldn't be listed right now. Close and reopen to try again." : "Listing the changed pages…"}</p>)}
         {p.step === "links" && <LinksStep data={data} onShow={(l, g) => {
+          walk.update(w => ({ ...w, reviewEdit: null }));
           const path = g.page?.path ?? p.pageRows.find(r => r.page)?.page?.path ?? "/";
           const already = walk.get().checking?.key === l.key;
           if (!already || phone) openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
