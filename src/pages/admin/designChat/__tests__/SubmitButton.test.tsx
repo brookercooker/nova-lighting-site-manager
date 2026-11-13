@@ -41,11 +41,26 @@ const confirmLinks = () => {
   }
 };
 const tickManual = () => {
-  for (const t of ["I have checked the design of changed pages", "I have verified the destinations of changed links", "I have checked the site appearance on different device types", "I have confirmed that all pages are ready to be published"])
+  for (const t of ["Check the design of changed pages", "Verify destinations of changed links", "Check site appearance on different device types", "Confirm that all pages are ready to be published"])
     fireEvent.click(within(dialog()).getByRole("checkbox", { name: t }));
 };
 
 describe("Submit for Review walkthrough", () => {
+  it("counts unknown comparisons in the three-step flow and requires link approval", () => {
+    m.data.links = { status: "ok", groups: [{ page: { name: "Homepage", path: "/" }, label: "Homepage", links: [{ key: "/|page|0", href: "https://example.com", kind: "external", label: "Unknown link", requestIds: [], status: null }] }] };
+    render(<PanelHost open />);
+    expect(dialog()).toHaveTextContent("Step 1 of 3");
+    viewAndTick();
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
+    expect(dialog()).toHaveTextContent("Step 2 of 3");
+    expect(dialog()).toHaveTextContent("Couldn't compare with the published site");
+    expect(dialog()).toHaveTextContent("0 of 1 links approved");
+    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
+    confirmLinks();
+    expect(dialog()).toHaveTextContent("1 of 1 links approved");
+    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeEnabled();
+    expect(m.post).not.toHaveBeenCalled();
+  });
   it("never confirms a broken external target even after it has been opened", () => {
     const link = { key: "/|https://example.com/missing", href: "https://example.com/missing", kind: "external", label: "Ideas & Advice", requestIds: [], status: { state: "broken" } };
     m.data.links = { status: "ok", groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [link] }], unread: 0, partial: false, truncated: false };
@@ -98,10 +113,10 @@ describe("Submit for Review walkthrough", () => {
     confirmLinks();
     expect(within(dialog()).getByRole("button", { name: /About · 1 of 1/ })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    expect(within(dialog()).getByRole("checkbox", { name: "I have verified the destinations of changed links" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, href: "/changed" }] }] } };
     host.rerender(<PanelHost open />);
-    expect(within(dialog()).getByRole("checkbox", { name: "I have verified the destinations of changed links" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Back" }));
     expect(dialog()).toHaveTextContent("Changed since you approved it");
     expect(within(dialog()).getByRole("button", { name: /^Approve:/ })).toHaveAttribute("aria-pressed", "false");
@@ -180,20 +195,32 @@ describe("Submit for Review walkthrough", () => {
     const submit = within(dialog()).getByRole("button", { name: "Submit for Review" });
     expect(submit).toBeDisabled();
     expect(walk.get().checks).toEqual([]);
-    expect(within(dialog()).getByRole("checkbox", { name: "I have checked the design of changed pages" })).not.toBeChecked();
-    expect(within(dialog()).getByRole("checkbox", { name: "I have verified the destinations of changed links" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "Check the design of changed pages" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
     tickManual();
     expect(submit).toBeEnabled();
     expect(m.post).not.toHaveBeenCalled();
   });
-  it("keeps the same first-person attestation before and after ticking", () => {
+  it.each([
+    ["Check the design of changed pages", "I have checked the design of changed pages"],
+    ["Verify destinations of changed links", "I have verified the destinations of changed links"],
+    ["Check site appearance on different device types", "I have checked the site appearance on different device types"],
+    ["Confirm that all pages are ready to be published", "I have confirmed that all pages are ready to be published"],
+  ])("toggles %s while keeping its accessible name stable", (todo, done) => {
     m.data.rows = [];
     render(<PanelHost open onOpenChange={vi.fn()} />);
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    const box = within(dialog()).getByRole("checkbox", { name: "I have checked the site appearance on different device types" });
+    const box = within(dialog()).getByRole("checkbox", { name: todo });
+    expect(box).not.toBeChecked();
+    expect(within(dialog()).getByText(todo)).toBeInTheDocument();
     fireEvent.click(box);
-    expect(within(dialog()).getByRole("checkbox", { name: "I have checked the site appearance on different device types" })).toBeChecked();
-    expect(dialog()).not.toHaveTextContent("wording and pictures");
+    expect(within(dialog()).getByRole("checkbox", { name: todo })).toBeChecked();
+    expect(within(dialog()).getByText(done)).toBeInTheDocument();
+    fireEvent.click(box);
+    expect(box).not.toBeChecked();
+    expect(within(dialog()).getByText(todo)).toBeInTheDocument();
+    expect(within(dialog()).queryByText(done)).toBeNull();
+    expect(m.post).not.toHaveBeenCalled();
   });
   it("skips the links step when no links changed and hides that checklist item", () => {
     render(<PanelHost open onOpenChange={vi.fn()} />);

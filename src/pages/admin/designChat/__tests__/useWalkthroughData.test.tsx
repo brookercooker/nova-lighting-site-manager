@@ -81,7 +81,7 @@ describe("review pages fetch", () => {
     await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
     const result = hook.result.current.links;
     if (result.status !== "ok") throw new Error("shared links not ready");
-    expect(result.groups.flatMap(g => g.links)).toEqual([]);
+    expect(result.groups.flatMap(g => g.links)).toHaveLength(1);
     expect(hook.result.current.comparisonUnavailable).toBe(true);
   });
   it("adds the saved destination while relay rows lag, but respects a current empty net inventory", () => {

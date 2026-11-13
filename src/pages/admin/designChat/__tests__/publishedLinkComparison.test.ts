@@ -3,8 +3,9 @@ import { comparedReviewLinks, publishedComparison } from "../publishedLinkCompar
 import { diffInventories, reviewPageInventory, loadNetLinks, parseInventory } from "../linkInventory";
 import type { ReviewLink } from "../submitWalkthrough";
 const link: ReviewLink = { key: "/|page|0", href: "/contact", kind: "internal", label: "Card link", requestIds: [], status: null };
-it("excludes unknown published baselines, even when the coded original differs", () => {
+it("includes unknown published baselines, even when the coded original differs", () => {
   expect(publishedComparison({ ...link, originalHref: "/gallery" })).toBe("unknown");
+  expect(comparedReviewLinks({ groups: [{ page: { name: "Homepage", path: "/" }, label: "Homepage", links: [link] }], unread: 0, partial: false, truncated: false }).groups[0].links).toEqual([link]);
 });
 it("excludes both restored Homepage card and consultation destinations", () => {
   const base = { unread: 0, partial: false, truncated: false, groups: [{ page: { name: "Homepage", path: "/" }, label: "Homepage", links: [{ ...link, publishedHref: "/contact" }, { ...link, key: "consultation", label: "Book a Consultation", publishedHref: "/contact" }, { ...link, key: "image", href: "/gallery", publishedHref: "/contact" }] }] };
@@ -37,7 +38,8 @@ it("retains authoritative published comparisons even when the live frame is unav
   expect(reviewPageInventory({ path: "/", links: [
     { key: "0", scope: "page", href: "/contact", publishedHref: "/contact", label: "Restored" },
     { key: "1", scope: "page", href: "/brands", publishedHref: "/gallery", label: "Changed" },
-  ] }, null).map(link => link.key)).toEqual(["1"]);
+    { key: "2", scope: "page", href: "/brands", label: "Unknown" },
+  ] }, null).map(link => link.key)).toEqual(["1", "2"]);
 });
 it("accepts explicit publication absence only from a validated inventory payload", () => {
   expect(parseInventory({ source: "nova-site", type: "link-inventory", v: 1, ...pricing, published: false })?.published).toBe(false);

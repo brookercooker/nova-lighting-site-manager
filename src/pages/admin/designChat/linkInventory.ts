@@ -128,15 +128,13 @@ function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): Revi
 /** A live inventory proves a published page unless explicitly marked absent. Unknown/absent pages verify all page-owned links. */
 export function reviewPageInventory(draft: Inventory, live: Inventory | null): InventoryLink[] {
   if (live && live.published !== false) return diffInventories(draft, live);
-  if (!live && draft.links.some(link => typeof link.publishedHref === "string")) {
-    return indexedInventory(draft.links).filter(link => link.publishedHref !== undefined && link.href !== link.publishedHref);
-  }
   const seen = new Set<string>();
   return indexedInventory(draft.links).filter(link => {
     const id = inventoryIdentity(link);
     if (link.scope !== "page" || seen.has(id)) return false;
     seen.add(id); return true;
-  }).map(link => ({ ...link, publishedHref: null, originalHref: undefined }));
+  }).filter(link => live?.published === false || link.publishedHref === undefined || link.href !== link.publishedHref)
+    .map(link => live?.published === false ? { ...link, publishedHref: null, originalHref: undefined } : link);
 }
 /** Load every changed page independently; a failed live comparison never suppresses another page's inventory. */
 export async function loadNetLinks(paths: string[], live: string | null, request = requestInventory): Promise<Record<string, InventoryLink[]>> {

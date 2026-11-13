@@ -7,5 +7,5 @@ export function publishedComparison(link: ReviewLink): "unknown" | "unchanged" |
   return link.publishedHref !== null && publicLinkAddress(link.href) === publicLinkAddress(link.publishedHref) ? "unchanged" : "changed";
 }
 export function comparedReviewLinks(base: ReviewLinks): ReviewLinks {
-  return { ...base, groups: base.groups.map(g => ({ ...g, links: g.links.filter(l => publishedComparison(l) === "changed") })).filter(g => g.links.length) };
+  return { ...base, groups: base.groups.map(g => ({ ...g, links: g.links.filter(l => publishedComparison(l) !== "unchanged") })).filter(g => g.links.length) };
 }

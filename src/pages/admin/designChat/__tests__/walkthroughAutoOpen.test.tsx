@@ -49,7 +49,7 @@ describe("walkthrough auto-open and link lines", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     expect(walk.get().ticked).toEqual(["page:/a"]);
     expect(m.show).toHaveBeenLastCalledWith("/b");
-    expect(screen.getByRole("button", { name: "Next Page" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Done" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     expect(walk.get().ticked).toEqual(["page:/a", "page:/b"]);
     expect(walk.get().checking).toBeNull();
@@ -67,9 +67,28 @@ describe("walkthrough auto-open and link lines", () => {
     render(<Host />);
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     act(() => walk.update(w => ({ ...w, checking: { key: "page:/a", kind: "page", name: "About" } })));
+    expect(screen.getByRole("button", { name: "Next Page" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Approved" }));
     expect(walk.get().ticked).toEqual(["page:/a"]);
     expect(walk.get().checking?.key).toBe("page:/b");
+  });
+  it("page navigation remains enabled while link comparisons refresh", () => {
+    m.data.rows = [page("/a", "About"), page("/b", "Blog")];
+    m.data.links = { status: "loading" };
+    render(<Host />);
+    expect(screen.getByRole("button", { name: "Next Page" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Next Page" }));
+    expect(screen.getByRole("button", { name: "Done" })).toBeEnabled();
+  });
+  it("last-page Done returns to the list without approving", () => {
+    m.data.rows = [page("/a", "About"), page("/b", "Blog")];
+    render(<Host />);
+    fireEvent.click(screen.getByRole("button", { name: "Next Page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(walk.get().checking).toBeNull();
+    expect(walk.get().open).toBe(true);
+    expect(walk.get().step).toBe("pages");
+    expect(walk.get().ticked).toEqual([]);
   });
   it("waits for the pages list", () => {
     m.data.pagesStatus = "loading";
