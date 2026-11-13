@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { Shield, User as UserIcon, ArrowLeft, UserPlus, MoreHorizontal, Pencil, Trash2, KeyRound } from "lucide-react";
 import { REQUIRE_LOGIN } from "@/lib/authGate";
+import "./usersLayout.css";
 
 
 
@@ -191,7 +192,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="nova-users-page min-h-screen bg-background">
       <header className="sticky top-0 z-30 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="w-full px-6 py-3 flex items-center gap-4">
           <Button asChild variant="ghost" size="sm" className="gap-2">
@@ -264,7 +265,7 @@ export default function UsersPage() {
         {loading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">Loading users…</div>
         ) : (
-          <div className="border rounded-md overflow-hidden">
+          <div className="nova-users-list border rounded-md overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr className="text-left text-xs text-muted-foreground">
@@ -279,7 +280,7 @@ export default function UsersPage() {
                   <tr key={u.id} className="border-t align-middle">
                     <td className="py-3 px-4">
                       <div className="font-medium truncate">{u.email || <span className="text-muted-foreground italic">no email</span>}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono truncate">{u.id}</div>
+                      <div className="nova-user-id text-[10px] text-muted-foreground font-mono truncate">{u.id}</div>
                     </td>
                     <td className="py-3 px-4 min-w-[220px]">
                       <div className="flex flex-wrap gap-1.5">
@@ -297,7 +298,7 @@ export default function UsersPage() {
                           <>
                             <span className="inline-flex items-center text-xs px-2 py-0.5 rounded border text-muted-foreground">No Access</span>
                             {u.id !== currentUserId && (
-                              <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={busyId === u.id} onClick={() => setAccess(u, true)}>
+                              <Button size="sm" variant="outline" className="nova-user-access h-6 px-2 text-xs" disabled={busyId === u.id} onClick={() => setAccess(u, true)}>
                                 Give Access
                               </Button>
                             )}
@@ -306,16 +307,17 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td className="py-3 px-4 text-xs text-muted-foreground whitespace-nowrap">
-                      {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : "—"}
+                      <span className="sm:hidden">Last sign-in: </span>{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString() : "—"}
                     </td>
                     <td className="py-3 px-4 text-left">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost" disabled={busyId === u.id} aria-label="User Actions">
-                            <MoreHorizontal className="w-4 h-4" />
+                          <Button size="icon" variant="ghost" className="nova-user-actions" disabled={busyId === u.id} aria-label="User Actions">
+                            <MoreHorizontal className="w-4 h-4" /><span className="sm:hidden">User Actions</span>
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => { void navigator.clipboard.writeText(u.id).then(() => toast.success("ID copied"), () => toast.error("Copy failed")); }}>Copy ID</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openEdit(u)}>
                             <Pencil className="w-4 h-4 mr-2" /> Edit Role
                           </DropdownMenuItem>

@@ -424,6 +424,7 @@ export default function LandingPagesView({ navigation }: { navigation?: React.Re
       />
       } />
         <SelectionBar
+          editing={listEditing}
           count={selected.size}
           itemLabel="landing page"
           onClear={() => setSelected(new Set())}

@@ -79,12 +79,12 @@ export default function DeveloperReviewPage() {
     <div className="h-screen flex flex-col">
       <header className="sticky top-0 z-30 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="w-full px-3 min-[480px]:px-6 py-3 flex items-center gap-2 min-[480px]:gap-4">
-          <Button asChild variant="ghost" size="sm" className="gap-2 shrink-0">
-            <Link to="/manage/pages"><ArrowLeft className="w-4 h-4" /> Site Manager</Link>
+          <Button asChild variant="ghost" size="sm" className="h-11 gap-2 shrink-0 max-sm:w-11 max-sm:p-0">
+            <Link to="/manage/pages" aria-label="Site Manager"><ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Site Manager</span></Link>
           </Button>
           <h1 className="text-base font-medium tracking-tight">Developer Review</h1>
           {isAdmin && RELAY_IS_HOSTED && (
-            <Button asChild variant="outline" size="sm" className="ml-auto shrink-0 gap-2 px-2 min-[480px]:px-3">
+            <Button asChild variant="outline" size="sm" className="ml-auto h-11 min-w-11 shrink-0 gap-2 px-2 min-[480px]:px-3">
               <a href={draftSiteUrl} target="_blank" rel="noopener noreferrer" aria-label="Open Draft Site">
                 <ExternalLink className="w-4 h-4" aria-hidden="true" />
                 <span className="hidden min-[480px]:inline">Open Draft Site</span>

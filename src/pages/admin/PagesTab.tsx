@@ -395,7 +395,7 @@ export default function PagesTab() {
   const pager = usePager(filtered.length);
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="Pages View" className="grid grid-cols-3 rounded-md border bg-background">{([['static', 'Static Pages'], ['landing', 'Landing Pages'], ['audit', 'Link Audit']] as const).map(([key, label]) => <Button key={key} role="tab" aria-selected={view === key} variant={view === key ? "default" : "ghost"} className="h-11 min-w-0 rounded-none px-1 text-xs" onClick={() => setView(key)}>{label}</Button>)}</div>
+      <div role="tablist" aria-label="Pages View" className="grid grid-cols-3 rounded-md border bg-background">{([['static', 'Static Pages', 'Pages'], ['landing', 'Landing Pages', 'Landing'], ['audit', 'Link Audit', 'Audit']] as const).map(([key, label, short]) => <Button key={key} role="tab" aria-label={label} aria-selected={view === key} variant={view === key ? "default" : "ghost"} className="h-11 min-w-0 rounded-none px-1 text-xs" onClick={() => setView(key)}><span className="hidden min-[375px]:inline">{label}</span><span className="min-[375px]:hidden">{short}</span></Button>)}</div>
 
     {view === "audit" ? (
       <LinkAuditView pages={pages as any} />
@@ -423,6 +423,7 @@ export default function PagesTab() {
       />
       } />
       <SelectionBar
+        editing={listEditing}
         count={selected.size}
         itemLabel="page"
         onClear={() => setSelected(new Set())}

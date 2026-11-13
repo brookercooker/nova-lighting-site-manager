@@ -21,6 +21,9 @@ it("shows No Access for accounts without roles, grants access, loads once and se
   expect(screen.queryByText("User")).toBeNull();
   expect(call.mock.calls.filter((c) => c[0] === undefined)).toHaveLength(1);
   expect(document.title).toBe("Users · Site Manager");
+  fireEvent.keyDown(screen.getByRole("button",{name:"User Actions"}),{key:"ArrowDown"});
+  expect(await screen.findByRole("menuitem",{name:"Copy ID"})).toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("menuitem",{name:"Copy ID"}),{key:"Escape"});
   fireEvent.click(screen.getByRole("button", { name: "Give Access" }));
   await waitFor(() => expect(call).toHaveBeenCalledWith({ action: "set_user", user_id: "u1", is_user: true }));
   expect(await screen.findByText("User")).toBeVisible();

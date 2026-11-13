@@ -1,5 +1,6 @@
 # Site Manager (src/pages/admin) rules
 - Library List/Grid uses shared LibraryListRow actions and libraryView scoped preferences; parent selection/filter/paging state stays layout-independent, and LibraryWindow retains grid geometry while releasing distant media.
+- Library Edit mode uses the same SelectionBar callbacks in a phone bottom bar with zero-selection actions disabled; Users uses responsive table-as-cards styling to keep a single action/role data path.
 - Library card labels share LibraryCardLabels and libraryLabels for bounded names, overflow and additive filters; LibraryFilterToolbar owns the existing management dialog so every scope keeps its storage/actions.
 - Filters, item label editors and chat label menus share memoized LabelSearchList and objectLabelFilter normalization, with local search, bounded native scrolling and capture-phase Escape clearing before overlay dismissal; no new persistent state. Item usage counts read existing scoped label arrays through useLabelUsageCounts.
 - Used On uses inline UsedOnChoices search/expansion and wrapping buttons; management presents a flat full-width label list while retaining hierarchical edit/delete operations, so phone names and actions remain readable without changing storage.

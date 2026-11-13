@@ -767,6 +767,7 @@ export default function VideoTab() {
 
         </div>
         <SelectionBar
+          editing={listEditing}
           count={selected.size}
           itemLabel="video"
           onClear={() => setSelected(new Set())}

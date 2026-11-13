@@ -318,6 +318,7 @@ export default function ObjectsTab() {
         itemLabel="objects"
       />} />
         <SelectionBar
+          editing={listEditing}
           count={selected.size}
           itemLabel="object"
           onClear={() => setSelected(new Set())}

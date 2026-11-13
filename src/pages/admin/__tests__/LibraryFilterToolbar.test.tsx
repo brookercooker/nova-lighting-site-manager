@@ -9,6 +9,13 @@ vi.mock("../useAllLabels",()=>({useInvalidateLabels:()=>()=>{},registerLabelPath
 afterEach(()=>{cleanup();h.applied.mockClear();h.phone=true;});
 function Harness(){const [f,setF]=useState(clearLibraryFilters());return <LibraryFilterToolbar scope="objects" noun="Objects" search="" onSearch={()=>{}} value={f} onApply={next=>{h.applied(next);setF(next);}} fields={[{v:"all",label:"All Fields"},{v:"name",label:"Name"}]} sort="newest" onSort={()=>{}} sortOptions={[{v:"newest",label:"Recently Modified"}]} count={8} countResults={next=>next.labels.length ? 3 : 8} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"used",label:"In Use"},{v:"none",label:"Not Used"}]} onAdd={()=>{}} onEdit={()=>{}} editing={false}/>;}
 describe("staged library panel",()=>{
+  it("removes the floating Add command during Edit without changing the desktop Add command",()=>{
+    const props = {scope:"objects" as const,noun:"Objects",search:"",onSearch:()=>{},value:clearLibraryFilters(),onApply:()=>{},fields:[],sort:"newest",onSort:()=>{},sortOptions:[],count:0,countResults:()=>0,onAdd:()=>{},onEdit:()=>{}};
+    const {rerender}=render(<LibraryFilterToolbar {...props} editing={false}/>);
+    expect(screen.getAllByRole("button",{name:"Add Object"})).toHaveLength(2);
+    rerender(<LibraryFilterToolbar {...props} editing/>);
+    expect(screen.getAllByRole("button",{name:"Add Object"})).toHaveLength(1);
+  });
   it("opens the existing manager from the Labels section and scoped header event",()=>{
     render(<Harness/>);fireEvent.click(screen.getByRole("button",{name:"Filter"}));
     fireEvent.click(screen.getByRole("button",{name:"Manage Labels"}));expect(screen.getByRole("heading",{name:"Manage Labels"})).toBeInTheDocument();

@@ -1,0 +1,18 @@
+@media(max-width:639px) {
+  .nova-users-page header > div { padding:8px 12px; gap:8px; }
+  .nova-users-page header button, .nova-users-page header a { min-height:44px; }
+  .nova-users-page header h1 { min-width:0; font-size:14px; }
+  .nova-users-page main { padding:16px 12px; }
+  .nova-users-page main > div:first-child button { min-height:44px; }
+  .nova-users-list { border:0; overflow:visible; }
+  .nova-users-list table, .nova-users-list tbody { display:block; width:100%; }
+  .nova-users-list thead { display:none; }
+  .nova-users-list tbody { display:grid; gap:12px; }
+  .nova-users-list tr { display:flex; flex-direction:column; gap:8px; padding:12px; min-width:0; border:1px solid hsl(var(--border)); border-radius:8px; background:hsl(var(--card)); }
+  .nova-users-list td { display:block; min-width:0; width:100%; padding:0; white-space:normal; }
+  .nova-users-list td:first-child > div:first-child { font-weight:700; white-space:normal; overflow-wrap:anywhere; }
+  .nova-users-list .nova-user-id { display:none; }
+  .nova-users-list td:nth-child(2) > div { min-width:0; width:100%; }
+  .nova-users-list .nova-user-access { width:100%; height:44px; margin-top:4px; }
+  .nova-users-list .nova-user-actions { width:100%; height:44px; gap:8px; border:1px solid hsl(var(--border)); }
+}

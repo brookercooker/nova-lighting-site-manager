@@ -721,6 +721,7 @@ export default function ImagesTab() {
 
       </div>
       <SelectionBar
+        editing={listEditing}
         count={selected.size}
         itemLabel="image"
         onClear={() => setSelected(new Set())}

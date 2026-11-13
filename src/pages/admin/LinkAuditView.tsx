@@ -334,9 +334,10 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
 
   return (
     <div className="nova-link-audit"><div className="nova-audit-layout flex flex-col gap-4 sm:flex-row sm:items-start">
-      {/* Phones: labels stack above the results in a bounded, scrollable panel; desktop keeps the sidebar unchanged. */}
-      <div className="nova-audit-labels w-full sm:contents max-sm:[&>aside]:static max-sm:[&>aside]:w-full max-sm:[&>aside]:max-h-56 max-sm:[&>aside]:overflow-y-auto max-sm:[&_button]:min-h-9 max-sm:[&_input]:h-9">
+      <details className="nova-audit-labels w-full min-w-0 sm:w-72 sm:shrink-0 [&_aside]:static [&_aside]:w-full">
+      <summary className="flex min-h-11 cursor-pointer items-center rounded-md border px-3 text-xs font-medium">Link Audit Labels</summary>
       <TagsPanel
+        bare
         scope="links"
         usageCounts={tagUsageCounts}
         activeFilters={tagFilters}
@@ -349,7 +350,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
         filteredCount={filtered.filter((r) => !r.is_deleted).length}
         onSelectAllFiltered={() => setSelectedIds(filtered.filter((r) => !r.is_deleted).map((r) => r.id))}
       />
-      </div>
+      </details>
 
 
       <div className="nova-audit-results flex-1 min-w-0 space-y-4">
@@ -370,9 +371,9 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
           <h3 id="audit-problems" className="flex items-center gap-1.5 text-sm font-medium"><AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden />Pages Needing Attention ({problems.length})</h3>
           <div className="border rounded-lg divide-y">
             {problems.map((p) => (
-              <div key={p.path} className="p-3 flex items-center gap-3 flex-wrap text-sm">
-                <span className="break-all font-mono text-xs">{p.path}</span>
-                <span className="text-muted-foreground text-xs">{PROBLEM_TEXT[p.problem] ?? p.problem}</span>
+              <div key={p.path} className="min-w-0 p-3 flex flex-col items-start gap-1 text-sm sm:flex-row sm:gap-3">
+                <span className="max-w-full break-words [overflow-wrap:anywhere] font-mono text-xs">{p.path}</span>
+                <span className="min-w-0 max-w-full break-words text-muted-foreground text-xs">{PROBLEM_TEXT[p.problem] ?? p.problem}</span>
               </div>
             ))}
           </div>
