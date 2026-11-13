@@ -182,7 +182,8 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3">
         {p.step === "pages" && (pagesReady ? <PagesStep rows={p.pageRows} data={data} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} /> : <p role="status" className="text-sm text-muted-foreground">{data.pagesStatus === "failed" ? "Changed pages couldn't be listed right now. Close and reopen to try again." : "Listing the changed pages…"}</p>)}
         {p.step === "links" && <LinksStep data={data} onShow={(l, g) => {
-          const path = g.page?.path ?? p.pageRows.find(r => r.page)?.page?.path ?? "/";
+          const path = g.page?.path ?? g.shared?.pages[0]?.path ?? p.pageRows.find(r => r.page)?.page?.path ?? "/";
+          walk.selectLink(l.key);
           walk.update(w => ({ ...w, reviewEdit: null, groupExpansion: { ...w.groupExpansion, [g.shared?.id ?? g.page?.path ?? g.label]: true }, openingLink: { key: l.key, path, name: g.page?.name ?? "Homepage", href: l.href, elementKey: l.elementKey, scope: l.scope, inventoryIndex: l.inventoryIndex, entries: data.links.status === "ok" ? linkCheckList(data.links.groups, w.linkTicked, w.linkReplaced) : [] } }));
           openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
         }} onChange={(l, g) => walk.editLink({ link: l, group: g, rows: p.pageRows, fingerprint: ownLinkPrint(l) })} />}
@@ -276,6 +277,16 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
     orderedKeys.current = { signature: sortSignature, groups: sorted.map(groupId), links: Object.fromEntries(sorted.map(g => [groupId(g), g.links.map(l => l.key)])) };
   }
   const orderedGroups = [...rawGroups].sort((a,b) => orderedKeys.current.groups.indexOf(groupId(a))-orderedKeys.current.groups.indexOf(groupId(b))).map(g => ({ ...g, links: [...g.links].sort((a,b) => (orderedKeys.current.links[groupId(g)] ?? []).indexOf(a.key)-(orderedKeys.current.links[groupId(g)] ?? []).indexOf(b.key)) }));
+  const reviewLinks = orderedGroups.flatMap(g => g.links.map(l => ({ l, g })));
+  const selectedKey = s.selectedLink?.key ?? (s.checking?.kind === "link" ? s.checking.key : null);
+  const currentIndex = Math.max(0, reviewLinks.findIndex(x => x.l.key === selectedKey));
+  const current = reviewLinks[currentIndex];
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || data.links.status !== "ok" || !current) return;
+    started.current = true;
+    if (!selectedKey && !s.reviewEdit) onShow(current.l, current.g);
+  }, [data.links.status, selectedKey, current?.l.key, s.reviewEdit]);
   const completedGroups = useRef<Set<string>>(new Set(Object.keys(s.groupCompleted).filter(k => s.groupCompleted[k])));
   const groupProgress = data.links.status === "ok" ? data.links.groups.map(g => `${g.shared?.id ?? g.page?.path ?? g.label}:${g.links.every(l => !linkNeedsCheck(l, s, data.pages))}`).join("|") : "";
   useEffect(() => {
@@ -302,8 +313,36 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   if (data.links.status !== "ok") return <p role="status" className="text-sm text-muted-foreground">Checking links…</p>;
   const { unread, partial, truncated } = data.links;
   const groups = orderedGroups;
+  const showAt = (index: number) => {
+    const next = reviewLinks[index];
+    if (next) onShow(next.l, next.g);
+  };
+  const currentApproved = !!current && s.linkTicked.includes(current.l.key);
+  const currentHandled = !!current && !linkNeedsCheck(current.l, s, data.pages);
+  const currentCanApprove = !!current && !missingInternalLink(current.l, data.pages) && s.verificationOpened[current.l.key] === ownLinkPrint(current.l);
+  const currentEmbed = preview?.frames.find(f => f.id === preview.shownId)?.url ?? preview?.frames.at(-1)?.url;
+  const sourcePath = current?.g.page?.path ?? current?.g.shared?.pages[0]?.path ?? "/";
+  const currentDestination = current && (current.l.kind === "internal" || current.l.kind === "anchor") ? sitePath(current.l.href, current.l.href, sourcePath) : null;
+  const currentTabUrl = currentDestination ? draftPageUrl(currentDestination, currentEmbed) : current && /^(https?:|mailto:|tel:)/i.test(current.l.href) ? current.l.href : null;
   return (
     <div ref={listRef} className="space-y-4">
+      {current && <div role="region" aria-label="Link Review Navigation" className="sticky top-0 z-20 -mx-3 border-b bg-background px-3 pb-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground" aria-live="polite">Link {currentIndex + 1} of {reviewLinks.length} · {current.g.label}</p>
+          <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Previous Link" title="Previous Link" disabled={currentIndex === 0} onClick={() => showAt(currentIndex - 1)}><ArrowLeft aria-hidden /></Button>
+          <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Next Link" title="Next Link" disabled={currentIndex === reviewLinks.length - 1} onClick={() => showAt(currentIndex + 1)}><ArrowRight aria-hidden /></Button>
+        </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold" title={reviewTileTitle(current.l, data.pages)}>{reviewTileTitle(current.l, data.pages)}</p>
+          {currentTabUrl && <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0"><a href={currentTabUrl} target="_blank" rel="noopener noreferrer" aria-label="Open Current Link to Verify" title="Open Current Link to Verify" onClick={e => openReviewIcon(e, currentTabUrl, () => walk.openedVerification(current.l.key, ownLinkPrint(current.l)))}><ExternalLink aria-hidden /></a></Button>}
+        </div>
+        <Button type="button" variant={currentHandled ? "outline" : "default"} className="h-11 w-full min-w-0 px-2" disabled={!currentHandled && !currentCanApprove} aria-label="Approve Current Link and Continue" onClick={() => {
+          if (!currentHandled && !currentCanApprove) return;
+          if (!currentHandled) walk.confirmLink(current.l.key, ownLinkPrint(current.l), true);
+          const next = [...reviewLinks.slice(currentIndex + 1), ...reviewLinks.slice(0, currentIndex)].find(x => linkNeedsCheck(x.l, walk.get(), data.pages));
+          if (next) onShow(next.l, next.g);
+        }}><Check aria-hidden />{currentHandled ? currentApproved ? "Approved" : "Replaced by Hand" : currentIndex === reviewLinks.length - 1 ? "Approve Link" : "Approve & Next"}</Button>
+      </div>}
       {data.inventoryUnavailable && <div className="text-xs text-muted-foreground" role="status">Link details couldn't be checked.<Button variant="link" className="h-11 px-2" onClick={data.retryInventory}>Retry</Button></div>}
       {s.linkNote && <p role="status" className="rounded-md border bg-secondary p-3 text-sm">{s.linkNote}</p>}
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}

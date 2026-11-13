@@ -10,11 +10,13 @@ vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: m.domains, isAdmin: true, pending: false, error: "", change: m.trust }), TrustedDomainList: () => null }));
 const a: ReviewLink = { key: "a", href: "https://example.com/a", originalHref: "/about", kind: "external", label: "Our Story", requestIds: [], status: null };
 beforeEach(() => {
+  vi.spyOn(window, "open").mockImplementation(() => ({ opener: null, document: document.implementation.createHTMLDocument(), close: vi.fn() }) as unknown as Window);
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   walk.reset(); m.trust.mockClear(); m.domains=[];
   m.data = { rows: [], pages: [{ name: "About", path: "/about", build_status: "ready" }], links: { status: "ok", groups: [{ label: "Homepage", page: { name: "Homepage", path: "/" }, links: [a, { ...a, key: "b", href: "/missing", kind: "internal", label: "Missing" }, { ...a, key: "c", href: "/about", kind: "internal", label: "About" }] }], unread: 0 } };
   walk.update(s => ({ ...s, open: true, step: "links", autoOpen: false }));
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const keys = () => Array.from(document.querySelectorAll<HTMLElement>("[data-walk-link]")).map(el => el.dataset.walkLink);
 it("keeps image actions distinct and never grants approval on selection", () => {
   m.data.links.groups[0].links = ["/contact", "/about"].map((href, i) => ({ ...a, key: `image-${i}`, href, kind: "internal", image: { alt: "", src: "" } }));

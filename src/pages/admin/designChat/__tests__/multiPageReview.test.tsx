@@ -8,10 +8,12 @@ import { changedLinkForClick } from "../linkCheck";
 const m = vi.hoisted(() => ({ data: null as any, show: vi.fn() }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: { publish: { open: 3 }, review: { enabled: true } }, showPreviewPath: m.show, preview: null }) }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
-afterEach(() => { cleanup(); walk.reset(); });
+afterEach(() => { cleanup(); walk.reset(); vi.restoreAllMocks(); });
 it.each([320, 375, 1280])("keeps six page-scoped approvals through navigation and Back at %spx", width => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
   walk.reset(); m.show.mockClear();
+  vi.spyOn(window, "open").mockImplementation(() => ({ opener: null, document: document.implementation.createHTMLDocument(), close: vi.fn() }) as unknown as Window);
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   const pages = [{ path: "/", name: "Homepage", count: 2 }, { path: "/draft/pricing", name: "Pricing", count: 3 }, { path: "/contact", name: "Contact", count: 1 }, { path: "/unchanged", name: "Unchanged", count: 1 }];
   const groups = pages.map(p => ({ page: p, label: p.name, links: Array.from({ length: p.count }, (_, i) => ({ key: "same-key", elementKey: `0.${i}`, scope: "page", href: p.name === "Pricing" && i === 0 ? "/brands" : "https://example.com/shared", publishedHref: p.name === "Pricing" ? null : p.name === "Unchanged" ? "https://example.com/shared" : "https://example.com/before", label: `${p.name} ${i + 1}`, kind: (p.name === "Pricing" && i === 0 ? "internal" : "external") as "internal" | "external", requestIds: [], status: null })) }));
   const links = stableReviewRows(comparedReviewLinks({ groups, unread: 0, partial: false, truncated: false }));
