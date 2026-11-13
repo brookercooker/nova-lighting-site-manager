@@ -1,10 +1,11 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { useCart } from "@/contexts/CartContext";
 import { requestObjectThumbnail } from "../objectThumbnailCapture";
 
 const capture = vi.hoisted(() => vi.fn());
 vi.mock("html2canvas", () => ({ default: capture }));
-vi.mock("@/components/objects/registry", () => ({ objectRegistry: { Example: { component: () => <h1>Original</h1> } } }));
+vi.mock("@/components/objects/registry", () => ({ objectRegistry: { Example: { component: () => { const cart=useCart(); return <h1>{cart.count ? "Wrong cart" : "Original"}</h1>; } } } }));
 vi.mock("@/components/ObjectSections", () => ({ default: () => null, parseSections: () => [] }));
 vi.mock("@/prototype/client", () => ({ supabase: {
   from: () => {

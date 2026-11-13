@@ -8,6 +8,7 @@ import ObjectSections, { parseSections } from "@/components/ObjectSections";
 import { ThumbnailContext } from "@/lib/thumbnail";
 import { BUILD_ID } from "@/lib/buildVersion";
 import { createReplay } from "@/lib/inlineEditCore";
+import { ThumbnailCartProvider } from "@/contexts/CartContext";
 
 const tasks = new Map<string, Promise<string | null>>();
 let queue = Promise.resolve();
@@ -45,7 +46,7 @@ async function capture(id: string, force: boolean): Promise<string | null> {
     let mounted = false;
     let reportReady: () => void = () => {};
     const committed = new Promise<void>(resolve => { reportReady = () => { mounted = true; resolve(); }; });
-    root.render(<CaptureBoundary><MemoryRouter><ThumbnailContext.Provider value={true}><Suspense fallback={null}>{Live ? <Live /> : <ObjectSections sections={sections} />}<CaptureReady onReady={reportReady} /></Suspense></ThumbnailContext.Provider></MemoryRouter></CaptureBoundary>);
+    root.render(<CaptureBoundary><MemoryRouter><ThumbnailCartProvider><ThumbnailContext.Provider value={true}><Suspense fallback={null}>{Live ? <Live /> : <ObjectSections sections={sections} />}<CaptureReady onReady={reportReady} /></Suspense></ThumbnailContext.Provider></ThumbnailCartProvider></MemoryRouter></CaptureBoundary>);
     await Promise.race([committed, new Promise(resolve => setTimeout(resolve, 8000))]);
     if (!mounted) return null;
     await new Promise(resolve => setTimeout(resolve, 400));

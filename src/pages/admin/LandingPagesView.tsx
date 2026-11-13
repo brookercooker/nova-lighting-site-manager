@@ -1,3 +1,7 @@
+import { SignedThumbImg } from "./signedThumb";
+import LibraryFilterToolbar from "./LibraryFilterToolbar";
+import LibraryListRow from "./LibraryListRow";
+import { type LibraryFilters } from "./libraryFilters";
 import ArchivedBadge from "./ArchivedBadge";
 import "./pageTables.css";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -8,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  ExternalLink, Search, Archive, ArchiveRestore, Trash2, MoreHorizontal, Pencil, Files, RefreshCw, Type, MessageSquare,
+  FileText, ExternalLink, Search, Archive, ArchiveRestore, Trash2, MoreHorizontal, Pencil, Files, RefreshCw, Type, MessageSquare,
 } from "lucide-react";
 import { RenameDialog } from "./RenameDialog";
 import { renameLanding } from "./renameHelpers";
@@ -17,14 +21,11 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import TagsPanel from "./TagsPanel";
-import LibraryLabels from "./LibraryLabels";
 import "./libraryLayout.css";
 import LabelsCell from "./LabelsCell";
 import SelectionBar from "./SelectionBar";
-import FilterBar, { type TimeRange } from "./FilterBar";
-import AddButtonRow from "./AddButtonRow";
+import { type TimeRange } from "./FilterBar";
 import ConfirmDialog from "./ConfirmDialog";
-import PageMiniPreview from "./PageMiniPreview";
 import ListPager, { usePager } from "./ListPager";
 import PagePreviewDialog from "./PagePreviewDialog";
 import { scheduleDeleteWithUndo } from "./deferredDelete";
@@ -116,7 +117,7 @@ const FIELDS: { v: Field; label: string }[] = [
   { v: "tags", label: "Labels" },
 ];
 
-export default function LandingPagesView() {
+export default function LandingPagesView({ navigation }: { navigation?: React.ReactNode }) {
   const designChat = useDesignChatOptional();
   const choosePage = (page: Landing) => {
     if (!designChat) return;
@@ -124,6 +125,7 @@ export default function LandingPagesView() {
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-mode-switch] [data-mode="manual"]')?.focus());
   };
   const [rows, setRows] = useState<Landing[]>([]);
+  const [listEditing, setListEditing] = useState(false);
   const [q, setQ] = useState("");
   const [searchField, setSearchField] = useState<Field>("all");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
@@ -217,35 +219,41 @@ export default function LandingPagesView() {
 
   const archivedCount = useMemo(() => rows.filter((r) => r.archived_at).length, [rows]);
 
-  const filtered = useMemo(() => {
+  const filterValue: LibraryFilters = { searchField, labels: tagFilters, timeRange, dateFrom, dateTo, archived: showArchived, extra: statusFilter };
+  const applyFilters = (f: LibraryFilters) => {
+    setSearchField(f.searchField as Field);
+    setTagFilters(f.labels); setTimeRange(f.timeRange as TimeRange); setDateFrom(f.dateFrom); setDateTo(f.dateTo); setShowArchived(f.archived);
+    setStatusFilter(f.extra as typeof statusFilter);
+  };
+  const filterRows = (f: LibraryFilters) => {
     const needle = q.trim().toLowerCase();
     const list = rows
       .filter((r) => {
         if (hiddenIds.has(r.id)) return false;
         const isArchived = !!r.archived_at;
-        if (showArchived ? !isArchived : isArchived) return false;
-        if (tagFilters.length && !tagFilters.every((t) => (r.tags ?? []).includes(t))) return false;
-        if (statusFilter !== "all") {
+        if (f.archived ? !isArchived : isArchived) return false;
+        if (f.labels.length && !f.labels.every((t) => (r.tags ?? []).includes(t))) return false;
+        if (f.extra !== "all") {
           const work = landingWork(r);
           const sched = scheduleStatus(work, r.start_at, r.end_at);
           const wl = workLabel(work);         // "Draft" | "Ready"
           const sl = scheduleLabel(sched);    // "Not live" | "Scheduled" | "Live" | "Expired"
-          if (statusFilter !== wl && statusFilter !== sl) return false;
+          if (f.extra !== wl && f.extra !== sl) return false;
         }
-        if (dateFrom && new Date(r.updated_at) < new Date(dateFrom)) return false;
-        if (dateTo && new Date(r.updated_at) > new Date(dateTo + "T23:59:59")) return false;
+        if (f.dateFrom && new Date(r.updated_at) < new Date(f.dateFrom)) return false;
+        if (f.dateTo && new Date(r.updated_at) > new Date(f.dateTo + "T23:59:59")) return false;
         const rangeMs =
-          timeRange === "hour" ? 3600e3 :
-          timeRange === "day" ? 24 * 3600e3 :
-          timeRange === "week" ? 7 * 24 * 3600e3 : 0;
+          f.timeRange === "hour" ? 3600e3 :
+          f.timeRange === "day" ? 24 * 3600e3 :
+          f.timeRange === "week" ? 7 * 24 * 3600e3 : 0;
         if (rangeMs && (Date.now() - new Date(r.updated_at).getTime()) > rangeMs) return false;
         if (needle) {
           const parts: string[] =
-            searchField === "name" ? [r.name] :
-            searchField === "id" ? [r.slug_id ?? ""] :
-            searchField === "path" ? [r.path] :
-            searchField === "description" ? [r.description ?? ""] :
-            searchField === "tags" ? (r.tags ?? []) :
+            f.searchField === "name" ? [r.name] :
+            f.searchField === "id" ? [r.slug_id ?? ""] :
+            f.searchField === "path" ? [r.path] :
+            f.searchField === "description" ? [r.description ?? ""] :
+            f.searchField === "tags" ? (r.tags ?? []) :
             [r.name, r.slug_id ?? "", r.path, r.description ?? "", ...(r.tags ?? [])];
           const hay = parts.join(" ").toLowerCase();
           if (!hay.includes(needle)) return false;
@@ -258,7 +266,8 @@ export default function LandingPagesView() {
       const da = new Date(a.updated_at).getTime(), db = new Date(b.updated_at).getTime();
       return sort === "oldest" ? da - db : db - da;
     });
-  }, [rows, q, searchField, tagFilters, statusFilter, sort, dateFrom, dateTo, timeRange, showArchived, hiddenIds]);
+  };
+  const filtered = useMemo(() => filterRows(filterValue), [rows, q, searchField, tagFilters, statusFilter, sort, dateFrom, dateTo, timeRange, showArchived, hiddenIds]);
   const pager = usePager(filtered.length);
 
 
@@ -393,7 +402,10 @@ export default function LandingPagesView() {
 
   return (
     <div className="nova-library-area"><div className="nova-library-layout flex gap-4 items-start">
-      <LibraryLabels>
+
+
+      <div className="nova-library-content flex-1 min-w-0 space-y-3">
+        <LibraryFilterToolbar navigation={navigation} scope="landing" noun="Landing Pages" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Status" extraOptions={[{v:"all",label:"All Statuses"},{v:"Ready",label:"Ready"},{v:"Draft",label:"Draft"},{v:"Scheduled",label:"Scheduled"},{v:"Live",label:"Live"},{v:"Expired",label:"Expired"},{v:"Not live",label:"Not Live"}]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={
       <TagsPanel
         scope="landing"
         usageCounts={usageCounts}
@@ -407,67 +419,7 @@ export default function LandingPagesView() {
         filteredCount={filtered.length}
         onSelectAllFiltered={() => setSelected(new Set(filtered.map((r) => r.id)))}
       />
-      </LibraryLabels>
-
-      <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <div className="flex items-stretch gap-0 rounded-lg border-2 border-border focus-within:border-primary bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center pl-4 pr-2 text-muted-foreground">
-            <Search className="w-5 h-5" />
-          </div>
-          <Input
-            placeholder="Search landing pages…"
-            aria-label="Search Landing Pages"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="flex-1 border-0 rounded-none h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-2"
-          />
-          <select
-            value={searchField}
-            onChange={(e) => setSearchField(e.target.value as Field)}
-            className="text-sm px-3 border-l bg-muted/40 h-14"
-            title="Search Field"
-            aria-label="Search Field"
-          >
-            {FIELDS.map((f) => <option key={f.v} value={f.v}>in {f.label}</option>)}
-          </select>
-        </div>
-
-        <FilterBar
-          sort={sort}
-          onSortChange={(v) => setSort(v as any)}
-          sortOptions={[
-            { v: "newest", label: "Recently Modified" },
-            { v: "oldest", label: "Oldest Modified" },
-            { v: "name", label: "Name (A–Z)" },
-            { v: "name_desc", label: "Name (Z–A)" },
-          ]}
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onDateFromChange={setDateFrom}
-          onDateToChange={setDateTo}
-          dateFieldLabel="Modified"
-          status={statusFilter}
-          onStatusChange={(v) => setStatusFilter(v as any)}
-          statusOptions={[
-            { v: "all", label: "All Statuses" },
-            { v: "Draft", label: "Draft" },
-            { v: "Scheduled", label: "Scheduled" },
-            { v: "Live", label: "Live" },
-            { v: "Expired", label: "Expired" },
-          ]}
-          showArchived={showArchived}
-          onShowArchivedChange={(v) => { setShowArchived(v); setSelected(new Set()); }}
-          archivedCount={archivedCount}
-        />
-
-        <div className="flex items-center gap-3 py-2">
-          <AddButtonRow subtle text="Add new page" label="Landing Page" onClick={() => setCreating(true)} />
-        </div>
-
-
-
+      } />
         <SelectionBar
           count={selected.size}
           itemLabel="landing page"
@@ -488,156 +440,7 @@ export default function LandingPagesView() {
         </SelectionBar>
 
 
-        <div className="manager-page-table-area w-full min-w-0">
-          <table className="manager-page-table manager-landing-table text-sm">
-            <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="px-3 py-2"></th>
-
-                <th className="px-3 py-2 text-left">Preview</th>
-                <th className="px-3 py-2 text-left">Name &amp; Path</th>
-                <th className="px-3 py-2 text-center">Status</th>
-                <th className="px-3 py-2 text-left">Schedule</th>
-                <th className="px-3 py-2 text-center">Copy</th>
-                <th className="px-3 py-2 text-left">Labels</th>
-                <th className="px-3 py-2 text-left">Last Mod</th>
-                <th className="px-2 py-2 text-center"><span className="sr-only">Change in Chat</span></th>
-                <th className="px-2 py-2 text-center"><span className="sr-only">Open</span></th>
-                <th className="px-2 py-2 text-center"><span className="sr-only">More</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr><td colSpan={11} className="px-3 py-10 text-center text-muted-foreground">
-                  {timeRange === "hour" ? "No landing pages modified in the last hour."
-                  : timeRange === "day" ? "No landing pages modified in the last 24 hours."
-                  : timeRange === "week" ? "No landing pages modified in the last 7 days."
-                  : timeRange === "custom" && (dateFrom || dateTo) ? "No landing pages match the selected date range."
-                  : showArchived ? "No archived landing pages."
-                  : <>No landing pages match the current filters. Click <strong>Add New Landing Page</strong> to create one.</>}
-                </td></tr>
-              )}
-              {filtered.slice(pager.start, pager.end).map((r, i) => { const idx = pager.start + i;
-                const work = landingWork(r);
-                const sched = scheduleStatus(work, r.start_at, r.end_at);
-                const slug = r.path.replace(/^\/landing\//, "");
-                return (
-                  <tr key={r.id} onClick={(event) => { if (!(event.target instanceof Element) || event.target.closest('button,a,input,select,textarea,[role="button"]')) return; choosePage(r); }} className={`border-b align-top hover:bg-muted/40 ${selected.has(r.id) ? "bg-primary/5" : ""}`}>
-                    <td className="px-1 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(r.id)}
-                        onChange={(e) => toggleSelect(r.id, idx, (e.nativeEvent as MouseEvent).shiftKey)}
-                        aria-label={`Select ${r.name}`}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setPreview(r)}
-                        className="block rounded hover:ring-2 hover:ring-primary/40 focus:outline-none focus:ring-2 focus:ring-primary"
-                        title="Open Larger Preview"
-                      >
-                        <PageMiniPreview name={r.name} path={r.path} content={(r as any).content} />
-                      </button>
-                    </td>
-                    <td className="px-3 py-3 min-w-0" title={r.name}>
-                      <div className="flex flex-col gap-0.5 min-w-0 items-start">
-                        <Button variant="link" onClick={() => choosePage(r)}
-                          className="h-auto p-0 text-sm truncate max-w-full block text-left"
-                          title={r.name}
-                        >
-                          {r.name}
-                        </Button>
-                        <span className="font-mono text-[10px] text-muted-foreground truncate max-w-full" title={r.path}>
-                          {r.path}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-2 py-3">
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${workBadgeClass(work)}`}>
-                          {workLabel(work)}
-                        </span>
-                        <ArchivedBadge archived={!!r.archived_at} />
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${scheduleBadgeClass(sched)}`}>
-                          {scheduleLabel(sched)}
-                        </span>
-                        {!r.archived_at && (
-                          <LandingStatusPopover
-                            value={{ work, startAt: r.start_at, endAt: r.end_at }}
-                            onSave={(next) => updateLandingStatus(r.id, next)}
-                          />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-2 py-3 text-[11px] text-muted-foreground truncate" title={fmtWindow(r)}>{fmtWindow(r)}</td>
-                    <td className="px-2 py-3">
-                      <div className="flex flex-col items-center gap-1.5">
-                        <CopyRefButton
-                          reference={buildLandingReference(r.name, slug)}
-                          id={r.slug_id}
-                          label="Copy Reference"
-                        />
-                        {work === "ready" && (() => {
-                          const publicUrl = `https://${PUBLIC_LANDING_HOST}/landing/${slug}`;
-                          let value = publicUrl;
-                          let title = publicUrl;
-                          if (sched === "scheduled" && r.start_at) {
-                            value = `This page will go live on ${fmtDateTimeFull(r.start_at)}.`;
-                            title = value;
-                          } else if (sched === "expired" && r.end_at) {
-                            value = `This page expired on ${fmtDateTimeFull(r.end_at)}.`;
-                            title = value;
-                          } else if (sched === "not-live") {
-                            value = `This page is Ready but has no scheduled go-live date.`;
-                            title = value;
-                          }
-                          return <CopyUrlButton value={value} title={title} toastLabel={sched === "live" ? "URL" : "Message"} />;
-                        })()}
-                      </div>
-                    </td>
-
-                    <td className="px-2 py-3 min-w-0">
-                      <LabelsCell scope="landing" value={r.tags ?? []} onChange={(v) => updateTags(r.id, v)} itemName={r.name} />
-                    </td>
-                    <td className="px-2 py-3 text-xs text-muted-foreground whitespace-nowrap leading-tight" title={fmtDateTimeFull(r.updated_at)}>
-                      {fmtDateTime(r.updated_at) || "—"}
-                    </td>
-                    <td className="px-1 py-3 text-center">
-                      {designChat && (() => {
-                        const chosen = designChat.workingPage?.path === (r.path.startsWith("/") ? r.path : `/${r.path}`);
-                        return (
-                          <button onClick={() => choosePage(r)}
-                            aria-label={`Change It in Chat: ${r.name}`}
-                            aria-pressed={chosen}
-                            title="Change It in Chat"
-                            className={`p-1.5 rounded border inline-flex ${chosen ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}>
-                            <MessageSquare className="w-4 h-4" />
-                          </button>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-1 py-3 text-center">
-                      <button className="p-1.5 rounded border hover:bg-muted inline-flex"
-                        aria-label="Open in New Tab"
-                        title="Open in New Tab"
-                        onClick={() => window.open(r.path, "_blank", "noopener,noreferrer")}>
-                        <ExternalLink className="w-4 h-4" />
-                      </button>
-                    </td>
-                    <td className="px-1 py-3 text-center">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            className="p-1.5 rounded border hover:bg-muted inline-flex"
-                            aria-label="More Actions"
-                            title="More Actions"
-                          >
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56" onClick={(event) => event.stopPropagation()}>
+        <div className="min-w-0">{filtered.slice(pager.start, pager.end).map((r, idx) => <LibraryListRow key={r.id} name={r.name} date={new Date(r.updated_at).toLocaleDateString()} thumbnail={<SignedThumbImg url={r.thumbnail_url} alt={r.name} className="h-14 w-14 object-cover" fallback={<FileText className="h-5 w-5 text-muted-foreground" />} />} badges={<><span>{workLabel(landingWork(r))}</span><span>{scheduleLabel(scheduleStatus(landingWork(r),r.start_at,r.end_at))}</span><span>{r.tags.length} Labels</span></>} onOpen={() => setPreview(r)} onTitle={() => choosePage(r)} selection={listEditing ? <input type="checkbox" checked={selected.has(r.id)} aria-label={`Select ${r.name}`} onChange={() => toggleSelect(r.id, idx, false)} /> : undefined} menu={<><DropdownMenuItem onSelect={() => choosePage(r)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => { const work=landingWork(r), sched=scheduleStatus(work,r.start_at,r.end_at); const value=sched === "scheduled" && r.start_at ? `This page will go live on ${fmtDateTimeFull(r.start_at)}.` : sched === "expired" && r.end_at ? `This page expired on ${fmtDateTimeFull(r.end_at)}.` : sched === "not-live" ? "This page is Ready but has no scheduled go-live date." : `https://${PUBLIC_LANDING_HOST}${r.path}`; void navigator.clipboard.writeText(value).then(()=>toast.success("URL copied"),()=>toast.error("Copy failed")); }}>Copy URL</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(r.path, "_blank", "noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => { void navigator.clipboard.writeText(buildLandingReference(r.name, r.path.replace(/^\/landing\//, ""))).then(() => toast.success("Reference copied"), () => toast.error("Copy failed")); } }>Copy Reference</DropdownMenuItem><LabelsCell scope="landing" value={r.tags} onChange={next => updateTags(r.id,next)} itemName={r.name} />
                           <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                             {r.name}
                           </DropdownMenuLabel>
@@ -673,19 +476,8 @@ export default function LandingPagesView() {
                           >
                             <Trash2 className="w-4 h-4 mr-2" /> Delete
                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-      <ListPager {...pager} total={filtered.length} />
-        </div>
-      </div>
-      </div>
-
+                        </>} />)}</div>
+      </div></div>
       <CreateLandingPageDialog open={creating} onOpenChange={setCreating} onCreated={load} />
       <EditLandingDialog row={editing} onClose={() => setEditing(null)} onSaved={load} />
       <RenameDialog

@@ -1,3 +1,7 @@
+import { SignedThumbImg } from "./signedThumb";
+import LibraryFilterToolbar from "./LibraryFilterToolbar";
+import LibraryListRow from "./LibraryListRow";
+import { type LibraryFilters } from "./libraryFilters";
 import "./pageTables.css";
 import ArchivedBadge from "./ArchivedBadge";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -7,10 +11,8 @@ import { supabase } from "@/prototype/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import PageMiniPreview from "./PageMiniPreview";
 import ListPager, { usePager } from "./ListPager";
 import TagsPanel from "./TagsPanel";
-import LibraryLabels from "./LibraryLabels";
 import InlineEdit from "./InlineEdit";
 import ConfirmDialog from "./ConfirmDialog";
 import { scheduleDeleteWithUndo } from "./deferredDelete";
@@ -26,8 +28,7 @@ import LinkAuditView from "./LinkAuditView";
 import { getPageType, type PageType } from "./routeTable";
 import LabelsCell from "./LabelsCell";
 import SelectionBar from "./SelectionBar";
-import FilterBar, { type TimeRange } from "./FilterBar";
-import AddButtonRow from "./AddButtonRow";
+import { type TimeRange } from "./FilterBar";
 import LandingPagesView from "./LandingPagesView";
 import PagePreviewDialog from "./PagePreviewDialog";
 import { useAutoCaptureThumbnails, regenerateThumbnail } from "./useThumbnailCapture";
@@ -93,6 +94,7 @@ export default function PagesTab() {
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-mode-switch] [data-mode="manual"]')?.focus());
   };
   const [pages, setPages] = useState<Page[]>([]);
+  const [listEditing, setListEditing] = useState(false);
   const [q, setQ] = useState("");
   const [searchField, setSearchField] = useState<Field>("all");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
@@ -304,11 +306,11 @@ export default function PagesTab() {
     load();
   };
 
-  const matches = (p: Page, needle: string) => {
+  const matches = (p: Page, needle: string, field: string = searchField) => {
     const n = needle.trim().toLowerCase();
     if (!n) return true;
     const test = (v: string) => (v ?? "").toLowerCase().includes(n);
-    switch (searchField) {
+    switch (field) {
       case "name": return test(p.name);
       case "id": return test(p.slug_id);
       case "path": return test(p.path);
@@ -318,30 +320,36 @@ export default function PagesTab() {
     }
   };
 
-  const filtered = useMemo(() => {
+  const filterValue: LibraryFilters = { searchField, labels: tagFilters, timeRange, dateFrom, dateTo, archived: showArchived, extra: statusFilter };
+  const applyFilters = (f: LibraryFilters) => {
+    setSearchField(f.searchField as Field);
+    setTagFilters(f.labels); setTimeRange(f.timeRange as TimeRange); setDateFrom(f.dateFrom); setDateTo(f.dateTo); setShowArchived(f.archived);
+    setStatusFilter(f.extra as typeof statusFilter);
+  };
+  const filterRows = (f: LibraryFilters) => {
     let list = pages.filter((p) => {
       if (hiddenIds.has(p.id)) return false;
       if (reservedPrefixFor(p.path)) return false;
       if (((p as any).page_type ?? "static") === "landing") return false;
       if (getPageType(p.path, p.name) !== "Static page") return false;
       const isArchived = !!p.archived_at;
-      if (showArchived) {
+      if (f.archived) {
         if (!isArchived) return false;
       } else {
         if (isArchived) return false;
-        if (statusFilter === "ready" && p.build_status !== "ready") return false;
-        if (statusFilter === "draft" && p.build_status !== "draft") return false;
+        if (f.extra === "ready" && p.build_status !== "ready") return false;
+        if (f.extra === "draft" && p.build_status !== "draft") return false;
       }
-      if (tagFilters.length && !tagFilters.every((t) => matchesLabelFilter(p.tags, t))) return false;
+      if (f.labels.length && !f.labels.every((t) => matchesLabelFilter(p.tags, t))) return false;
       if (pageTypeFilter !== "all" && getPageType(p.path, p.name) !== pageTypeFilter) return false;
-      if (dateFrom && new Date(p.updated_at) < new Date(dateFrom)) return false;
-      if (dateTo && new Date(p.updated_at) > new Date(dateTo + "T23:59:59")) return false;
+      if (f.dateFrom && new Date(p.updated_at) < new Date(f.dateFrom)) return false;
+      if (f.dateTo && new Date(p.updated_at) > new Date(f.dateTo + "T23:59:59")) return false;
       const rangeMs =
-        timeRange === "hour" ? 3600e3 :
-        timeRange === "day" ? 24 * 3600e3 :
-        timeRange === "week" ? 7 * 24 * 3600e3 : 0;
+        f.timeRange === "hour" ? 3600e3 :
+        f.timeRange === "day" ? 24 * 3600e3 :
+        f.timeRange === "week" ? 7 * 24 * 3600e3 : 0;
       if (rangeMs && (Date.now() - new Date(p.updated_at).getTime()) > rangeMs) return false;
-      if (q && !matches(p, q)) return false;
+      if (q && !matches(p, q, f.searchField)) return false;
       return true;
     });
     list = [...list].sort((a, b) => {
@@ -356,7 +364,8 @@ export default function PagesTab() {
       return sort === "oldest" ? da - db : db - da;
     });
     return list;
-  }, [pages, q, searchField, tagFilters, pageTypeFilter, statusFilter, dateFrom, dateTo, timeRange, sort, showArchived, hiddenIds]);
+  };
+  const filtered = useMemo(() => filterRows(filterValue), [pages, q, searchField, tagFilters, pageTypeFilter, statusFilter, dateFrom, dateTo, timeRange, sort, showArchived, hiddenIds]);
 
 
   const archivedCount = useMemo(() => pages.filter((p) => p.archived_at).length, [pages]);
@@ -383,28 +392,19 @@ export default function PagesTab() {
   const pager = usePager(filtered.length);
   return (
     <div className="space-y-4">
-      <div className="nova-library-tabs inline-flex rounded-lg border p-1 bg-muted/30">
-        <Button variant="ghost" onClick={() => setView("static")}
-          className={`inline-flex h-auto min-h-11 sm:min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="static"?"bg-background shadow-sm":"text-muted-foreground"}`}>
-          <FileText className="w-3.5 h-3.5" /> Static Pages
-        </Button>
-        <Button variant="ghost" onClick={() => setView("landing")}
-          className={`inline-flex h-auto min-h-11 sm:min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="landing"?"bg-background shadow-sm":"text-muted-foreground"}`}>
-          <Megaphone className="w-3.5 h-3.5" /> Landing Pages
-        </Button>
-        <Button variant="ghost" onClick={() => setView("audit")}
-          className={`inline-flex h-auto min-h-11 sm:min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium ${view==="audit"?"bg-background shadow-sm":"text-muted-foreground"}`}>
-          <ListChecks className="w-3.5 h-3.5" /> Link Audit
-        </Button>
-      </div>
+      {view === "audit" && <select aria-label="Pages View" value={view} onChange={e => setView(e.target.value as typeof view)} className="h-11 max-w-full rounded border bg-background px-2"><option value="static">Static Pages</option><option value="landing">Landing Pages</option><option value="audit">Link Audit</option></select>}
 
     {view === "audit" ? (
       <LinkAuditView pages={pages as any} />
     ) : view === "landing" ? (
-      <LandingPagesView />
+      <LandingPagesView navigation={<select aria-label="Pages View" value={view} onChange={e => setView(e.target.value as typeof view)} className="h-10 max-w-[120px] rounded border bg-background px-1 text-xs"><option value="static">Static Pages</option><option value="landing">Landing Pages</option><option value="audit">Link Audit</option></select>} />
     ) : (
     <div className="nova-library-layout flex gap-4 items-start">
-      <LibraryLabels>
+
+
+
+      <div className="nova-library-content flex-1 min-w-0 space-y-3">
+        <LibraryFilterToolbar navigation={<select aria-label="Pages View" value={view} onChange={e => setView(e.target.value as typeof view)} className="h-10 max-w-[110px] rounded border bg-background px-1 text-xs"><option value="static">Static Pages</option><option value="landing">Landing Pages</option><option value="audit">Link Audit</option></select>} scope="static" noun="Pages" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Status" extraOptions={[{ v: "all", label: "All Statuses" }, { v: "ready", label: "Ready" }, { v: "draft", label: "Draft" }]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={
       <TagsPanel
         scope="static"
         usageCounts={usageCounts}
@@ -418,66 +418,7 @@ export default function PagesTab() {
         filteredCount={filtered.length}
         onSelectAllFiltered={() => setSelected(new Set(filtered.map((p) => p.id)))}
       />
-      </LibraryLabels>
-
-
-      <div className="nova-library-content flex-1 min-w-0 space-y-3">
-      <div className="nova-library-search flex items-stretch gap-0 rounded-lg border-2 border-border focus-within:border-primary bg-background shadow-sm overflow-hidden">
-        <div className="flex items-center pl-4 pr-2 text-muted-foreground">
-          <Search className="w-5 h-5" />
-        </div>
-        <Input
-          placeholder="Search pages…"
-          aria-label="Search Pages"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="flex-1 border-0 rounded-none h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-2"
-        />
-        <select
-          value={searchField}
-          onChange={(e) => setSearchField(e.target.value as Field)}
-          className="text-sm px-3 border-l bg-muted/40 h-14"
-          title="Search Field"
-          aria-label="Search Field"
-        >
-          {FIELDS.map((f) => <option key={f.v} value={f.v}>in {f.label}</option>)}
-        </select>
-      </div>
-
-      <FilterBar
-        sort={sort}
-        onSortChange={(v) => setSort(v as any)}
-        sortOptions={[
-          { v: "newest", label: "Recently Modified" },
-          { v: "oldest", label: "Oldest Modified" },
-          { v: "name", label: "Name (A–Z)" },
-          { v: "name_desc", label: "Name (Z–A)" },
-        ]}
-        timeRange={timeRange}
-        onTimeRangeChange={setTimeRange}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onDateFromChange={setDateFrom}
-        onDateToChange={setDateTo}
-        dateFieldLabel="Modified"
-        status={statusFilter}
-        onStatusChange={(v) => setStatusFilter(v as any)}
-        statusOptions={[
-          { v: "all", label: "All Statuses" },
-          { v: "ready", label: "Ready" },
-          { v: "draft", label: "Draft" },
-        ]}
-        showArchived={showArchived}
-        onShowArchivedChange={setShowArchived}
-        archivedCount={archivedCount}
-      />
-
-      <div className="flex items-center gap-3 py-2">
-        <AddButtonRow subtle text="Add new page" label="Page" onClick={() => setCreating(true)} />
-      </div>
-
-
-
+      } />
       <SelectionBar
         count={selected.size}
         itemLabel="page"
@@ -497,157 +438,9 @@ export default function PagesTab() {
         </Button>
       </SelectionBar>
 
-      
 
-      <div className="manager-page-table-area w-full min-w-0">
-      <table className="manager-page-table manager-static-table text-sm">
 
-        <thead>
-          <tr className="border-b bg-muted/30">
-            <th className="px-3 py-3 text-left"></th>
-            <th className="px-3 py-3 text-left truncate">Preview</th>
-            <th className="px-3 py-3 text-left truncate">Name &amp; Path</th>
-            <th className="px-3 py-3 text-center truncate">Status</th>
-            <th className="px-3 py-3 text-center truncate">Copy</th>
-            <th className="px-3 py-3 text-left truncate">Labels</th>
-            <th className="px-3 py-3 text-left truncate">Last Mod</th>
-            <th className="px-2 py-3 text-center truncate"><span className="sr-only">Chat</span></th>
-            <th className="px-2 py-3 text-center truncate"><span className="sr-only">Open</span></th>
-            <th className="px-2 py-3 text-center truncate"><span className="sr-only">More</span></th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {filtered.length === 0 && (
-            <tr>
-              <td colSpan={10} className="px-3 py-10 text-center text-muted-foreground text-sm">
-                {timeRange === "hour" ? "No pages modified in the last hour."
-                : timeRange === "day" ? "No pages modified in the last 24 hours."
-                : timeRange === "week" ? "No pages modified in the last 7 days."
-                : timeRange === "custom" && (dateFrom || dateTo) ? "No pages match the selected date range."
-                : "No pages match the current filters."}
-              </td>
-            </tr>
-          )}
-          {filtered.slice(pager.start, pager.end).map((p, i) => { const idx = pager.start + i;
-            const on = selected.has(p.id);
-            const pageType = getPageType(p.path, p.name);
-            return (
-              <tr
-                key={p.id}
-                onClick={(event) => { if (!(event.target instanceof Element) || event.target.closest('button,a,input,select,textarea,[role="button"]')) return; choosePage(p); }}
-                draggable
-                onDragStart={(e) => onRowDragStart(e, p.id)}
-                className={`border-b align-top ${on ? "bg-primary/10" : "hover:bg-muted/40"}`}
-              >
-                <td className="px-1 py-3">
-                  <input type="checkbox" checked={on}
-                    aria-label={`Select ${p.name}`}
-                    onChange={(e) =>
-                    toggleSelect(p.id, idx, (e.nativeEvent as MouseEvent).shiftKey)
-                  } />
-                </td>
-                <td className="px-3 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setPreview(p)}
-                    className="block rounded hover:ring-2 hover:ring-primary/40 focus:outline-none focus:ring-2 focus:ring-primary"
-                    title="Open Larger Preview"
-                  >
-                    <PageMiniPreview name={p.name} path={p.path} content={(p as any).content} />
-                  </button>
-                </td>
-                <td className="px-3 py-3 min-w-0" title={p.name}>
-                  <div className="flex flex-col gap-0.5 min-w-0 items-start">
-                    <Button variant="link" onClick={() => choosePage(p)}
-                      className="h-auto p-0 text-sm truncate max-w-full block text-left"
-                      title={p.name}
-                    >
-                      {p.name}
-                    </Button>
-                    <span className="font-mono text-[10px] text-muted-foreground truncate max-w-full" title={p.path}>
-                      {p.path}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-2 py-3">
-                  <div className="flex flex-col items-center">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
-                        p.build_status === "ready"
-                          ? "bg-emerald-500/15 text-emerald-700 border-emerald-500/40"
-                          : "bg-amber-400/20 text-amber-800 border-amber-500/40"
-                      }`}
-                      title={p.build_status === "ready" ? "Ready" : "Draft"}
-                    >
-                      {p.build_status === "ready" ? "Ready" : "Draft"}
-                    </span>
-                    <ArchivedBadge archived={!!p.archived_at} />
-                    <WorkStatusPopover
-                      value={p.build_status === "ready" ? "ready" : "draft"}
-                      onSave={(next) => setBuildStatus(p.id, next)}
-                      disabled={!!p.archived_at}
-                    />
-                  </div>
-                </td>
-                <td className="px-2 py-3">
-                  <div className="flex justify-center">
-                    <CopyRefButton
-                      reference={buildPageRef({ id: p.slug_id, name: p.name, path: p.path })}
-                      id={p.slug_id}
-                      label="Copy Reference"
-                    />
-                  </div>
-                </td>
-                <td className="px-2 py-3 min-w-0 overflow-hidden">
-                  <LabelsCell scope="static"
-                    value={p.tags ?? []}
-                    onChange={(next) => updateTags(p.id, next)}
-                    itemName={p.name}
-                  />
-                </td>
-                <td className="px-2 py-3 text-xs text-muted-foreground whitespace-nowrap leading-tight" title={fmtDateTimeFull(p.updated_at)}>
-                  {fmtDateTime(p.updated_at) || "—"}
-                </td>
-                <td className="px-1 py-3 text-center">
-                  {designChat && (() => {
-                    const pagePath = p.path.startsWith("/") ? p.path : `/${p.path}`;
-                    const chosen = designChat.workingPage?.path === pagePath;
-                    return (
-                      <button
-                        onClick={() => choosePage(p)}
-                        aria-label={`Change It in Chat: ${p.name}`}
-                        aria-pressed={chosen}
-                        title="Change It in Chat"
-                        className={`p-1.5 rounded border inline-flex ${chosen ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                      </button>
-                    );
-                  })()}
-                </td>
-                <td className="px-1 py-3 text-center">
-                  <button
-                    onClick={() => openLive(p.path)}
-                    aria-label="Open in New Tab"
-                    title="Open in New Tab"
-                    className="p-1.5 rounded border hover:bg-muted inline-flex"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </button>
-                </td>
-                <td className="px-1 py-3 text-center">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        aria-label="More Actions"
-                        title="More Actions"
-                        className="p-1.5 rounded border hover:bg-muted inline-flex"
-                      >
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-80" onClick={(event) => event.stopPropagation()}>
+        <div className="min-w-0">{filtered.slice(pager.start, pager.end).map((p, idx) => <LibraryListRow key={p.id} name={p.name} date={new Date(p.updated_at).toLocaleDateString()} thumbnail={<SignedThumbImg url={p.thumbnail_url} alt={p.name} className="h-14 w-14 object-cover" fallback={<FileText className="h-5 w-5 text-muted-foreground" />} />} badges={<><span>{p.archived_at ? "Archived" : p.build_status === "ready" ? "Ready" : "Draft"}</span><span>{p.tags.length} Labels</span></>} onOpen={() => setPreview(p)} onTitle={() => choosePage(p)} selection={listEditing ? <input type="checkbox" checked={selected.has(p.id)} aria-label={`Select ${p.name}`} onChange={() => toggleSelect(p.id, idx, false)} /> : undefined} menu={<><DropdownMenuItem onSelect={() => choosePage(p)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(p.path, "_blank", "noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => { void navigator.clipboard.writeText(buildPageRef({id:p.slug_id,name:p.name,path:p.path})).then(() => toast.success("Reference copied"), () => toast.error("Copy failed")); } }>Copy Reference</DropdownMenuItem><DropdownMenuSeparator /><WorkStatusPopover value={p.build_status} onSave={next => setBuildStatus(p.id,next)} disabled={!!p.archived_at} /><LabelsCell scope="static" value={p.tags} onChange={next => updateTags(p.id,next)} itemName={p.name} />
                       <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         Description
                       </DropdownMenuLabel>
@@ -679,19 +472,7 @@ export default function PagesTab() {
                       >
                         <Trash2 className="w-4 h-4 mr-2" /> Delete
                       </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <ListPager {...pager} total={filtered.length} />
-      </div>
-
-
-
+                    </>} />)}</div>
       <PagePreviewDialog
         page={preview ? {
           kind: "page", id: preview.id, name: preview.name, path: preview.path,

@@ -1,3 +1,6 @@
+import LibraryFilterToolbar from "./LibraryFilterToolbar";
+import LibraryListRow from "./LibraryListRow";
+import { type LibraryFilters } from "./libraryFilters";
 import { Suspense, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { matchesLabelFilter } from "./labelPath";
 import { useNavigate } from "react-router-dom";
@@ -19,15 +22,14 @@ import { renameObject } from "./renameHelpers";
 import { toast } from "sonner";
 import { CopyRefButton, buildObjectRef } from "./copyReference";
 import SelectionBar from "./SelectionBar";
-import AddButtonRow from "./AddButtonRow";
-import FilterBar, { type TimeRange } from "./FilterBar";
+import { type TimeRange } from "./FilterBar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   useObjectRegistry,
   useArchivedObjects,
   useArchiveObject,
   useRestoreObject,
-  
+
   useDeleteObjectPermanent,
   type ObjectRegistryRow,
 } from "./useObjectRegistry";
@@ -35,7 +37,6 @@ import { objectRegistry } from "@/components/objects/registry";
 import CreateObjectDialog from "./CreateObjectDialog";
 import ConfirmDialog from "./ConfirmDialog";
 import TagsPanel from "./TagsPanel";
-import LibraryLabels from "./LibraryLabels";
 import ObjectThumbnail from "./ObjectThumbnail";
 import { requestObjectThumbnail } from "./objectThumbnailCapture";
 import LabelsCell from "./LabelsCell";
@@ -95,9 +96,11 @@ export default function ObjectsTab() {
   const { data: objects = [], isLoading } = useObjectRegistry();
   const { data: archived = [] } = useArchivedObjects();
   const archive = useArchiveObject();
-  
+
   const deletePermanent = useDeleteObjectPermanent();
   const restore = useRestoreObject();
+  const [usedFilter, setUsedFilter] = useState("all");
+  const [listEditing, setListEditing] = useState(false);
   const [q, setQ] = useState("");
   const deferredQ = useDeferredValue(q);
   const [searchField, setSearchField] = useState<Field>("all");
@@ -212,11 +215,11 @@ export default function ObjectsTab() {
   const byName = (a: ObjectRegistryRow, b: ObjectRegistryRow) =>
     a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
 
-  const matches = (o: ObjectRegistryRow, needle: string) => {
+  const matches = (o: ObjectRegistryRow, needle: string, field: string = searchField) => {
     const n = needle.toLowerCase();
     const test = (v: string | null | undefined) => (v ?? "").toLowerCase().includes(n);
     const path = `/objects/${o.slug_id ?? ""}`;
-    switch (searchField) {
+    switch (field) {
       case "name": return test(o.name);
       case "id": return test(o.slug_id);
       case "path": return test(path);
@@ -228,20 +231,28 @@ export default function ObjectsTab() {
     }
   };
 
-  const visible = useMemo(() => {
+  const filterValue: LibraryFilters = { searchField, labels: filterTags, timeRange, dateFrom, dateTo, archived: showArchived, extra: usedFilter };
+  const applyFilters = (f: LibraryFilters) => {
+    setSearchField(f.searchField as Field);
+    setFilterTags(f.labels); setTimeRange(f.timeRange as TimeRange); setDateFrom(f.dateFrom); setDateTo(f.dateTo); setShowArchived(f.archived);
+    setUsedFilter(f.extra);
+  };
+  const filterRows = (f: LibraryFilters) => {
     const term = deferredQ.trim().toLowerCase();
-    const source = isArchivedView ? archived : objects;
+    const source = f.archived ? archived : objects;
     let list = source.filter((o) => {
 
-      if (term && !matches(o, term)) return false;
-      if (filterTags.length && !filterTags.every((f) => matchesLabelFilter(o.labels, f))) return false;
-      if (dateFrom && new Date(o.updated_at) < new Date(dateFrom)) return false;
-      if (dateTo && new Date(o.updated_at) > new Date(dateTo + "T23:59:59")) return false;
+      if (term && !matches(o, term, f.searchField)) return false;
+      if (f.labels.length && !f.labels.every((f) => matchesLabelFilter(o.labels, f))) return false;
+      if (f.dateFrom && new Date(o.updated_at) < new Date(f.dateFrom)) return false;
+      if (f.dateTo && new Date(o.updated_at) > new Date(f.dateTo + "T23:59:59")) return false;
       const rangeMs =
-        timeRange === "hour" ? 3600e3 :
-        timeRange === "day" ? 24 * 3600e3 :
-        timeRange === "week" ? 7 * 24 * 3600e3 : 0;
+        f.timeRange === "hour" ? 3600e3 :
+        f.timeRange === "day" ? 24 * 3600e3 :
+        f.timeRange === "week" ? 7 * 24 * 3600e3 : 0;
       if (rangeMs && (Date.now() - new Date(o.updated_at).getTime()) > rangeMs) return false;
+      if (f.extra === "used" && !usagesForObject(o).length) return false;
+      if (f.extra === "none" && usagesForObject(o).length) return false;
       return true;
     });
     list = [...list].sort((a, b) => {
@@ -252,7 +263,8 @@ export default function ObjectsTab() {
       return sort === "oldest" ? da - db : db - da;
     });
     return list;
-  }, [objects, archived, deferredQ, searchField, filterTags, isArchivedView, sort, timeRange, dateFrom, dateTo]);
+  };
+  const visible = useMemo(() => filterRows(filterValue), [objects, archived, deferredQ, searchField, filterTags, isArchivedView, sort, timeRange, dateFrom, dateTo, usedFilter, usageMap]);
 
 
   const doArchive = async (o: ObjectRegistryRow) => {
@@ -289,7 +301,9 @@ export default function ObjectsTab() {
 
   return (
     <div className="nova-library-layout flex gap-4 items-start">
-      <LibraryLabels><TagsPanel
+
+      <div className="nova-library-content flex-1 min-w-0 space-y-3">
+        <LibraryFilterToolbar scope="objects" noun="Objects" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={visible.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{ v: "all", label: "Any" }, { v: "used", label: "In Use" }, { v: "none", label: "Not Used" }]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
         scope="objects"
         usageCounts={usageCounts}
         activeFilters={filterTags}
@@ -299,66 +313,7 @@ export default function ObjectsTab() {
         selectedIds={[...selected]}
         onApplyTag={applyTagToObjects}
         itemLabel="objects"
-      /></LibraryLabels>
-      <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <div className="nova-library-search flex items-stretch gap-0 rounded-lg border-2 border-border focus-within:border-primary bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center pl-4 pr-2 text-muted-foreground">
-            <Search className="w-5 h-5" />
-          </div>
-          <Input
-            placeholder="Search objects…"
-            aria-label="Search Objects"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="flex-1 border-0 rounded-none h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-2"
-          />
-          <select
-            value={searchField}
-            onChange={(e) => setSearchField(e.target.value as Field)}
-            className="text-sm px-3 border-l bg-muted/40 h-14"
-            title="Search Field"
-            aria-label="Search Field"
-          >
-            {FIELDS.map((f) => <option key={f.v} value={f.v}>in {f.label}</option>)}
-          </select>
-        </div>
-
-        <FilterBar
-          sort={sort}
-          onSortChange={(v) => setSort(v as SortKey)}
-          sortOptions={[
-            { v: "newest", label: "Recently Modified" },
-            { v: "oldest", label: "Oldest Modified" },
-            { v: "name", label: "Name (A–Z)" },
-            { v: "name_desc", label: "Name (Z–A)" },
-          ]}
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onDateFromChange={setDateFrom}
-          onDateToChange={setDateTo}
-          dateFieldLabel="Modified"
-          showArchived={showArchived}
-          onShowArchivedChange={setShowArchived}
-          archivedCount={archived.length}
-        />
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 py-2">
-            <button type="button" onClick={() => navigate("/manage/objects/design")}
-              className="inline-flex items-center gap-3 px-10 py-3.5 rounded-full bg-[hsl(var(--nova-ink))] text-[hsl(var(--nova-sand))] border border-transparent shadow-md transition-all duration-300 hover:bg-[hsl(var(--nova-brass))] hover:text-[hsl(var(--nova-ink))] active:scale-[0.98]">
-              <Pencil className="w-[18px] h-[18px] opacity-80" />
-              <span className="text-[15px] font-medium tracking-wide uppercase">Edit Objects</span>
-            </button>
-            <AddButtonRow subtle text="Add new object" label="Object" onClick={() => setCreating(true)} />
-          </div>
-        </div>
-
-
-
-        {isLoading && <div className="h-24 bg-muted rounded animate-pulse" />}
-
+      />} />
         <SelectionBar
           count={selected.size}
           itemLabel="object"
@@ -370,170 +325,9 @@ export default function ObjectsTab() {
         </SelectionBar>
 
 
-        <div className="w-full overflow-x-auto">
-          <table className="nova-object-table w-full text-sm border-collapse table-fixed min-w-[1012px]">
-            <colgroup>
-              <col style={{ width: 60 }} />
-              <col style={{ width: 116 }} />
-              <col style={{ minWidth: 200 }} />
-              <col style={{ width: 110 }} />
-              <col style={{ width: 150 }} />
-              <col style={{ width: 100 }} />
-              <col style={{ width: 90 }} />
-              <col style={{ width: 48 }} />
-              <col style={{ width: 48 }} />
-              <col style={{ width: 48 }} />
-            </colgroup>
-            <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="px-3 py-3 text-left">
-                  <Checkbox
-                    checked={visible.length > 0 && visible.every((o) => selected.has(o.id))}
-                    onCheckedChange={(v) => {
-                      if (v) setSelected(new Set(visible.map((o) => o.id)));
-                      else setSelected(new Set());
-                    }}
-                    aria-label="Select All"
-                  />
-                </th>
-                <th className="px-3 py-3 text-left">Preview</th>
-                <th className="px-3 py-3 text-left">Name</th>
-                <th className="px-3 py-3 text-left">Used On</th>
-                <th className="px-3 py-3 text-center">Copy</th>
-                <th className="px-3 py-3 text-left">Labels</th>
-                <th className="px-3 py-3 text-center">Last Mod</th>
-                <th className="px-2 py-3 text-center"><span className="sr-only">Edit</span></th>
-                <th className="px-2 py-3 text-center"><span className="sr-only">Open</span></th>
-                <th className="px-2 py-3 text-center"><span className="sr-only">More</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {!isLoading && visible.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-3 py-16 text-center text-muted-foreground text-sm">
-                    {timeRange === "hour" ? "No objects modified in the last hour."
-                    : timeRange === "day" ? "No objects modified in the last 24 hours."
-                    : timeRange === "week" ? "No objects modified in the last 7 days."
-                    : timeRange === "custom" && (dateFrom || dateTo) ? "No objects match the selected date range."
-                    : q ? `No objects match “${q}”.`
-                    : "No objects match the current filters."}
-                  </td>
-                </tr>
-              )}
-
-              {visible.map((obj) => {
-                const ref = buildObjectRef({
-                  id: obj.slug_id,
-                  name: obj.name,
-                  description: obj.description,
-                });
-                const isArchivedRow = !!obj.archived_at;
-                const hasComponent = !!obj.component_key && !!objectRegistry[obj.component_key];
-                return (
-                  <tr
-                    key={obj.id}
-                    id={`object-${obj.slug_id}`}
-                    className="border-b align-top hover:bg-muted/40"
-                  >
-                    <td className="px-2 py-3">
-                      <Checkbox
-                        checked={selected.has(obj.id)}
-                        onCheckedChange={() => toggleSelected(obj.id)}
-                        aria-label={`Select ${obj.name}`}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (hasComponent) setPreview(obj);
-                          else gotoObject(obj);
-                        }}
-                        className="block rounded hover:ring-2 hover:ring-primary/40 focus:outline-none focus:ring-2 focus:ring-primary"
-                        title={hasComponent ? "Open Larger Preview" : "Open Object"}
-                      >
-                        {hasComponent ? (
-                          <div className="w-[96px] h-[60px] rounded border overflow-hidden bg-muted/30">
-                            <ObjectThumbnail id={obj.id} storedThumb={obj.thumbnail_url} />
-                          </div>
-                        ) : (
-                          <div className="w-[96px] h-[60px] rounded border border-dashed border-brass/40 bg-brass/5 flex flex-col items-center justify-center text-[10px] text-brass uppercase tracking-wider">
-                            <span>Object</span>
-                            <span className="text-[9px] normal-case tracking-normal text-brass/70">Open →</span>
-                          </div>
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-3 py-3 min-w-0" title={obj.name}>
-                      <div className="flex flex-col gap-1 min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => gotoObject(obj)}
-                          className="text-sm truncate block min-h-9 sm:min-h-0 text-left hover:underline"
-                        >
-                          {obj.name}
-                        </button>
-                        <span className="font-mono text-[10px] text-muted-foreground truncate">
-                          /objects/{obj.slug_id}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-2 py-3">
-                      <UsedOnChip
-                        usages={usagesForObject(obj)}
-                        hasKey={!!obj.component_key}
-                      />
-                    </td>
-                    <td className="px-1 py-3 min-w-0 overflow-hidden">
-                      <div className="flex justify-center">
-                        <CopyRefButton
-                          reference={ref}
-                          id={obj.slug_id}
-                          label="Copy Reference"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-2 py-3 min-w-0 overflow-hidden">
-                      <LabelsCell scope="objects"
-                        value={obj.labels ?? []}
-                        onChange={(next) => updateObjectLabels(obj.id, next)}
-                        itemName={obj.name}
-                      />
-                    </td>
-                    <td className="px-2 py-3 text-xs text-muted-foreground whitespace-nowrap leading-tight text-center" title={fmtDateTimeFull(obj.updated_at)}>
-                      {fmtDateTime(obj.updated_at) || "—"}
-                    </td>
-                    <td className="px-1 py-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/manage/preview?editObject=${encodeURIComponent(obj.id)}`)}
-                        aria-label="Edit Object"
-                        title="Edit Object"
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center p-1.5 rounded border hover:bg-muted"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    </td>
-                    <td className="px-1 py-3 text-center">
-                      <a
-                        href={`/objects/${obj.slug_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Open in New Tab"
-                        title="Open in New Tab"
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center p-1.5 rounded border hover:bg-muted"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </td>
-                    <td className="px-1 py-3">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="inline-flex min-h-11 min-w-11 items-center justify-center p-1.5 rounded border hover:bg-muted" aria-label="More Actions" title="More">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                       <DropdownMenuContent align="end" className="w-80">
+        {isLoading && <div className="h-24 animate-pulse bg-muted" />}
+        {!isLoading && visible.length === 0 && <p className="py-8 text-sm text-muted-foreground">No objects match the current filters.</p>}
+        <div className="min-w-0">{visible.map((obj, idx) => <LibraryListRow key={obj.id} name={obj.name} date={new Date(obj.updated_at).toLocaleDateString()} thumbnail={<ObjectThumbnail id={obj.id} storedThumb={obj.thumbnail_url} />} badges={<><span>{obj.archived_at ? "Archived" : obj.site_wide ? "Site-Wide" : usagesForObject(obj).length ? "In Use" : "Not Used"}</span><span>{(obj.labels ?? []).length} Labels</span></>} onOpen={() => setPreview(obj)} onTitle={() => gotoObject(obj)} selection={listEditing ? <input type="checkbox" checked={selected.has(obj.id)} aria-label={`Select ${obj.name}`} onChange={() => toggleSelected(obj.id)} /> : undefined} menu={<><DropdownMenuItem onSelect={() => navigate(`/manage/preview?editObject=${encodeURIComponent(obj.id)}`)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(`/objects/${obj.slug_id}`, "_blank", "noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => { void navigator.clipboard.writeText(buildObjectRef({id:obj.slug_id,name:obj.name})).then(() => toast.success("Reference copied"), () => toast.error("Copy failed")); } }>Copy Reference</DropdownMenuItem><UsedOnChip usages={usagesForObject(obj)} hasKey={!!obj.component_key} /><LabelsCell scope="objects" value={obj.labels ?? []} onChange={next => updateObjectLabels(obj.id,next)} itemName={obj.name} />
                           <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                             Description
                           </DropdownMenuLabel>
@@ -548,7 +342,7 @@ export default function ObjectsTab() {
                             />
                           </div>
                           <DropdownMenuSeparator />
-                          {isArchivedRow && (
+                          {!!obj.archived_at && (
                             <>
                               <DropdownMenuItem onSelect={() => doRestore(obj)} disabled={restore.isPending}>
                                 <RotateCcw className="w-4 h-4 mr-2" /> Restore from Archive
@@ -563,7 +357,7 @@ export default function ObjectsTab() {
                             <Type className="w-4 h-4 mr-2" /> Rename…
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          {hasComponent && (
+                          {!!obj.component_key && (
                             <>
                               <DropdownMenuItem onSelect={() => regenerateObj(obj)}>
                                 <RefreshCw className="w-4 h-4 mr-2" /> Regenerate Thumbnail
@@ -582,16 +376,7 @@ export default function ObjectsTab() {
                           >
                             <AlertTriangle className="w-4 h-4 mr-2" /> Delete Permanently…
                           </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
+                        </>} />)}</div>
         <ObjectPreviewDialog obj={preview} onClose={() => setPreview(null)} />
 
         <CreateObjectDialog open={creating} onOpenChange={setCreating} navigateOnCreate />
@@ -629,7 +414,7 @@ export default function ObjectsTab() {
           onMakeCopy={(o) => { setEditReady(null); setCopyFrom(o); }}
         />
 
-        
+
         <ConfirmDialog
           open={!!confirmArchive}
           onOpenChange={(o) => { if (!o) setConfirmArchive(null); }}

@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 
 /** Retain grid geometry while unmounting distant card contents. */
-export default function LibraryWindow({ children, kind }: { children: () => ReactNode; kind: "image" | "video" }) {
+export default function LibraryWindow({ children, kind, compact = false }: { children: () => ReactNode; kind: "image" | "video"; compact?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(typeof IntersectionObserver === "undefined");
   const [height, setHeight] = useState<number>();
@@ -24,5 +24,5 @@ export default function LibraryWindow({ children, kind }: { children: () => Reac
     observer.observe(el);
     return () => observer.disconnect();
   }, [near]);
-  return <div ref={ref} data-library-window={kind} className={near ? "min-w-0" : kind === "image" ? "min-w-0 aspect-square" : "min-w-0 aspect-video"} style={!near && height ? { height, aspectRatio: "auto" } : undefined}>{near ? children() : null}</div>;
+  return <div ref={ref} data-library-window={kind} className={near ? "min-w-0" : compact ? "min-w-0 h-[77px]" : kind === "image" ? "min-w-0 aspect-square" : "min-w-0 aspect-video"} style={!near && height ? { height, aspectRatio: "auto" } : undefined}>{near ? children() : null}</div>;
 }

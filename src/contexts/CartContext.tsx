@@ -21,6 +21,12 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null);
 const STORAGE_KEY = "nova-sandbox-cart-v1";
 
+/** Inert visitor dependency for isolated object previews; never reads or writes a real cart. */
+export function ThumbnailCartProvider({ children }: { children: ReactNode }) {
+  const value: CartContextValue = { items: [], count: 0, subtotal: 0, add: () => {}, setQty: () => {}, remove: () => {}, clear: () => {} };
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => {
     if (typeof window === "undefined") return [];

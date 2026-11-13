@@ -1,3 +1,7 @@
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import LibraryFilterToolbar from "./LibraryFilterToolbar";
+import LibraryListRow from "./LibraryListRow";
+import { type LibraryFilters } from "./libraryFilters";
 import LibraryWindow from "./LibraryWindow";
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { matchesLabelFilter } from "./labelPath";
@@ -13,7 +17,6 @@ import { tileSrcCandidates } from "./imageTileSrc";
 import { libraryImageCandidates } from "./imageTileSrc";
 import LibraryImageThumbnail from "./LibraryImageThumbnail";
 import TagsPanel from "./TagsPanel";
-import LibraryLabels from "./LibraryLabels";
 import { Trash2, Search, Archive, ArchiveRestore, AlertTriangle, RefreshCw, Download, Globe, Lock } from "lucide-react";
 import { GATED_BUCKET, clearAssetUrlCache } from "@/lib/assetUrl";
 import { downloadOriginalImage, downloadImagesAsZip } from "./downloadAssets";
@@ -28,7 +31,7 @@ import { extractAndPersistExif } from "./imageExif";
 import { assetKind, isImageAsset } from "./assetType";
 import LabelPicker from "./LabelPicker";
 import SelectionBar from "./SelectionBar";
-import FilterBar, { type TimeRange as UITimeRange } from "./FilterBar";
+import { type TimeRange as UITimeRange } from "./FilterBar";
 import { useImagePageUsages } from "./useAssetPageUsages";
 import InUseWarning from "./InUseWarning";
 import UsedOnChip, { UsedOnList } from "./UsedOnChip";
@@ -114,6 +117,8 @@ export default function ImagesTab() {
     () => (rawImages as Img[]).filter((i) => isImageAsset(i.filename || i.web_url)),
     [rawImages],
   );
+  const [addingMedia, setAddingMedia] = useState(false);
+  const [listEditing, setListEditing] = useState(false);
   const [q, setQ] = useState("");
   const [searchField, setSearchField] = useState<Field>("all");
   const [filterTags, setFilterTags] = useState<string[]>([]);
@@ -280,10 +285,10 @@ export default function ImagesTab() {
   }, [allPages]);
 
 
-  const matches = (img: Img, tags: string[], needle: string) => {
+  const matches = (img: Img, tags: string[], needle: string, field: string = searchField) => {
     const n = needle.toLowerCase();
     const test = (v: string) => (v ?? "").toLowerCase().includes(n);
-    switch (searchField) {
+    switch (field) {
       case "filename": return test(img.filename);
       case "id": return test(img.slug_id);
       case "description": return test(img.description);
@@ -299,32 +304,38 @@ export default function ImagesTab() {
     }
   };
 
-  const filtered = useMemo(() => {
+  const filterValue: LibraryFilters = { searchField, labels: filterTags, timeRange, dateFrom, dateTo, archived: showArchived, extra: usedOnPage };
+  const applyFilters = (f: LibraryFilters) => {
+    setSearchField(f.searchField as Field); if (f.searchField === "date_taken") setQ("");
+    setFilterTags(f.labels); setTimeRange(f.timeRange as TimeRange); setDateFrom(f.dateFrom); setDateTo(f.dateTo); setShowArchived(f.archived);
+    setUsedOnPage(f.extra);
+  };
+  const filterRows = (f: LibraryFilters) => {
     const now = Date.now();
     const rangeMs =
-      timeRange === "hour" ? 60 * 60 * 1000 :
-      timeRange === "day" ? 24 * 60 * 60 * 1000 :
-      timeRange === "week" ? 7 * 24 * 60 * 60 * 1000 : 0;
+      f.timeRange === "hour" ? 60 * 60 * 1000 :
+      f.timeRange === "day" ? 24 * 60 * 60 * 1000 :
+      f.timeRange === "week" ? 7 * 24 * 60 * 60 * 1000 : 0;
     let list = (images as Img[]).filter((img) => {
       if (hiddenIds.has(img.id)) return false;
       const isArchived = !!img.archived_at;
-      if (showArchived ? !isArchived : isArchived) return false;
+      if (f.archived ? !isArchived : isArchived) return false;
       const t = img.tags ?? [];
-      if (filterTags.length && !filterTags.every((f) => matchesLabelFilter(t, f))) return false;
+      if (f.labels.length && !f.labels.every((f) => matchesLabelFilter(t, f))) return false;
       // When "Date taken" is the search scope, the date range filters by
       // the EXIF capture date (taken_at). Otherwise it filters by upload date.
-      const useTaken = searchField === "date_taken";
+      const useTaken = f.searchField === "date_taken";
       const basisIso = useTaken ? img.taken_at : img.created_at;
       if (useTaken && !basisIso) return false;
-      if (basisIso && dateFrom && new Date(basisIso) < new Date(dateFrom)) return false;
-      if (basisIso && dateTo && new Date(basisIso) > new Date(dateTo + "T23:59:59")) return false;
+      if (basisIso && f.dateFrom && new Date(basisIso) < new Date(f.dateFrom)) return false;
+      if (basisIso && f.dateTo && new Date(basisIso) > new Date(f.dateTo + "T23:59:59")) return false;
       if (rangeMs && (now - new Date(img.created_at).getTime()) > rangeMs) return false;
-      if (usedOnPage !== "all") {
+      if (f.extra !== "all") {
         const list = usagesFor(img.id);
-        if (usedOnPage === "none") { if (list.length > 0) return false; }
-        else if (!list.some((u) => u.pageId === usedOnPage)) return false;
+        if (f.extra === "none") { if (list.length > 0) return false; }
+        else if (!list.some((u) => u.pageId === f.extra)) return false;
       }
-      if (q && !matches(img, t, q)) return false;
+      if (q && !matches(img, t, q, f.searchField)) return false;
       return true;
     });
     const justAdded = new Set(justAddedIds);
@@ -339,7 +350,8 @@ export default function ImagesTab() {
       return sort === "oldest" ? da - db : db - da;
     });
     return list;
-  }, [images, q, searchField, filterTags, dateFrom, dateTo, sort, timeRange, showArchived, hiddenIds, justAddedIds, usedOnPage, usageMap]);
+  };
+  const filtered = useMemo(() => filterRows(filterValue), [images, q, searchField, filterTags, dateFrom, dateTo, sort, timeRange, showArchived, hiddenIds, justAddedIds, usedOnPage, usageMap]);
 
 
   const archivedCount = useMemo(() => (images as Img[]).filter((i) => i.archived_at).length, [images]);
@@ -641,8 +653,11 @@ export default function ImagesTab() {
 
 
   return (
-    <div className="nova-library-layout flex gap-4 items-start">
-      <LibraryLabels><TagsPanel
+    <div className="nova-library-layout flex gap-4 items-start" onDragEnter={e => { if(e.dataTransfer.types.includes("Files")) setAddingMedia(true); }}>
+
+
+      <div className="nova-library-content flex-1 min-w-0 space-y-3">
+        <LibraryFilterToolbar action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { setBrokenIds(new Set()); setFailedTileSources({}); invalidate(); toast.success("Images refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="images" noun="Images" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { setAddingMedia(true); fileRef.current?.click(); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
         scope="images"
         usageCounts={usageCounts}
         activeFilters={filterTags}
@@ -654,10 +669,8 @@ export default function ImagesTab() {
         itemLabel="images"
         filteredCount={filtered.length}
         onSelectAllFiltered={() => setSelected(new Set(filtered.map((i) => i.id)))}
-      /></LibraryLabels>
-
-      <div className="nova-library-content flex-1 min-w-0 space-y-3">
-      <div
+      />} />
+<div hidden={!addingMedia && !busy && !dragActive && !justAddedIds.length}>      <div
         onDrop={onDrop}
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
@@ -702,136 +715,7 @@ export default function ImagesTab() {
         </div>
       )}
 
-      <div className="nova-library-search flex items-stretch gap-0 rounded-lg border-2 border-border focus-within:border-primary bg-background shadow-sm overflow-hidden">
-        <div className="flex items-center pl-4 pr-2 text-muted-foreground">
-          <Search className="w-5 h-5" />
-        </div>
-        {searchField === "date_taken" ? (
-          <div className="flex-1 flex items-center gap-2 px-2 h-14">
-            <label className="text-xs text-muted-foreground shrink-0" htmlFor="images-taken-from">
-              Taken on/after
-            </label>
-            <Input
-              id="images-taken-from"
-              type="date"
-              value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); setTimeRange("custom"); }}
-              max={dateTo || undefined}
-              className="h-9 w-44"
-              aria-label="Date taken — from"
-            />
-            <span className="text-xs text-muted-foreground">to</span>
-            <label className="sr-only" htmlFor="images-taken-to">Taken on/before</label>
-            <Input
-              id="images-taken-to"
-              type="date"
-              value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); setTimeRange("custom"); }}
-              min={dateFrom || undefined}
-              className="h-9 w-44"
-              aria-label="Date taken — to"
-            />
-            {(dateFrom || dateTo) && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-9 text-xs"
-                onClick={() => { setDateFrom(""); setDateTo(""); setTimeRange("all"); }}
-              >
-                Clear
-              </Button>
-            )}
-            <span className="ml-auto text-[11px] text-muted-foreground pr-2">
-              Filters by EXIF capture date. Leave a bound blank for on/after or on/before.
-            </span>
-          </div>
-        ) : (
-          <Input
-            placeholder="Search images…"
-            aria-label="Search Images"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="flex-1 border-0 rounded-none h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-2"
-          />
-        )}
-        <select
-          value={searchField}
-          onChange={(e) => {
-            const next = e.target.value as Field;
-            setSearchField(next);
-            if (next === "date_taken") { setQ(""); setTimeRange("custom"); }
-          }}
-          className="text-sm px-3 border-l bg-muted/40 h-14"
-          title="Search Field"
-          aria-label="Search Field"
-        >
-          {FIELDS.map((f) => <option key={f.v} value={f.v}>in {f.label}</option>)}
-        </select>
       </div>
-
-
-      <FilterBar
-        sort={sort}
-        onSortChange={(v) => setSort(v as any)}
-        sortOptions={[
-          { v: "newest", label: "Newest" },
-          { v: "oldest", label: "Oldest" },
-          { v: "name", label: "Name (A–Z)" },
-          { v: "name_desc", label: "Name (Z–A)" },
-        ]}
-        timeRange={timeRange}
-        onTimeRangeChange={setTimeRange}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onDateFromChange={setDateFrom}
-        onDateToChange={setDateTo}
-        dateFieldLabel={searchField === "date_taken" ? "Taken" : "Added"}
-        showArchived={showArchived}
-        onShowArchivedChange={setShowArchived}
-        archivedCount={archivedCount}
-        action={
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => { setBrokenIds(new Set()); setFailedTileSources({}); invalidate(); toast.success("Images refreshed"); }}
-            title="Refetch from the database and clear cached thumbnails"
-          >
-            <RefreshCw className="w-3 h-3" /> Refresh
-          </Button>
-        }
-      />
-
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <label className="font-medium text-muted-foreground" htmlFor="images-used-on-page">
-          Used on Page
-        </label>
-        <select
-          id="images-used-on-page"
-          value={usedOnPage}
-          onChange={(e) => setUsedOnPage(e.target.value)}
-          className="border rounded px-2 py-1 h-9 sm:h-8 text-xs bg-background max-w-full sm:max-w-[260px]"
-        >
-          <option value="all">Any Page</option>
-          <option value="none">Not used on any page</option>
-          {pageOptions.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name || p.path} · {p.path}
-            </option>
-          ))}
-        </select>
-        {usedOnPage !== "all" && (
-          <button
-            type="button"
-            className="text-xs text-muted-foreground hover:text-foreground underline"
-            onClick={() => setUsedOnPage("all")}
-          >
-            Clear
-          </button>
-        )}
-      </div>
-
-
       <SelectionBar
         count={selected.size}
         itemLabel="image"
@@ -864,139 +748,9 @@ export default function ImagesTab() {
 
 
 
-      <div className="nova-library-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-        {imagesLoading && Array.from({ length: 12 }).map((_, i) => (
-          <div key={`sk-${i}`} className="aspect-square bg-muted animate-pulse rounded border" />
-        ))}
-        {!imagesLoading && shown.map((img) => {
-          const sel = selected.has(img.id);
-          const gated = (img as any).visibility === "gated";
-          const signedThumb = img.web_path ? thumbUrls[img.web_path] : undefined;
-          const local = localPreviews[img.id];
-          const candidates = tileSrcCandidates({ gated, thumb: signedThumb, local, webUrl: img.web_url, fallbackUrl: img.fallback_url, originalUrl: img.original_url });
-          const thumb = candidates.find((src) => !(failedTileSources[img.id] ?? []).includes(src)) ?? null;
-          const broken = brokenIds.has(img.id);
-          const isJustAdded = justAddedIds.includes(img.id);
-          return (
-            <LibraryWindow key={img.id} kind="image">{() => <div
-              draggable
-              onDragStart={(e) => onTileDragStart(e, img.id)}
-              className={`relative group border rounded overflow-hidden hover:shadow-lg cursor-grab active:cursor-grabbing ${sel ? "ring-2 ring-primary" : ""} ${isJustAdded ? "ring-2 ring-primary/70" : ""} ${broken ? "border-destructive/60" : ""}`}
-            >
-              {(img as any).visibility === "gated" && (
-                <div
-                  className="absolute bottom-1 left-1 z-10 flex items-center gap-1 rounded-full bg-background/90 border px-1.5 py-0.5 text-[9px] uppercase tracking-wide"
-                  title="Gated — only reachable while signed in. Publish to make it public."
-                >
-                  <Lock className="w-2.5 h-2.5" /> Gated
-                </div>
-              )}
-              {isJustAdded && (
-                <div className="absolute top-1 left-1/2 -translate-x-1/2 z-10 text-[9px] uppercase tracking-wide font-medium bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">
-                  Just Added
-                </div>
-              )}
-              <input type="checkbox" checked={sel}
-                aria-label={`Select ${img.alt_text || img.filename || "image"}`}
-                onChange={(e) => {
-                const n = new Set(selected);
-                if (e.target.checked) n.add(img.id); else n.delete(img.id);
-                setSelected(n);
-              }} className="absolute top-1 left-1 z-10" />
-              <div className="nova-library-actions absolute top-1 right-1 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {img.archived_at ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); unarchiveImages([img.id]); }}
-                    className="bg-background/90 hover:bg-muted border rounded p-1"
-                    title="Restore from Archive"
-                  >
-                    <ArchiveRestore className="w-3 h-3" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); archiveImages([img.id]); }}
-                    className="bg-background/90 hover:bg-muted border rounded p-1"
-                    title="Archive"
-                  >
-                    <Archive className="w-3 h-3" />
-                  </button>
-                )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); downloadOriginalImage(img); }}
-                  className="bg-background/90 hover:bg-muted border rounded p-1"
-                  title="Download Original"
-                >
-                  <Download className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); remove(img); }}
-                  className="bg-background/90 hover:bg-destructive hover:text-destructive-foreground border rounded p-1"
-                  title="Delete Image"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-              {(() => {
-                const kind = assetKind(img.filename || img.web_url);
-                if (kind === "video") {
-                  return (
-                    <video
-                      src={img.web_url}
-                      onClick={() => setDetail(img)}
-                      muted playsInline preload="none"
-                      className="w-full aspect-square object-contain cursor-pointer bg-muted"
-                    />
-                  );
-                }
-                if (thumb === null) return <div onClick={() => setDetail(img)} className="w-full aspect-square cursor-pointer"><LibraryImageThumbnail candidates={[]} className="h-full w-full" /></div>;
-                return (
-                  <img key={thumb} src={thumb} alt=""
-                    onClick={() => setDetail(img)}
-                    onLoad={() => { if (broken) setBrokenIds(previous => { const next = new Set(previous); next.delete(img.id); return next; }); }}
-                    onError={() => {
-                      const failed = [...(failedTileSources[img.id] ?? []), thumb];
-                      setFailedTileSources((current) => ({ ...current, [img.id]: failed }));
-                      if (candidates.every((src) => failed.includes(src))) markBroken(img.id);
-                    }}
-                    width={400} height={400}
-                    className="w-full aspect-square object-contain cursor-pointer bg-muted"
-                    loading="lazy" decoding="async" fetchPriority="low" />
-
-                );
-
-
-              })()}
-              {img.slug_id && (
-                <div
-                  className="absolute inset-x-0 top-0 w-full aspect-square z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="pointer-events-auto">
-                    <CopyRefButton
-                      reference={buildImageRef({ id: img.slug_id, filename: img.filename, url: img.web_url, fallbackUrl: (img as any).fallback_url })}
-                      id={img.slug_id}
-                      label="Copy Reference"
-                    />
-                  </div>
-                </div>
-              )}
-              <div className="nova-library-caption p-1 text-[10px] truncate" title={`Uploaded ${new Date(img.created_at).toLocaleString()}`}>
-                <div className="flex items-center gap-1 truncate">
-                  {broken && <AlertTriangle className="w-3 h-3 text-destructive shrink-0" />}
-                  <span className="nova-library-name truncate">{img.filename}</span>
-                </div>
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-muted-foreground truncate">{formatRelative(img.created_at)}</span>
-                  <span onClick={(e) => e.stopPropagation()} className="shrink-0">
-                    <UsedOnChip usages={usagesFor(img.id)} />
-                  </span>
-                </div>
-              </div>
-            </div>}</LibraryWindow>
-          );
-        })}
-      </div>
-
+      <div className="min-w-0">{shown.map(img => <LibraryWindow key={img.id} kind="image" compact>{() => <LibraryListRow name={img.filename} date={formatRelative(img.created_at)} thumbnail={<LibraryImageThumbnail candidates={tileSrcCandidates({gated:(img as any).visibility === "gated",thumb: img.web_path ? thumbUrls[img.web_path] : undefined,local:localPreviews[img.id],webUrl:img.web_url,fallbackUrl:img.fallback_url,originalUrl:img.original_url})} className="h-14 w-14" />} badges={<><span>{img.archived_at ? "Archived" : (img as any).visibility === "gated" ? "Gated" : "Public"}</span><span>{img.tags.length} Labels</span></>} onOpen={() => setDetail(img)} draggable onDragStart={e => onTileDragStart(e,img.id)} selection={listEditing ? <input type="checkbox" checked={selected.has(img.id)} aria-label={`Select ${img.filename}`} onChange={() => setSelected(cur => {const next=new Set(cur);next.has(img.id)?next.delete(img.id):next.add(img.id);return next;})} /> : undefined} menu={<>
+        <DropdownMenuItem onSelect={() => setDetail(img)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(img.web_url,"_blank","noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(buildImageRef({id:img.slug_id,filename:img.filename,url:img.web_url,fallbackUrl:img.fallback_url})).then(()=>toast.success("Reference copied"),()=>toast.error("Copy failed"))}>Copy Reference</DropdownMenuItem><DropdownMenuItem onSelect={() => downloadOriginalImage(img)}>Download Original</DropdownMenuItem><DropdownMenuItem onSelect={() => img.archived_at ? unarchiveImages([img.id]) : archiveImages([img.id])}>{img.archived_at ? "Restore" : "Archive"}</DropdownMenuItem><DropdownMenuItem onSelect={() => remove(img)} className="text-destructive">Delete Image</DropdownMenuItem>
+      </>} />}</LibraryWindow>)}</div>
       {!imagesLoading && visibleCount < filtered.length && (
         <div ref={sentinelRef} className="py-6 flex flex-col items-center gap-2">
           <div className="text-xs text-muted-foreground">

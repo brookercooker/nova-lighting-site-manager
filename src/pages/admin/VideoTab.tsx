@@ -1,3 +1,7 @@
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import LibraryFilterToolbar from "./LibraryFilterToolbar";
+import LibraryListRow from "./LibraryListRow";
+import { type LibraryFilters } from "./libraryFilters";
 import LibraryWindow from "./LibraryWindow";
 import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { matchesLabelFilter } from "./labelPath";
@@ -9,7 +13,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import { formatBytes } from "@/lib/imageOptimize";
 import TagsPanel from "./TagsPanel";
-import LibraryLabels from "./LibraryLabels";
 import {
   Copy, Trash2, Search, Archive, ArchiveRestore, RefreshCw, Link as LinkIcon,
   Play, Youtube, Video as VideoIcon, Download, Lock, Globe,
@@ -72,7 +75,7 @@ const FIELDS: { v: Field; label: string }[] = [
   { v: "tags", label: "Labels" },
   { v: "used_on", label: "Used On (page)" },
 ];
-type TimeRange = "all" | "hour" | "day" | "week";
+type TimeRange = "all" | "hour" | "day" | "week" | "custom";
 
 const SIGN_EXPIRY = 60 * 60 * 24 * 365 * 10;
 async function signedUrl(bucket: string, path: string) {
@@ -120,9 +123,13 @@ export default function VideoTab() {
   const qc = useQueryClient();
   const { data: videos = [], isLoading } = useVideos();
 
+  const [addingMedia, setAddingMedia] = useState(false);
+  const [listEditing, setListEditing] = useState(false);
   const [q, setQ] = useState("");
   const [searchField, setSearchField] = useState<Field>("all");
   const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest" | "name" | "name_desc">("newest");
   const [timeRange, setTimeRange] = useState<TimeRange>("all");
   const [showArchived, setShowArchived] = useState(false);
@@ -234,10 +241,10 @@ export default function VideoTab() {
   }, [allPages]);
   const [usedOnPage, setUsedOnPage] = useState<string>("all");
 
-  const matches = (v: Vid, tags: string[], needle: string) => {
+  const matches = (v: Vid, tags: string[], needle: string, field: string = searchField) => {
     const n = needle.toLowerCase();
     const test = (s: string) => (s ?? "").toLowerCase().includes(n);
-    switch (searchField) {
+    switch (field) {
       case "name": return test(v.name);
       case "id": return test(v.slug_id);
       case "description": return test(v.description);
@@ -251,25 +258,33 @@ export default function VideoTab() {
     }
   };
 
-  const filtered = useMemo(() => {
+  const filterValue: LibraryFilters = { searchField, labels: filterTags, timeRange, dateFrom, dateTo, archived: showArchived, extra: usedOnPage };
+  const applyFilters = (f: LibraryFilters) => {
+    setSearchField(f.searchField as Field);
+    setFilterTags(f.labels); setTimeRange(f.timeRange as TimeRange); setDateFrom(f.dateFrom); setDateTo(f.dateTo); setShowArchived(f.archived);
+    setUsedOnPage(f.extra);
+  };
+  const filterRows = (f: LibraryFilters) => {
     const now = Date.now();
     const rangeMs =
-      timeRange === "hour" ? 60 * 60 * 1000 :
-      timeRange === "day" ? 24 * 60 * 60 * 1000 :
-      timeRange === "week" ? 7 * 24 * 60 * 60 * 1000 : 0;
+      f.timeRange === "hour" ? 60 * 60 * 1000 :
+      f.timeRange === "day" ? 24 * 60 * 60 * 1000 :
+      f.timeRange === "week" ? 7 * 24 * 60 * 60 * 1000 : 0;
     let list = (videos as Vid[]).filter((v) => {
       if (hiddenIds.has(v.id)) return false;
       const isArchived = !!v.archived_at;
-      if (showArchived ? !isArchived : isArchived) return false;
+      if (f.archived ? !isArchived : isArchived) return false;
       const t = v.tags ?? [];
-      if (filterTags.length && !filterTags.every((f) => matchesLabelFilter(t, f))) return false;
+      if (f.labels.length && !f.labels.every((f) => matchesLabelFilter(t, f))) return false;
+      if (f.dateFrom && new Date(v.created_at) < new Date(f.dateFrom)) return false;
+      if (f.dateTo && new Date(v.created_at) > new Date(f.dateTo + "T23:59:59")) return false;
       if (rangeMs && (now - new Date(v.created_at).getTime()) > rangeMs) return false;
-      if (usedOnPage !== "all") {
+      if (f.extra !== "all") {
         const list = usagesFor(v.id);
-        if (usedOnPage === "none") { if (list.length > 0) return false; }
-        else if (!list.some((u) => u.pageId === usedOnPage)) return false;
+        if (f.extra === "none") { if (list.length > 0) return false; }
+        else if (!list.some((u) => u.pageId === f.extra)) return false;
       }
-      if (q && !matches(v, t, q)) return false;
+      if (q && !matches(v, t, q, f.searchField)) return false;
       return true;
     });
     const justAdded = new Set(justAddedIds);
@@ -283,7 +298,8 @@ export default function VideoTab() {
       return sort === "oldest" ? da - db : db - da;
     });
     return list;
-  }, [videos, q, searchField, filterTags, timeRange, showArchived, sort, hiddenIds, justAddedIds, usedOnPage, usageMap]);
+  };
+  const filtered = useMemo(() => filterRows(filterValue), [videos, q, searchField, filterTags, timeRange, showArchived, sort, hiddenIds, justAddedIds, usedOnPage, usageMap, dateFrom, dateTo]);
 
   const archivedCount = useMemo(
     () => (videos as Vid[]).filter((v) => v.archived_at).length,
@@ -666,8 +682,11 @@ export default function VideoTab() {
     v.source_type === "upload" ? (v.storage_url ?? "") : (v.external_url ?? "");
 
   return (
-    <div className="nova-library-layout flex gap-4 items-start">
-      <LibraryLabels><TagsPanel
+    <div className="nova-library-layout flex gap-4 items-start" onDragEnter={e => { if(e.dataTransfer.types.includes("Files")) setAddingMedia(true); }}>
+
+
+      <div className="nova-library-content flex-1 min-w-0 space-y-3">
+        <LibraryFilterToolbar action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { invalidate(); toast.success("Videos refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="videos" noun="Videos" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { setAddingMedia(true); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
         scope="videos"
         usageCounts={usageCounts}
         activeFilters={filterTags}
@@ -679,10 +698,8 @@ export default function VideoTab() {
         itemLabel="videos"
         filteredCount={filtered.length}
         onSelectAllFiltered={() => setSelected(new Set(filtered.map((v) => v.id)))}
-      /></LibraryLabels>
-
-      <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <div
+      />} />
+<div hidden={!addingMedia && !busy && !dragActive && !justAddedIds.length}>        <div
           onDrop={onDrop}
           onDragEnter={onDragEnter}
           onDragOver={onDragOver}
@@ -744,116 +761,7 @@ export default function VideoTab() {
           </div>
         )}
 
-        <div className="nova-library-search flex items-stretch gap-0 rounded-lg border-2 border-border focus-within:border-primary bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center pl-4 pr-2 text-muted-foreground">
-            <Search className="w-5 h-5" />
-          </div>
-          <Input
-            placeholder="Search videos…"
-            aria-label="Search Videos"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="flex-1 border-0 rounded-none h-14 text-lg focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-2"
-          />
-          <select
-            value={searchField}
-            onChange={(e) => setSearchField(e.target.value as Field)}
-            className="text-sm px-3 border-l bg-muted/40 h-14"
-            title="Search Field"
-            aria-label="Search Field"
-          >
-            {FIELDS.map((f) => <option key={f.v} value={f.v}>in {f.label}</option>)}
-          </select>
         </div>
-
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="flex items-center gap-1.5">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="videos-sort">
-              Sort By
-            </label>
-            <select
-              id="videos-sort"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as any)}
-              className="text-sm border rounded px-2 py-1 h-9"
-            >
-              <option value="newest">Newest Added</option>
-              <option value="oldest">Oldest Added</option>
-              <option value="name">Name (A–Z)</option>
-              <option value="name_desc">Name (Z–A)</option>
-            </select>
-          </div>
-
-          <div className="h-6 w-px bg-border mx-1" aria-hidden="true" />
-
-          <div className="flex items-center gap-1.5" role="group" aria-label="Time Range">
-            <span className="text-xs font-medium text-muted-foreground">Show</span>
-            {([
-              { v: "all", label: "All" },
-              { v: "hour", label: "Last Hour" },
-              { v: "day", label: "Last 24h" },
-              { v: "week", label: "Last 7 days" },
-            ] as { v: TimeRange; label: string }[]).map((c) => (
-              <button
-                key={c.v}
-                onClick={() => setTimeRange(c.v)}
-                className={`inline-flex min-h-9 items-center text-xs px-2 py-1 rounded-full border transition-colors sm:min-h-0 ${
-                  timeRange === c.v
-                    ? "bg-foreground text-background border-foreground"
-                    : "bg-background hover:bg-muted border-border text-muted-foreground"
-                }`}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="h-6 w-px bg-border mx-1" aria-hidden="true" />
-
-          <label className="text-xs flex items-center gap-1.5 font-medium text-muted-foreground">
-            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-            Archived Only {archivedCount > 0 && <span className="text-muted-foreground">({archivedCount})</span>}
-          </label>
-          <Button
-            size="sm" variant="outline" className="gap-1.5 ml-auto"
-            onClick={() => { invalidate(); toast.success("Videos refreshed"); }}
-          >
-            <RefreshCw className="w-3 h-3" /> Refresh
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <label className="font-medium text-muted-foreground" htmlFor="videos-used-on-page">
-            Used on Page
-          </label>
-          <select
-            id="videos-used-on-page"
-            value={usedOnPage}
-            onChange={(e) => setUsedOnPage(e.target.value)}
-            className="border rounded px-2 py-1 h-9 sm:h-8 text-xs bg-background max-w-full sm:max-w-[260px]"
-          >
-            <option value="all">Any Page</option>
-            <option value="none">Not used on any page</option>
-            {pageOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name || p.path} · {p.path}
-              </option>
-            ))}
-          </select>
-          {usedOnPage !== "all" && (
-            <button
-              type="button"
-              className="text-xs text-muted-foreground hover:text-foreground underline"
-              onClick={() => setUsedOnPage("all")}
-            >
-              Clear
-            </button>
-          )}
-        </div>
-
-
-
-
         <SelectionBar
           count={selected.size}
           itemLabel="video"
@@ -882,143 +790,7 @@ export default function VideoTab() {
           </Button>
         </SelectionBar>
 
-        <div className="nova-library-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-          {isLoading && Array.from({ length: 10 }).map((_, i) => (
-            <div key={`sk-${i}`} className="aspect-video bg-muted animate-pulse rounded border" />
-          ))}
-          {!isLoading && shown.map((v) => {
-            const sel = selected.has(v.id);
-            const isJustAdded = justAddedIds.includes(v.id);
-            return (
-              <LibraryWindow key={v.id} kind="video">{() => <div
-                draggable
-                onDragStart={(e) => onTileDragStart(e, v.id)}
-                className={`relative group border rounded overflow-hidden hover:shadow-lg cursor-grab active:cursor-grabbing ${sel ? "ring-2 ring-primary" : ""} ${isJustAdded ? "ring-2 ring-primary/70" : ""}`}
-              >
-                {isJustAdded && (
-                  <div className="absolute top-1 left-1/2 -translate-x-1/2 z-10 text-[9px] uppercase tracking-wide font-medium bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">
-                    Just Added
-                  </div>
-                )}
-                <input
-                  type="checkbox" checked={sel}
-                  aria-label={`Select ${v.name || "video"}`}
-                  onChange={(e) => {
-                    const n = new Set(selected);
-                    if (e.target.checked) n.add(v.id); else n.delete(v.id);
-                    setSelected(n);
-                  }}
-                  className="absolute top-1 left-1 z-10"
-                />
-                <div className="nova-library-actions absolute top-1 right-1 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {v.archived_at ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); unarchive([v.id]); }}
-                      className="bg-background/90 hover:bg-muted border rounded p-1"
-                      title="Restore from Archive"
-                    >
-                      <ArchiveRestore className="w-3 h-3" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); archive([v.id]); }}
-                      className="bg-background/90 hover:bg-muted border rounded p-1"
-                      title="Archive"
-                    >
-                      <Archive className="w-3 h-3" />
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); downloadOriginalVideo(v); }}
-                    className="bg-background/90 hover:bg-muted border rounded p-1"
-                    title={v.source_type === "upload" ? "Download Original" : "Open Source (External Video)"}
-                  >
-                    <Download className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); requestDelete([v]); }}
-                    className="bg-background/90 hover:bg-destructive hover:text-destructive-foreground border rounded p-1"
-                    title="Delete Video"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-
-                <div
-                  onClick={() => setDetail(v)}
-                  className="relative w-full aspect-video bg-muted cursor-pointer overflow-hidden"
-                >
-                  <SignedThumbImg
-                    url={v.poster_url}
-                    alt={v.alt_text || v.name}
-                    className="absolute inset-0 w-full h-full object-cover"
-                    loading="lazy"
-                    width={400} height={225}
-                    decoding="async"
-                    fallback={
-                      <div className="absolute inset-0 w-full h-full flex items-center justify-center text-muted-foreground">
-                        <Play className="w-8 h-8 opacity-40" />
-                      </div>
-                    }
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="rounded-full bg-black/55 text-white p-2 backdrop-blur-sm">
-                      <Play className="w-5 h-5 fill-white" />
-                    </div>
-                  </div>
-                  <div className="absolute bottom-1 left-1 flex items-center gap-1">
-                    <SourceBadge v={v} />
-                    {v.visibility === "gated" && (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full bg-background/90 border px-1.5 py-0.5 text-[9px] uppercase tracking-wide"
-                        title="Gated — only reachable while signed in. Publish to make it public."
-                      >
-                        <Lock className="w-2.5 h-2.5" /> Gated
-                      </span>
-                    )}
-                  </div>
-                  {v.duration_seconds ? (
-                    <div className="absolute bottom-1 right-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-black/70 text-white">
-                      {formatDuration(v.duration_seconds)}
-                    </div>
-                  ) : null}
-                </div>
-
-                {v.slug_id && (
-                  <div
-                    className="absolute inset-x-1 bottom-14 z-10 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <CopyRefButton
-                      reference={buildVideoRef({
-                        id: v.slug_id, name: v.name, source: v.source_type,
-                        url: playbackUrl(v), altUrl: v.alt_url, posterUrl: v.poster_url,
-                      })}
-                      id={v.slug_id}
-                      label="Copy Reference"
-                    />
-                  </div>
-                )}
-
-                <div className="nova-library-caption p-1 text-[10px] truncate">
-                  <div className="nova-library-name truncate font-medium">{v.name}</div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-muted-foreground truncate">
-                      {v.source_type === "upload" && (
-                        <span title="Uploaded raw — not optimized">Not optimized · </span>
-                      )}
-                      {formatRelative(v.created_at)}
-                    </span>
-                    <span onClick={(e) => e.stopPropagation()} className="shrink-0">
-                      <UsedOnChip usages={usagesFor(v.id)} />
-                    </span>
-                  </div>
-                </div>
-              </div>}</LibraryWindow>
-            );
-          })}
-        </div>
-
+        <div className="min-w-0">{shown.map(v => <LibraryWindow key={v.id} kind="video" compact>{() => <LibraryListRow name={v.name} date={formatRelative(v.created_at)} thumbnail={<SignedThumbImg url={v.poster_url} alt={v.name} className="h-14 w-14 object-cover" fallback={<Play className="h-6 w-6 text-muted-foreground" />} />} badges={<><span>{v.archived_at ? "Archived" : sourceLabel(v)}</span><span>{v.tags.length} Labels</span></>} onOpen={() => setDetail(v)} draggable onDragStart={e => onTileDragStart(e,v.id)} selection={listEditing ? <input type="checkbox" checked={selected.has(v.id)} aria-label={`Select ${v.name}`} onChange={() => setSelected(cur => {const next=new Set(cur);next.has(v.id)?next.delete(v.id):next.add(v.id);return next;})} /> : undefined} menu={<><DropdownMenuItem onSelect={() => setDetail(v)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(playbackUrl(v),"_blank","noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(buildVideoRef({id:v.slug_id,name:v.name,source:v.source_type,url:playbackUrl(v),altUrl:v.alt_url,posterUrl:v.poster_url})).then(()=>toast.success("Reference copied"),()=>toast.error("Copy failed"))}>Copy Reference</DropdownMenuItem><DropdownMenuItem onSelect={() => downloadOriginalVideo(v)}>{v.source_type === "upload" ? "Download Original" : "Open Source"}</DropdownMenuItem><DropdownMenuItem onSelect={() => v.archived_at ? unarchive([v.id]) : archive([v.id])}>{v.archived_at ? "Restore" : "Archive"}</DropdownMenuItem><DropdownMenuItem onSelect={() => requestDelete([v])} className="text-destructive">Delete Video</DropdownMenuItem></>} />}</LibraryWindow>)}</div>
         {!isLoading && visibleCount < filtered.length && (
           <div ref={sentinelRef} className="py-6 flex flex-col items-center gap-2">
             <div className="text-xs text-muted-foreground">
