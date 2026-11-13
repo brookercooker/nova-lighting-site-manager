@@ -48,7 +48,7 @@ describe("Pages list synchronization", () => {
   it("archives from the portalled menu without opening the page and queues its named change", async () => {
     state.rows = [{ id: "race", name: "Race Test Page", path: "/race-test-page", tags: [], build_status: "ready", archived_at: null }];
     render(<MemoryRouter initialEntries={["/manage/pages"]}><PagesTab /></MemoryRouter>);
-    const menu = await screen.findByRole("button", { name: "Actions: Race Test Page" });
+    const menu = await screen.findByRole("button", { name: "Options for Race Test Page" });
     fireEvent.keyDown(menu, { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
     await waitFor(() => expect(state.notify).toHaveBeenCalledWith(['Archived the page "Race Test Page" (/race-test-page)']));
@@ -59,7 +59,7 @@ describe("Pages list synchronization", () => {
     state.rows = [{ id: "race", name: "Race Test Page", path: "/race-test-page", tags: [], build_status: "ready", archived_at: null }];
     state.error = { message: "Archive failed" };
     render(<MemoryRouter><PagesTab /></MemoryRouter>);
-    fireEvent.keyDown(await screen.findByRole("button", { name: "Actions: Race Test Page" }), { key: "Enter" });
+    fireEvent.keyDown(await screen.findByRole("button", { name: "Options for Race Test Page" }), { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Archive" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Race Test Page" })).toBeInTheDocument());
     expect(state.notify).not.toHaveBeenCalled();

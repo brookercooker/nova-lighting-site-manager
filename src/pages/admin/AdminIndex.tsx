@@ -39,7 +39,7 @@ import { referenceKey } from "./designChat/references";
 import { useManagerTitle } from "./useManagerTitle";
 import { useManagerLayout, useKeyboardInset, clampPanelWidth, PANEL_WIDTH_KEY } from "./designChat/useManagerLayout";
 import { DropdownMenu as MoreMenu, DropdownMenuContent as MoreMenuContent, DropdownMenuItem as MoreMenuItem, DropdownMenuTrigger as MoreMenuTrigger, DropdownMenuSeparator as MoreMenuSeparator, DropdownMenuLabel as MoreMenuLabel } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Monitor, Smartphone, Tablet, MessageSquare, ListTree, LayoutTemplate } from "lucide-react";
+import { Menu, Monitor, Smartphone, Tablet, MessageSquare, ListTree, LayoutTemplate } from "lucide-react";
 import type { Device } from "./designChat/DesignChatContext";
 import { usePhoneChat } from "./designChat/phoneChat";
 import { PhoneChatButton, PhoneChatHeader } from "./designChat/PhoneChatChrome";
@@ -602,9 +602,10 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
     <ModePageChooser {...modeSwitch.chooserProps} />
     <MoreMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <MoreMenuTrigger asChild>
-        <Button ref={triggerRef} type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label={`More Options${count ? `: ${count} Waiting` : ""}`} title="More Options"><MoreHorizontal className="h-4 w-4" /></Button>
+        <Button ref={triggerRef} type="button" variant="outline" className="nova-phone-menu h-11 shrink-0 gap-1.5 px-2" aria-label="Menu" title="Menu"><Menu className="h-4 w-4 shrink-0" aria-hidden /><span className="nova-phone-menu-label">Menu</span></Button>
       </MoreMenuTrigger>
       <MoreMenuContent align="end">
+        <MoreMenuLabel>Menu</MoreMenuLabel>
         <ModeSwitchMenuItem actions={modeSwitch} />
         <MoreMenuSeparator />
         {mode === "manual" && <>
