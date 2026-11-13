@@ -60,7 +60,7 @@ export default function ReviewChangesView({ embedded = false }: { onShowPreview:
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 text-sm">
         <h2 className="font-sans text-base font-semibold">Changes Waiting for Review</h2>
         <p className="text-muted-foreground">{waitingLine(count)}</p>
-        {!requests && count > 0 && <p className="text-xs text-muted-foreground">Individual change details aren't available from the design service yet.</p>}
+        {!requests && count > 0 && <p className="text-xs text-muted-foreground">Change details aren't available yet.</p>}
         {!embedded && <SubmitButton />}
         <ReviewProblems />
         {isAdmin && reviewBlocked(state) && <div role="region" aria-label="Review Findings"><FindingsList items={findings} onFix={fixIds} onReject={rejectAll} /></div>}

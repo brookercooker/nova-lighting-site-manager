@@ -114,9 +114,6 @@ export function linksNeedChecking(links: ReviewLink[], linkTicked: string[], rep
   const left = links.filter(l => !linkResolved(linkState(l.key, linkTicked, replaced))).length;
   return left ? `${left} of ${links.length} ${links.length === 1 ? "link needs" : "links need"} checking` : "All links confirmed";
 }
-export const LINK_HINT = "Dashed orange outlines on the page mark links to check. Click one to jump to its row here.";
-/** Plain suggestions shown on the Pages step and in the Checking Changes bar; never ticked, stored or gating. */
-export const PAGE_SUGGESTIONS = ["How the page looks on a phone", "That the text that changed reads correctly", "That the images and layout look right"];
 /** One item per changed link on the page; each ticks itself when the link is confirmed. Pages without links have none. */
 export function pageChecks(row: ChangedRow, links: ReviewLink[], linkTicked: string[], pages: Pick<ManagerPage, "name" | "path">[] = []): PageCheck[] {
   if (!row.page) return [];
@@ -137,4 +134,4 @@ export function fixPage(group: LinkGroup, rows: ChangedRow[]): { path: string; n
   const r = rows.find(x => x.page);
   return r?.page ? { path: r.page.path, name: r.page.name } : { path: "/", name: "Home" };
 }
-export const fixBannerText = (pageName: string, address: string) => `Changing a link on ${pageName}. Find the link to ${address}, change where it goes, then Save Changes.`;
+export const fixBannerText = (pageName: string, address: string) => `${pageName} · link to ${address}`;

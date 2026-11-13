@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmitWalkthroughPanel, walkProgress, ownLinkPrint } from "../SubmitWalkthrough";
 import { walk, useWalk } from "../submitWalkthroughStore";
-import { LINK_BADGE, fixPage, linkCheckList, linkState } from "../linkCheck";
+import { fixPage, linkCheckList, linkState } from "../linkCheck";
 import { LinkFixBanner, useClearFixOnExit } from "../linkFix";
 import { CONTENT_SAVED } from "../contentSavedEvent";
 
@@ -11,6 +11,7 @@ vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state,
 vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
 vi.mock("../reviewLinkSave", () => ({ resolveReviewLink: vi.fn(async () => { throw new Error("We couldn't find this link on the page"); }), FIND_LINK_ERROR: "We couldn't find this link on the page", saveReviewLink: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
+vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: [], isAdmin: false, pending: false, error: "", change: vi.fn() }), TrustedDomainList: () => null }));
 vi.mock("../pageSelection", () => ({ workingPageFrom: (p: any) => ({ id: p.id, name: p.name, path: p.path }) }));
 vi.mock("../usePreviewPage", () => ({ registerPreviewPage: (p: any) => { m.register(p); return Promise.resolve({ id: "id" + p.path, ...p }); } }));
 
@@ -50,7 +51,6 @@ describe("Edit Link Destination", () => {
     expect(m.select).toHaveBeenCalledWith({ id: "id/a", name: "About", path: "/a" });
     expect(walk.get().open).toBe(false);
     expect(walk.get().fix).toMatchObject({ key: "/a|/gallery", path: "/a", saved: false });
-    expect(screen.getByText("Changing a link on About. Find the link to /gallery, change where it goes, then Save Changes.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Back to Review" })).toBeTruthy();
   });
   it("Back to Review without a save leaves the link needing checking", async () => {
@@ -74,15 +74,15 @@ describe("Edit Link Destination", () => {
     setData([old, link("/gallery-new")]);
     m.data.pages = [{ name: "Gallery", path: "/gallery-new", build_status: "ready" }];
     h.rerender(<Host />);
-    expect(screen.getByText(LINK_BADGE.replaced)).toBeTruthy();
-    expect(screen.getByText(LINK_BADGE.todo)).toBeTruthy();
+    expect(linkState(old.key, walk.get().linkTicked, walk.get().linkReplaced)).toBe("replaced");
+    expect(linkState("/a|/gallery-new", walk.get().linkTicked, walk.get().linkReplaced)).toBe("todo");
     expect(screen.getByText("1 of 2 links approved")).toBeTruthy();
-    expect((screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getAllByRole("link", { name: "Open Link to Verify" })).toHaveLength(1);
     const p = walkProgress(m.data, walk.get());
     expect(p.linksLeft).toBe(1);
     act(() => walk.confirmLink("/a|/gallery-new", linkFingerprints(m.data)["/a|/gallery-new"], true));
-    expect((screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(false);
     expect(linkCheckList(m.data.links.groups, walk.get().linkTicked, walk.get().linkReplaced).map(e => e.raw)).toEqual(["/gallery-new"]);
   });
   it("a fingerprint change clears Replaced by Hand", () => {
@@ -112,7 +112,6 @@ describe("Links step with nothing left", () => {
   it("says so and lets the reviewer continue", async () => {
     render(<Host />); toLinks();
     act(() => walk.update(w => ({ ...w, linkReplaced: { "/a|/gallery": ownLinkPrint(m.data.links.groups[0].links[0]) } })));
-    expect(screen.getByText("Nothing is left to check here. Press Next to continue.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({ state: null as any, show: vi.fn(), data: null as a
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, setReviewOpen: vi.fn(), refreshSoon: vi.fn(), showPreviewPath: m.show, selectPage: vi.fn() }) }));
 vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
+vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: [], isAdmin: false, pending: false, error: "", change: vi.fn() }), TrustedDomainList: () => null }));
 vi.mock("../previewNavigate", async (orig) => ({ ...(await orig<any>()), shownPreviewFrame: () => frame }));
 const page = (key: string, name: string) => ({ key: "page:" + key, page: { name, path: key }, how: "Changed by the builder" });
 const link = { key: "/a|/gallery", href: "/gallery", kind: "internal", label: null, requestIds: [] };
@@ -112,17 +113,5 @@ describe("walkthrough auto-open and link lines", () => {
     expect(linkText({ href: "/contact", kind: "internal", visibleText: "Lighting Design Services", label: "Lighting Design Services Work one-on-one with our expert designers to create a custom lighting plan tailored to your home — complimentary with any project. BOOK A CONSULTATION" })).toBe("Lighting Design Services");
     expect(linkText({ href: "/contact", kind: "internal", label: "Long card wording that contains several sentences without a short call to action at the end." }).length).toBeLessThanOrEqual(40);
     expect(linkText({ href: "/contact", kind: "internal", label: "Lots of card wording", ariaLabel: "Book a Consultation" })).toBe("Lots of card wording");
-  });
-  it("shows the suggestions as plain bullets on the step and in the bar", () => {
-    render(<Host />);
-    act(() => walk.close());
-    const bar = within(screen.getByRole("region", { name: "Checking Changes" }));
-    const inBar = bar.getByText("Things to Look At on Each Page").parentElement!;
-    expect(within(inBar).getAllByRole("listitem").map(l => l.textContent)).toEqual(["How the page looks on a phone", "That the text that changed reads correctly", "That the images and layout look right"]);
-    expect(within(inBar).queryByRole("checkbox")).toBeNull();
-    act(() => walk.reopen("pages"));
-    const step = screen.getByRole("region", { name: "Submit for Review Walkthrough" }).querySelector("[data-page-suggestions]") as HTMLElement;
-    expect(within(step).getAllByRole("listitem")).toHaveLength(3);
-    expect(within(step).queryByRole("checkbox")).toBeNull();
   });
 });

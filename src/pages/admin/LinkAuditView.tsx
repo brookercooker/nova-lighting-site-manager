@@ -360,7 +360,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
         </Button>
         <div className="text-xs text-muted-foreground">
           {lastRun ? `Last scan: ${lastRun.toLocaleString()} · ${scannedPages.length} page${scannedPages.length === 1 ? "" : "s"}` : "No scans yet. Click Scan the Public Site to begin."}
-          <span className="block">This checks the live site. Draft changes are checked when you Submit for Review.</span>
+          <span className="block">Live-site results only. Draft changes are not included.</span>
           <span className="block">Links to other sites aren't checked.</span>
         </div>
       </div>
@@ -389,7 +389,7 @@ export default function LinkAuditView({ pages }: { pages: DbPage[] }) {
             <SummaryCard label="Same Page" value={counts.SelfRef} />
             {counts.Unchecked > 0 && <SummaryCard label="Couldn't Check" value={counts.Unchecked} tone="warn" />}
           </div>
-          <p className="-mt-2 text-xs text-muted-foreground">Tiles count {activeRows.length} current distinct links; results also include {deletedRows.length} removed links and follow your filters. Repeated header/footer links count once, and matching results are grouped below—not counted like every link in a page inventory.</p>
+          <p className="-mt-2 text-xs text-muted-foreground">{activeRows.length} distinct current links · {deletedRows.length} removed. Header/footer repeats count once. Results follow your filters.</p>
 
           <div className="nova-audit-filters flex items-center gap-2 flex-wrap">
             <div className="relative w-full sm:w-auto sm:flex-1 sm:min-w-[240px] max-w-md">

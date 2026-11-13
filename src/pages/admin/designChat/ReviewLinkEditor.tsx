@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Save, X, Undo2, Unlink } from "lucide-react";
+import { Pencil, Save, X, Undo2, Unlink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
@@ -94,7 +94,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
   };
   const suggestions = pages.filter(p => validTextLink(p.path) && !isInternalPath(p.path) && (!address || p.name.toLowerCase().includes(address.toLowerCase()) || p.path.toLowerCase().includes(address.toLowerCase()))).slice(0, 12);
   const content = <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} className="min-w-0 space-y-2" aria-label="Edit Link Destination">
-    {edit.group.shared && <div><p className="text-xs text-muted-foreground">Changing this link updates {edit.group.shared.name} everywhere it is used.</p><SharedPageUsage pages={edit.group.shared.pages} /></div>}
+    {edit.group.shared && <div><SharedPageUsage prefix="Site-wide link · used on" pages={edit.group.shared.pages} /></div>}
     <div><p className="text-xs text-muted-foreground">Current Destination</p><p className="break-all font-mono text-sm">{removed ? "Link removed. The text is no longer clickable." : publicLinkAddress(resolved?.href ?? edit.link.href)}</p></div>
     <div className="space-y-1"><label htmlFor="review-link-address" className="text-sm">New Destination</label>
       <Input id="review-link-address" className="h-11 text-sm sm:h-8" value={address} aria-invalid={!valid || !!error} aria-describedby={!valid || destinationHint ? "review-link-hint" : error ? "review-link-error" : undefined} disabled={saving}
@@ -103,7 +103,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
       {suggesting && suggestions.length > 0 && <div aria-label="Page Suggestions" className="max-h-48 overflow-y-auto overscroll-contain border bg-popover p-1">{suggestions.map(p => <Button type="button" key={p.path} variant="ghost" className="h-auto min-h-11 sm:min-h-8 w-full justify-start whitespace-normal break-words text-left" disabled={saving} onMouseDown={e => e.preventDefault()} onClick={() => { setAddress(p.path); setSuggesting(false); if (resolved) setError(""); }}>{p.name}</Button>)}</div>}
     </div>
     <label className="flex min-h-11 sm:min-h-8 items-center justify-between gap-3 text-sm">Open in New Tab<Switch aria-label="Open in New Tab" checked={blank} disabled={!resolved || saving} onCheckedChange={setBlank} /></label>
-    {finding && <p role="status" className="text-sm text-muted-foreground">Finding the link on this page…</p>}
+    {finding && <span role="status" aria-label="Loading"><Loader2 aria-hidden className="h-4 w-4 animate-spin motion-reduce:animate-none text-muted-foreground" /></span>}
     {error && resolved && <p id="review-link-error" role="alert" className="break-words text-sm text-destructive">{error}</p>}
     {!finding && !resolved && <><p role="status" className="text-sm">{resolutionHint}</p><Button type="button" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => { walk.update(s => ({ ...s, reviewEdit: null })); void fallback(edit.link, edit.group, edit.rows, edit.fingerprint); }}><Pencil className="h-4 w-4" aria-hidden />Open in Manual Edit</Button></>}
     {resolved && <div className="grid grid-cols-1 gap-2">

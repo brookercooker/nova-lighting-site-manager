@@ -62,8 +62,8 @@ export function LinkFixBanner() {
   };
   return <div role="region" aria-label="Changing a Link" data-link-fix className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-secondary px-3 py-3 text-sm text-secondary-foreground sm:py-2">
     <div className="w-full min-w-0 break-words sm:w-auto sm:flex-1">
-      <p>{found.state === "found" ? `Changing a link on ${fix.pageName}. The link to ${fix.address} is selected. Change where it goes, then Save Changes.` : fixBannerText(fix.pageName, fix.address)}</p>
-      {found.state === "missing" && <p role="status" className="mt-2 text-xs leading-relaxed">We couldn't find it automatically. Look for the link to {fix.address} on this page.</p>}
+      <p>{fixBannerText(fix.pageName, fix.address)}</p>
+      {found.state === "missing" && <p role="status" className="mt-2 text-xs leading-relaxed">Couldn't select this link.</p>}
       {found.state === "found" && found.count > 1 && <p role="status" className="mt-2 text-xs leading-relaxed">{found.count} links on this page go there; the first is selected.</p>}
     </div>
     <Button type="button" variant={fix.saved ? "default" : "outline"} className="h-11 w-full sm:h-9 sm:w-auto" onClick={() => void backToReview()}>

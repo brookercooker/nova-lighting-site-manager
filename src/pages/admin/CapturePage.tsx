@@ -418,14 +418,7 @@ export default function CapturePage() {
               Choose Files
             </Button>
           </div>
-          <details className="rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
-            <summary className="cursor-pointer list-none font-medium text-foreground">How This Works</summary>
-            <p className="pt-2 leading-relaxed">
-              Photos and videos stage here first. Name them, add labels and pages, then upload in one batch.
-              Capture metadata (location, date taken, camera) is read from each original automatically.
-              Choose an MP4 and a WebM with the same base name and they upload as one clip with both formats.
-            </p>
-          </details>
+          <p className="text-xs text-muted-foreground">MP4 and WebM files with matching names upload as one clip.</p>
         </section>
 
 
@@ -467,7 +460,7 @@ export default function CapturePage() {
         {/* Staged items */}
         {items.length === 0 ? (
           <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-            Nothing staged yet. Take a photo or choose files to begin.
+            Nothing staged yet.
           </div>
         ) : (
           <section className="space-y-3">
