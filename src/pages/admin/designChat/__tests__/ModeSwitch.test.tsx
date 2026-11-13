@@ -42,7 +42,7 @@ describe("mode switch safeguards", () => {
     expect(m.discard).toHaveBeenCalledTimes(1); expect(m.stop).toHaveBeenCalledTimes(1); expect(m.save).not.toHaveBeenCalled();
   });
   it("keeps editing without saving or discarding", async () => {
-    open(); fireEvent.click(screen.getByText("Chat Mode")); fireEvent.click(screen.getByText("Keep Editing"));
+    open(); fireEvent.click(screen.getByText("Chat Mode")); fireEvent.click(screen.getByText("Return to Edit"));
     await waitFor(() => expect(m.result).toHaveBeenCalledWith(false));
     expect(m.stop).not.toHaveBeenCalled(); expect(m.save).not.toHaveBeenCalled(); expect(m.discard).not.toHaveBeenCalled();
   });
@@ -56,7 +56,7 @@ describe("mode switch safeguards", () => {
     m.editing = false; m.busy = kind === "busy"; m.open = kind === "review" ? 1 : 0; m.status = kind === "review" ? "reviewing" : "";
     open(); fireEvent.click(screen.getByText("Manual Edit Mode")); expect(m.enter).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Cancel")); expect(m.enter).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText("Manual Edit Mode")); fireEvent.click(screen.getByText(kind === "busy" ? "Continue Editing" : "Keep Editing"));
+    fireEvent.click(screen.getByText("Manual Edit Mode")); fireEvent.click(screen.getByText(kind === "busy" ? "Continue Editing" : "Return to Edit"));
     await waitFor(() => expect(m.enter).toHaveBeenCalledTimes(1));
   });
 });

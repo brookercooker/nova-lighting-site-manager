@@ -118,11 +118,11 @@ describe("segmented mode switch", () => {
     fireEvent.click(manual()); fireEvent.click(await screen.findByRole("button", { name: /About/ }));
     await waitFor(() => expect(manual()).toHaveAttribute("aria-checked", "true")); expect(m.select).toHaveBeenCalledWith({ id: "chosen", name: "About", path: "/about" });
   });
-  it.each(["Save Changes", "Discard Changes", "Keep Editing"])("preserves the unsaved guard: %s", async (choice) => {
+  it.each(["Save Changes", "Discard Changes", "Return to Edit"])("preserves the unsaved guard: %s", async (choice) => {
     m.initial = "manual"; m.dirty = true; open(); fireEvent.click(chat());
     expect(screen.getByRole("alertdialog")).toBeVisible(); expect(manual()).toHaveAttribute("aria-checked", "true");
     fireEvent.click(screen.getByRole("button", { name: choice }));
-    await waitFor(() => expect(choice === "Keep Editing" ? manual() : chat()).toHaveAttribute("aria-checked", "true"));
+    await waitFor(() => expect(choice === "Return to Edit" ? manual() : chat()).toHaveAttribute("aria-checked", "true"));
     expect(m.save).toHaveBeenCalledTimes(choice === "Save Changes" ? 1 : 0); expect(m.discard).toHaveBeenCalledTimes(choice === "Discard Changes" ? 1 : 0);
   });
   it("failed save keeps manual selected and shows the reason", async () => {
@@ -132,7 +132,7 @@ describe("segmented mode switch", () => {
   it.each(["busy", "review"])("confirms Claude %s before changing the highlight", async (kind) => {
     m.busy = kind === "busy"; m.open = kind === "review" ? 1 : 0; m.status = kind === "review" ? "reviewing" : ""; open(); fireEvent.click(manual());
     expect(screen.getByRole("alertdialog")).toBeVisible(); expect(chat()).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(screen.getByText(kind === "busy" ? "Continue Editing" : "Keep Editing")); await waitFor(() => expect(manual()).toHaveAttribute("aria-checked", "true"));
+    fireEvent.click(screen.getByText(kind === "busy" ? "Continue Editing" : "Return to Edit")); await waitFor(() => expect(manual()).toHaveAttribute("aria-checked", "true"));
   });
 });
 function PhoneMenuHarness(props: { onChat: () => void }) {

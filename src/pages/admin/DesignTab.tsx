@@ -1209,7 +1209,7 @@ export default function DesignTab({ embedded = false, pageId, onNavigate, object
         description="Save your edits to this page before opening the object editor?" destructive={false} primaryFirst
         confirmLabel="Save Changes" confirmIcon={<SaveIcon className="h-4 w-4" aria-hidden />}
         secondaryLabel="Discard Changes" secondaryIcon={<TrashIcon className="h-4 w-4" aria-hidden />}
-        cancelLabel="Keep Editing" cancelIcon={<PencilIcon className="h-4 w-4" aria-hidden />}
+        cancelLabel="Return to Edit" cancelIcon={<PencilIcon className="h-4 w-4" aria-hidden />}
         onConfirm={async () => { const id = openAsk; setOpenAsk(null); if (id && await saveAll()) chat?.openObject(id, undefined, { slot: openSlot.current }); }}
         onSecondary={async () => { const id = openAsk; setOpenAsk(null); if (!id) return; try { await discardAll(); chat?.openObject(id, undefined, { slot: openSlot.current }); } catch { /* stays on the page */ } }} />
       <CreatePageDialog

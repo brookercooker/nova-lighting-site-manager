@@ -30,7 +30,7 @@ export type WalkState = {
   autoOpen: boolean;
   /** Wrong links the reviewer replaced by hand in Manual Edit Mode, with the link fingerprint at the time. */
   linkReplaced: Record<string, string>;
-  /** Set while Change This Link is open in Manual Edit Mode; cleared by Keep Editing and normal mode exits. */
+  /** Set while Change This Link is open in Manual Edit Mode; cleared by Return to Edit and normal mode exits. */
   fix: LinkFix | null;
   /** The page just saved through Change This Link: its page approval follows the hand save; links always retain their own fingerprints. */
   repin: { path: string; until: number } | null;

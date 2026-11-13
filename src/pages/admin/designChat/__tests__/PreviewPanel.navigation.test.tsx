@@ -6,12 +6,15 @@ import PreviewPanel from "../PreviewPanel";
 import PreviewToolbar from "../PreviewToolbar";
 import type { DesignChat } from "../DesignChatContext";
 import { rememberScroll } from "../frameScroll";
+import { walk } from "../submitWalkthroughStore";
+import { SubmitWalkthroughPanel } from "../SubmitWalkthrough";
 
 const context = vi.hoisted(() => ({ chat: null as unknown }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => context.chat }));
 vi.mock("../DrawLayer", () => ({ default: () => <div>Drawing</div> }));
 vi.mock("../pageSelection", () => ({ loadManualPages: async () => [] }));
-afterEach(cleanup);
+vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => ({ rows: [], pages: [{name:"Team",path:"/team",build_status:"ready"}], links: {status:"ok",unread:0,groups:[{label:"Homepage",page:{name:"Homepage",path:"/"},links:[{key:"team",href:"/team",kind:"internal",label:"Team",requestIds:[],status:null}]}]}}) }));
+afterEach(() => { cleanup(); walk.reset(); });
 
 function setup(overrides: Partial<DesignChat> = {}) {
   const chat = {
@@ -28,6 +31,34 @@ function setup(overrides: Partial<DesignChat> = {}) {
 }
 
 describe("floating preview navigation", () => {
+  it("removes Design Check shielding for Step 2 and accepts clicks as tile selection, never navigation", () => {
+    walk.update(w => ({...w,open:true,step:"pages",checking:{key:"page:/",kind:"page",name:"Homepage"}}));
+    const {chat,view,rerender,container} = setup({state:{publish:{open:1},review:{enabled:true}} as any,preview:{frames:[{id:1,url:"https://public.example/"}],shownId:1,loaded:true,finish:vi.fn()} as any,showPreviewPath:vi.fn(),setReviewOpen:vi.fn()});
+    const frame = container.querySelector("iframe");
+    if (!frame?.contentWindow) throw new Error("Missing preview");
+    const win = frame.contentWindow;
+    const post = vi.spyOn(win,"postMessage");
+    expect(frame).toHaveAttribute("inert");
+    expect(screen.getByRole("region",{name:"Design Check Preview"})).toBeInTheDocument();
+    act(() => walk.update(w => ({...w,step:"links",checking:{key:"team",kind:"link",name:"Team"}})));
+    rerender(view());
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(frame).not.toHaveAttribute("inert");
+    expect(frame).not.toHaveAttribute("tabindex","-1");
+    expect(screen.queryByRole("region",{name:"Design Check Preview"})).toBeNull();
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({type:"link-check",enabled:true,interceptAll:true}),"https://public.example");
+    render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
+    const scroll = vi.fn(); HTMLElement.prototype.scrollIntoView = scroll;
+    const send = (match: string | null) => act(() => window.dispatchEvent(new MessageEvent("message",{origin:"https://public.example",source:win,data:{source:"nova-site",type:"link-click",v:2,match,raw:match ?? "/unchanged",href:"https://public.example"+(match ?? "/unchanged"),kind:"internal",label:"Team",path:"/"}})));
+    send("/team");
+    expect(walk.get().selectedLink?.key).toBe("team");
+    expect(scroll).toHaveBeenCalledWith({block:"nearest"});
+    expect(screen.getByRole("link",{name:"Open link to verify Team"})).toHaveFocus();
+    send(null);
+    expect(walk.get().linkNote).toBe("This link wasn't changed, so it doesn't need checking.");
+    expect(chat.showPreviewPath).not.toHaveBeenCalled();
+    expect(frame.src).toBe("https://public.example/");
+  });
   it("records Homepage scrolling without a path-bearing ready and restores after bare preview-ready", () => {
     const { chat, view, rerender, container } = setup({ preview: { frames: [{ id: 1, url: "https://public.example/" }], shownId: 1, loaded: true, finish: vi.fn() } as any });
     const frame = container.querySelector("iframe"); const win = frame?.contentWindow;

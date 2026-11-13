@@ -65,7 +65,7 @@ export default function ManualPageSwitcher({ navigation }: { navigation: Navigat
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:flex-nowrap sm:justify-start sm:space-x-0">
           <Button className="gap-2" disabled={disabled} onClick={() => void navigation.resolve(true)}><Save className="h-4 w-4" aria-hidden />Save Changes</Button>
           <Button className="gap-2" variant="outline" disabled={disabled} onClick={() => void navigation.resolve(false)}><Trash2 className="h-4 w-4" aria-hidden />Discard Changes</Button>
-          <Button className="gap-2" variant="outline" disabled={disabled} onClick={() => navigation.setPending(null)}><Pencil className="h-4 w-4" aria-hidden />Keep Editing</Button>
+          <Button className="gap-2" variant="outline" disabled={disabled} onClick={() => navigation.setPending(null)}><Pencil className="h-4 w-4" aria-hidden />Return to Edit</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

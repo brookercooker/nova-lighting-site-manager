@@ -387,7 +387,7 @@ function AdminShell() {
               {(!phone || reviewActive) && <PreviewTools showViewControls={tab === "preview"} tight={!reviewActive && squeeze >= 2} review={reviewActive} />}
 
               <div aria-hidden className={cn("h-9 w-px bg-border shrink-0", compact && "hidden")} />
-              {!phone && !manual && !editing && (reviewActive ? <Button variant="outline" className="h-11 shrink-0" onClick={keepEditing}><Pencil aria-hidden className="h-4 w-4" />Keep Editing</Button> : <SubmitButton compact={compact} showProgress={false} />)}
+              {!phone && !manual && !editing && (reviewActive ? <Button variant="outline" className="h-11 shrink-0" onClick={keepEditing}><Pencil aria-hidden className="h-4 w-4" />Return to Edit</Button> : <SubmitButton compact={compact} showProgress={false} />)}
               {manual && (
                 <Button type="button" size="sm" data-save-changes variant={dirty ? "default" : "outline"} className={cn("shrink-0 gap-1.5", phone && "h-11")} aria-label="Save Changes" title="Save Changes" disabled={finishing || !dirty} onClick={() => void saveChanges()}>
                   <Save className="h-4 w-4" aria-hidden />{finishing ? "Saving…" : layout.labels && !compact ? "Save Changes" : "Save"}
@@ -398,7 +398,7 @@ function AdminShell() {
           </header>
           <WaitProgress progress={saveProgress} className="shrink-0 border-b bg-background px-3 py-2" />
           {!phone && !manual && <WaitProgress progress={designChat.waitProgress?.submit} className="shrink-0 border-b bg-background px-3 py-2" />}
-          {tab === "preview" && <PreviewToolbar onManualNavigate={pageNavigation.requestPath} manualDisabled={pageNavigation.disabled} />}
+          {tab === "preview" && !reviewActive && <PreviewToolbar onManualNavigate={pageNavigation.requestPath} manualDisabled={pageNavigation.disabled} />}
 
           <ChangeMyPasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
 
@@ -634,7 +634,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
         {/^\/manage\/(objects|images|videos|pages)$/.test(window.location.pathname) && new URLSearchParams(window.location.search).get("tab") !== "audit" && <MoreMenuItem onSelect={() => { const path = window.location.pathname; const scope = path.includes('/objects') ? 'objects' : path.includes('/images') ? 'images' : path.includes('/videos') ? 'videos' : path.includes('/pages') ? (new URLSearchParams(window.location.search).get('tab') === 'landing' ? 'landing' : new URLSearchParams(window.location.search).get('tab') === 'audit' ? 'links' : 'static') : null; if (scope) window.dispatchEvent(new CustomEvent('nova:manage-library-labels', { detail: scope })); }}>Manage Labels</MoreMenuItem>}
         <MoreMenuItem onClick={() => navigate("/manage/pages")}><FileText className="mr-2 h-4 w-4" />Pages</MoreMenuItem>
         <HeaderActions menuItems onExpand={onReview} />
-        {reviewActive ? <MoreMenuItem className="min-h-11" onSelect={() => { walk.keepEditing(); setReviewOpen(false); }}><Pencil className="mr-2 h-4 w-4" />Keep Editing</MoreMenuItem> : !editing && <div className="px-2 py-1"><SubmitButton onRequestSubmit={() => { setMenuOpen(false); setSubmitConfirm(true); }} /></div>}
+        {reviewActive ? <MoreMenuItem className="min-h-11" onSelect={() => { walk.keepEditing(); setReviewOpen(false); }}><Pencil className="mr-2 h-4 w-4" />Return to Edit</MoreMenuItem> : !editing && <div className="px-2 py-1"><SubmitButton onRequestSubmit={() => { setMenuOpen(false); setSubmitConfirm(true); }} /></div>}
         <MoreMenuSeparator />
         {showView && (
           <>

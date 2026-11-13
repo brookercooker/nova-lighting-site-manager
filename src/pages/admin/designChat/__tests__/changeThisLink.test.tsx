@@ -78,7 +78,7 @@ describe("Edit Link Destination", () => {
     expect(linkState("/a|/gallery-new", walk.get().linkTicked, walk.get().linkReplaced)).toBe("todo");
     expect(screen.getByText("1 of 2 links approved")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getAllByRole("link", { name: "Open Link to Verify" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: /^Open link to verify / })).toHaveLength(2);
     const p = walkProgress(m.data, walk.get());
     expect(p.linksLeft).toBe(1);
     act(() => walk.confirmLink("/a|/gallery-new", linkFingerprints(m.data)["/a|/gallery-new"], true));
@@ -92,7 +92,7 @@ describe("Edit Link Destination", () => {
     walk.reconcile({}, { "/a|/gallery": "x" }, { "/a|/gallery": "new" });
     expect(walk.get().linkReplaced).toEqual({});
   });
-  it("Keep Editing and leaving Manual Edit Mode clear the return point", () => {
+  it("Return to Edit and leaving Manual Edit Mode clear the return point", () => {
     walk.startFix({ key: "k", fingerprint: "f", path: "/a", pageName: "About", address: "/x" });
     walk.keepEditing();
     expect(walk.get().fix).toBeNull();

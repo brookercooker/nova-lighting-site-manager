@@ -29,7 +29,7 @@ function Host() {
 const ready = () => { const e = new Event("message") as any; Object.assign(e, { data: { source: "nova-site", type: "link-check-ready", v: 2, enabled: true }, origin: "https://site.example", source: frame.contentWindow }); window.dispatchEvent(e); };
 
 describe("walkthrough auto-open and link lines", () => {
-  it("opens the first real page once on desktop, and again after Keep Editing then Submit", () => {
+  it("opens the first real page once on desktop, and again after Return to Edit then Submit", () => {
     const h = render(<Host />);
     expect(m.show).toHaveBeenCalledTimes(1);
     expect(m.show).toHaveBeenCalledWith("/a");

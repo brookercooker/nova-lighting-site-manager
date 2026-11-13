@@ -36,7 +36,7 @@ export function LinkCheckBridge({ root, frameKey }: { root: RefObject<HTMLElemen
 /**
  * While a walkthrough page is being checked in the visible preview, sends the public frame the changed links (protocol v2)
  * and selects inline review rows on trusted clicks. All-link interception requires Public's interceptAll support.
- * Turned off when checking ends, on Keep Editing and in Manual Edit.
+ * Turned off when checking ends, on Return to Edit and in Manual Edit.
  */
 export function useLinkCheckBridge(root: RefObject<HTMLElement>, active: boolean, frameKey: string, links: LinkCheckEntry[] = [], onClick?: (click: LinkClick) => void) {
   const clickRef = useRef(onClick); clickRef.current = onClick;

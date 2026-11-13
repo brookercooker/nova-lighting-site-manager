@@ -53,13 +53,13 @@ describe("manual page navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(m.select).toHaveBeenLastCalledWith({ id: "about", name: "About", path: "/about" });
   });
-  it.each(["Save Changes", "Discard Changes", "Keep Editing"])("protects unsaved edits with %s", async action => {
+  it.each(["Save Changes", "Discard Changes", "Return to Edit"])("protects unsaved edits with %s", async action => {
     m.dirty = true; await open(); fireEvent.click(screen.getByRole("button", { name: "Forward" }));
     expect(screen.getByRole("dialog", { name: "You have unsaved changes" })).toBeVisible();
     expect(m.select).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: action }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    if (action === "Keep Editing") { expect(m.select).not.toHaveBeenCalled(); expect(m.save).not.toHaveBeenCalled(); expect(m.discard).not.toHaveBeenCalled(); }
+    if (action === "Return to Edit") { expect(m.select).not.toHaveBeenCalled(); expect(m.save).not.toHaveBeenCalled(); expect(m.discard).not.toHaveBeenCalled(); }
     else { expect(m.select).toHaveBeenCalledWith({ id: "draft", name: "Autumn", path: "/landing/autumn" }); expect(action === "Save Changes" ? m.save : m.discard).toHaveBeenCalledOnce(); }
   });
   it("stays on the same page after a failed save", async () => {

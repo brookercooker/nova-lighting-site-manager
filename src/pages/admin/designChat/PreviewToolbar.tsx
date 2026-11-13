@@ -51,6 +51,7 @@ export default function PreviewToolbar({ onManualNavigate, manualDisabled = fals
   } catch { /* No usable public address yet. */ }
   const fullLabel = chat.inFull ? "Exit Full Screen" : "Full Screen";
   const FullIcon = chat.inFull ? Minimize2 : Maximize2;
+  if (reviewActive && !chat.editing) return null;
   return <div role="toolbar" aria-label="Preview Toolbar" className={reviewActive ? "grid h-12 min-w-0 shrink-0 grid-cols-[5.5rem_minmax(0,1fr)_2.75rem] items-center gap-1 border-b bg-background px-1" : "grid h-10 min-w-0 shrink-0 grid-cols-[4.25rem_minmax(0,1fr)_4.25rem] items-center gap-1 border-b bg-background px-2"}>
     <div className="flex shrink-0 gap-0.5">
       {chat.editing ? <div data-preview-nav className="flex shrink-0 gap-0.5">

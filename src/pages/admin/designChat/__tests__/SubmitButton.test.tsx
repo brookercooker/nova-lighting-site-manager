@@ -55,7 +55,7 @@ describe("Submit for Review walkthrough", () => {
     expect(screen.getByRole("button", { name: "Approve: Ideas & Advice" })).toBeDisabled();
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
   });
-  it.each(["pages", "links", "checklist"] as const)("Keep Editing is available on %s and preserves unchanged approvals", (step) => {
+  it.each(["pages", "links", "checklist"] as const)("Return to Edit is available on %s and preserves unchanged approvals", (step) => {
     m.data.links = { status: "failed" };
     const host = render(<PanelHost open onOpenChange={vi.fn()} />);
     viewAndTick();

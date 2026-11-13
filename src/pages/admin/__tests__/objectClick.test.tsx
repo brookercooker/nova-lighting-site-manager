@@ -126,10 +126,10 @@ describe("object dialogs", () => {
 });
 
 describe("save flow", () => {
-  it("Save Your Changes? lists Save Changes, Discard Changes, Keep Editing left to right", () => {
+  it("Save Your Changes? lists Save Changes, Discard Changes, Return to Edit left to right", () => {
     render(<ConfirmDialog open onOpenChange={() => {}} title="Save Your Changes?" description="" destructive={false} primaryFirst
-      confirmLabel="Save Changes" secondaryLabel="Discard Changes" cancelLabel="Keep Editing" onConfirm={() => {}} onSecondary={() => {}} />);
-    expect(screen.getAllByRole("button").map(b => b.textContent)).toEqual(["Save Changes", "Discard Changes", "Keep Editing"]);
+      confirmLabel="Save Changes" secondaryLabel="Discard Changes" cancelLabel="Return to Edit" onConfirm={() => {}} onSecondary={() => {}} />);
+    expect(screen.getAllByRole("button").map(b => b.textContent)).toEqual(["Save Changes", "Discard Changes", "Return to Edit"]);
   });
 });
 

@@ -40,7 +40,7 @@ export default function ObjectEditorHeader({ info, backLabel, disabled, onLeave 
         <DialogFooter className="flex-row flex-wrap justify-start gap-2 sm:justify-start sm:space-x-0">
           <Button className="gap-2" disabled={busy} onClick={() => void resolve(true)}><Save className="h-4 w-4" aria-hidden />Save Changes</Button>
           <Button className="gap-2" variant="outline" disabled={busy} onClick={() => void resolve(false)}><Trash2 className="h-4 w-4" aria-hidden />Discard Changes</Button>
-          <Button className="gap-2" variant="outline" disabled={busy} onClick={() => setAsking(false)}><Pencil className="h-4 w-4" aria-hidden />Keep Editing</Button>
+          <Button className="gap-2" variant="outline" disabled={busy} onClick={() => setAsking(false)}><Pencil className="h-4 w-4" aria-hidden />Return to Edit</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

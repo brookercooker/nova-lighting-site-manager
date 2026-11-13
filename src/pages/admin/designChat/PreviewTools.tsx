@@ -1,20 +1,27 @@
 import { useState } from "react";
-import { Monitor, Smartphone, Tablet, Send } from "lucide-react";
+import { Monitor, Smartphone, Tablet, Send, Maximize2, Minimize2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useDesignChat, type Device } from "./DesignChatContext";
 import WaitProgress from "./WaitProgress";
 import { undoPendingGate, undoPendingReason } from "./logic";
+import { publicPreviewPage } from "./publicPreviewUrl";
 
 /**
  * Device size stays with the component pickers; navigation lives in PreviewToolbar.
  * Submit for review stays in the top bar (SubmitButton).
  */
 export default function PreviewTools({ showViewControls, tight = false, review = false }: { showViewControls: boolean; tight?: boolean; review?: boolean }) {
-  const { device, setDevice } = useDesignChat();
+  const chat = useDesignChat();
+  const { device, setDevice } = chat;
+  const destination = !chat.editing ? chat.previewDestination : null;
+  const path = chat.editing ? chat.workingPage?.path ?? "/" : destination ?? (chat.previewLocation ? chat.previewLocation.path + (chat.previewLocation.search ?? "") : chat.workingPage?.path ?? "/");
+  let href: string | undefined;
+  try { if (chat.state?.liveUrl) href = publicPreviewPage(chat.state.liveUrl, path); } catch { /* no usable preview URL */ }
+  const FullIcon = chat.inFull ? Minimize2 : Maximize2;
 
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-1">
       {showViewControls && (
         <>
           {!tight && <ToggleGroup type="single" value={device} onValueChange={(v) => v && setDevice(v as Device)} variant="outline" size="sm"
@@ -23,6 +30,10 @@ export default function PreviewTools({ showViewControls, tight = false, review =
             <ToggleGroupItem value="tablet" aria-label="Tablet Preview" title="Tablet Preview"><Tablet className="h-4 w-4" /></ToggleGroupItem>
             <ToggleGroupItem value="desktop" aria-label="Desktop Preview" title="Desktop Preview"><Monitor className="h-4 w-4" /></ToggleGroupItem>
           </ToggleGroup>}
+          {review && <>
+            <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0 shadow-none" aria-label="Full screen preview" title="Full screen preview" aria-pressed={chat.inFull} onClick={chat.toggleFull}><FullIcon className="h-4 w-4" aria-hidden /></Button>
+            {href ? <Button asChild variant="outline" size="icon" className="h-11 w-11 shrink-0 shadow-none"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open preview in new tab" title="Open preview in new tab"><ExternalLink className="h-4 w-4" aria-hidden /></a></Button> : <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 shadow-none" disabled aria-label="Open preview in new tab" title="Open preview in new tab"><ExternalLink className="h-4 w-4" aria-hidden /></Button>}
+          </>}
         </>
       )}
     </div>
