@@ -21,7 +21,7 @@ export async function resolveReviewLink(path: string, href: string, label: strin
   const url = publicPreviewPage(publicPreviewBase(embed), path);
   const frame = shownPreviewFrame();
   const inv = (frame ? await requestFrameInventory(frame, url) : null) ?? await requestInventory(url);
-  const candidates = inv?.links.filter(l => l.href === href && parseKey(`link:${l.key}`) && (l.scope === "page" || l.scope.startsWith("object:"))) ?? [];
+  const candidates = inv?.links.filter(l => (identity?.elementKey ? l.key === identity.elementKey.replace(/^link:/, "") && l.scope === (identity.scope ?? "page") : l.href === href) && parseKey(`link:${l.key}`) && (l.scope === "page" || l.scope.startsWith("object:"))) ?? [];
   const named = label ? candidates.filter(l => l.label === label) : [];
   const pool = named.length ? named : candidates;
   const body = pool.filter(l => l.scope === "page");

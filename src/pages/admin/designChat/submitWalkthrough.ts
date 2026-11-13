@@ -2,13 +2,13 @@ import type { DraftRequest } from "./helper";
 
 /** Pure rules for the Submit for Review walkthrough (pages, links, checklist). */
 export type PageRef = { name: string; path: string; sharedChange?: unknown };
-export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number; guess?: boolean; by?: string; fingerprint?: string };
+export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number; guess?: boolean; by?: string; fingerprint?: string; shared?: { id: string; name: string; pages: PageRef[] } };
 export const OTHER_KEY = "other";
 export type ManagerPage = { name: string; path: string; build_status: string; handEdits?: number; inlineEdits?: unknown; content?: unknown };
 /** Count of stored hand edits, ignoring orig: baseline metadata; undefined when unknown. */
 export function countHandEdits(inline: unknown): number | undefined {
   if (!inline || typeof inline !== "object" || Array.isArray(inline)) return inline == null ? 0 : undefined;
-  return Object.keys(inline).filter((k) => !k.startsWith("orig:")).length;
+  return Object.keys(inline).filter((k) => !k.startsWith("orig:") && !k.startsWith("fp:")).length;
 }
 /** Drop pages whose only change is a hand edit that has since been fully undone (stored hand edits now empty). */
 export function dropRevertedHandEdits(rows: ChangedRow[], pages: ManagerPage[]): ChangedRow[] {

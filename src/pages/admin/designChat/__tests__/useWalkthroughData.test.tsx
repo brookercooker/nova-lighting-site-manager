@@ -19,6 +19,21 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("drops restored About Us-only design checks but preserves builder changes", async () => {
+    m.from.mockImplementation((table: string) => {
+      const result = { data: table === "object_registry" ? [{ id: "about-us", name: "About Us", inline_edits: { "fp:0.1": "original" } }] : table === "object_page_usages" ? [{ object_registry_id: "about-us", pages: { name: "About", path: "/about" } }] : [], error: null };
+      const q: any = { select: () => q, is: () => Promise.resolve(result), in: () => Promise.resolve(result) }; return q;
+    });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? { ...body, rows: [], objects: [{ name: "About Us", requestIds: ["1"] }] } : { ok: true, groups: [] }))));
+    const client = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const state: any = { draft: { requests: [{ id: "1", source: "content", request: "Restore link" }] } };
+    const hook = renderHook(({ value }) => useWalkthroughData(value, true), { wrapper, initialProps: { value: state } });
+    await waitFor(() => expect(hook.result.current.pagesStatus).toBe("ok"));
+    expect(hook.result.current.rows).toEqual([]);
+    hook.rerender({ value: { draft: { requests: [{ id: "1", source: "chat", request: "Change coded object" }] } } });
+    await waitFor(() => expect(hook.result.current.rows.some(row => row.page?.path === "/about")).toBe(true));
+  });
   it("includes saved About Us object links even when the relay only reports page links", async () => {
     m.from.mockImplementation((table: string) => {
       const result = { data: table === "object_registry" ? [{ id: "about-us", name: "About Us", inline_edits: { "link:0.1": '{"href":"/contact"}' } }] : table === "object_page_usages" ? [{ object_registry_id: "about-us", pages: { name: "About", path: "/about" } }, { object_registry_id: "about-us", pages: { name: "Homepage", path: "/" } }] : [], error: null };

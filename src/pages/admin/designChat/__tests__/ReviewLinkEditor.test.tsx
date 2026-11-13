@@ -95,6 +95,15 @@ it("legacy wrong state is safely dropped without changing current approvals", ()
   expect(walk.get()).not.toHaveProperty("linkWrong");
   expect(walk.get().linkTicked).toEqual(["/|/team"]);
 });
+it("retains the visible footer wording after saving a destination", async () => {
+  m.resolve.mockResolvedValue({ href: "/contact", blank: false, element: { key: "0.1", scope: "object:footer", label: "Ideas & Advice" } });
+  walk.editLink({ link, group: { ...group, shared: { id: "footer", name: "Site Footer", pages: [{ name: "Homepage", path: "/" }] } }, rows: [], fingerprint: "own" });
+  render(<ReviewLinkEditor pages={pages} />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/gallery" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
+  await waitFor(() => expect(walk.get().savedReviewLinks[0]?.link.label).toBe("Ideas & Advice"));
+});
 
 it.each(["javascript:alert(1)", "//host", "plain words", ""])("blocks invalid destination %s during typing", async value => {
   render(<ReviewLinkEditor pages={pages} />);

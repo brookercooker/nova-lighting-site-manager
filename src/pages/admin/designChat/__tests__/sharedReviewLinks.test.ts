@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { mergeSharedReviewLinks, stableReviewEdits } from "../sharedReviewLinks";
+import { addSharedChromeRows, mergeSharedReviewLinks, stableReviewEdits } from "../sharedReviewLinks";
 import { changeFingerprint } from "../submitWalkthrough";
 
 const pages = [{ name: "About", path: "/about", build_status: "ready" }, { name: "Homepage", path: "/", build_status: "ready" }];
 const base = { groups: [], unread: 0, partial: false, truncated: false };
 describe("shared review links", () => {
+  it("adds one Site Footer visual-review item for 37 pages, ignoring fingerprint-only restores", () => {
+    const uses = Array.from({ length: 37 }, (_, i) => ({ name: `Page ${i}`, path: `/page-${i}`, build_status: "ready" }));
+    const footer = { id: "footer", name: "Site Footer", pages: [], inlineEdits: { "link:0.1": '{"href":"/team"}' } };
+    const rows = addSharedChromeRows([], [footer], uses);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].how).toBe("Shared piece: Site Footer · used on 37 pages");
+    expect(rows[0].shared?.pages).toHaveLength(37);
+    expect(addSharedChromeRows([], [{ ...footer, inlineEdits: { "fp:0.1": "original" } }], uses)).toEqual([]);
+    expect(mergeSharedReviewLinks(base, [footer], uses).groups[0].label).toBe("Shared: Site Footer");
+  });
+  it("lists coded Header changes once even without manual overrides", () => {
+    const rows = addSharedChromeRows([{ key: "page:/", page: pages[1], how: "Shared piece: Header" }], [{ id: "header", name: "Site Header", componentKey: "Header", pages, inlineEdits: {} }], pages, ["Header"]);
+    expect(rows.map(row => row.key)).toEqual(["shared:header"]);
+  });
   it("lists the About Us location-to-contact override once across About and Homepage", () => {
     const result = mergeSharedReviewLinks(base, [{ id: "about-us", name: "About Us", inlineEdits: { "link:0.1": '{"href":"/contact"}' }, pages }], pages);
     expect(result.groups).toHaveLength(1);

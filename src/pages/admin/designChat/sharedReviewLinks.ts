@@ -1,6 +1,6 @@
-import { normPath, type PageRef, type ReviewLinks, type ReviewLink, type ManagerPage } from "./submitWalkthrough";
+import { normPath, type PageRef, type ReviewLinks, type ReviewLink, type ManagerPage, type ChangedRow } from "./submitWalkthrough";
 
-export type SharedReviewObject = { id: string; name: string; inlineEdits: unknown; content?: unknown; pages: PageRef[] };
+export type SharedReviewObject = { id: string; name: string; componentKey?: string; inlineEdits: unknown; content?: unknown; pages: PageRef[] };
 /** One stored object link per scope/key, regardless of how many pages render it. */
 export function mergeSharedReviewLinks(base: ReviewLinks, objects: SharedReviewObject[], pages: ManagerPage[]): ReviewLinks {
   const groups = base.groups.map(g => ({ ...g, links: [...g.links] }));
@@ -25,9 +25,19 @@ export function mergeSharedReviewLinks(base: ReviewLinks, objects: SharedReviewO
         links.set(elementKey, { ...prior, key: `${scope}|${elementKey}|${href}`, href, kind, elementKey, scope, target: override.target === "_blank" ? "_blank" : null, label: prior?.label ?? null, requestIds: prior?.requestIds ?? [], status: prior?.status ?? null });
       } catch { /* malformed stored overrides never authorize a write */ }
     }
-    if (links.size) groups.push({ page: uses[0], shared: { id: object.id, name: object.name, pages: uses }, label: `Shared: ${object.name} (used on ${uses.map(p => p.name).join(", ")})`, links: [...links.values()] });
+    if (links.size) groups.push({ page: uses[0], shared: { id: object.id, name: object.name, pages: uses }, label: `Shared: ${object.name}`, links: [...links.values()] });
   }
   return { ...base, groups: groups.filter(g => g.links.length) };
+}
+
+/** Site chrome is reviewed once on a representative page, not once per usage. */
+export function addSharedChromeRows(rows: ChangedRow[], objects: SharedReviewObject[], pages: ManagerPage[], changedNames: string[] = []): ChangedRow[] {
+  const chrome = objects.filter(object => /^(?:Site )?(?:Header|Footer)$/i.test(object.name) && (Object.keys(stableReviewEdits(object.inlineEdits) as object).length > 0 || changedNames.includes(object.name) || !!object.componentKey && changedNames.includes(object.componentKey)));
+  const remaining = rows.filter(row => !chrome.some(object => row.how === `Shared piece: ${object.name}` || row.how === `Shared piece: ${object.componentKey}`));
+  return [...remaining, ...chrome.map(object => {
+    const uses = object.pages.length ? object.pages : pages;
+    return { key: `shared:${object.id}`, page: uses[0] ?? null, shared: { id: object.id, name: object.name, pages: uses }, how: `Shared piece: ${object.name} · used on ${uses.length} pages` };
+  })];
 }
 
 /** Fingerprint metadata arrival is not a visual edit; actual override/content changes remain authoritative. */

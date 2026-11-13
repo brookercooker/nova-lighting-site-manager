@@ -20,9 +20,10 @@ import { LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, linkState, linkCheckList, link
 import { shownPreviewFrame } from "./previewNavigate";
 import { ReviewLinkEditor } from "./ReviewLinkEditor";
 import { publicLinkAddress } from "../linkDisplay";
+import { SharedPageUsage } from "./SharedPageUsage";
 
 const missingInternalLink = (link: ReviewLink, pages: ManagerPage[]) =>
-  (link.kind === "internal" || link.kind === "anchor") && linkChip(link, pages)?.tone === "bad";
+  linkChip(link, pages)?.tone === "bad";
 const linkNeedsCheck = (link: ReviewLink, s: WalkState, pages: ManagerPage[]) =>
   !(link.key in s.linkReplaced) && (missingInternalLink(link, pages) || !s.linkTicked.includes(link.key));
 
@@ -56,7 +57,7 @@ function pageCount(rows: ChangedRow[], ticked: string[]): string {
   if (!rows.length) return "No pages were changed in this draft.";
   return `${rows.filter((r) => ticked.includes(r.key)).length} of ${rows.length} ${rows.length === 1 ? "page" : "pages"} approved`;
 }
-const rowName = (r: ChangedRow) => r.page?.name ?? "Other site changes";
+const rowName = (r: ChangedRow) => r.shared?.name ?? r.page?.name ?? "Other site changes";
 const rowPath = (r: ChangedRow) => r.page?.path ?? "/";
 /** The draft site address for a page (new tab), or null when no draft address is configured. */
 function draftPageUrl(path: string, embed: unknown = null): string | null {
@@ -236,6 +237,7 @@ function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: Walkthrou
       <p className="break-all font-mono text-xs text-muted-foreground">{rowPath(r)}</p>
       {r.guess && <p className="text-xs text-muted-foreground">(best guess)</p>}
       {(r.how || r.by) && <p className="break-words text-xs text-muted-foreground">{[r.how, r.by ? `by ${r.by}` : ""].filter(Boolean).join(" · ")}</p>}
+      {r.shared && <SharedPageUsage pages={r.shared.pages} />}
       {s.changed.includes(r.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
       {r.key === OTHER_KEY && <Button type="button" variant="link" className="h-9 p-0" onClick={() => onView(r)}>Open Site</Button>}
       <Approval approved={approved} enabled={approved || viewed} hint="Open the page first" onClick={() => walk.approve(r.key, r.fingerprint ?? changeFingerprint(r))} />
@@ -300,6 +302,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
         return (
         <section key={g.label + (g.page?.path ?? "")} aria-label={g.label}>
           <h3 className="mb-2"><Button type="button" variant="ghost" className="min-h-11 h-auto w-full justify-between whitespace-normal px-0 text-left text-sm font-semibold" aria-expanded={open} onClick={() => setExpanded(e => ({ ...e, [id]: !open }))}><span className="min-w-0 break-words">{g.label} · {handled} of {g.links.length}</span><ChevronDown aria-hidden className={cn("h-4 w-4 shrink-0", !open && "-rotate-90")} /></Button></h3>
+          {g.shared && <SharedPageUsage pages={g.shared.pages} />}
           {open && <ul className="space-y-2">
             {g.links.map((l) => {
               const chip = linkChip(l, data.pages);
@@ -326,7 +329,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                   <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{publicLinkAddress(friendlyName)}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[st]}</Badge></div>
                   {st === "todo" && s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <p className="break-all font-mono text-xs text-muted-foreground">{address}</p>
-                  {g.shared && <p className="text-xs text-muted-foreground">Also changes on {g.shared.pages.filter(p => normPath(p.path) !== normPath(g.page?.path ?? "/")).map(p => p.name).join(", ") || g.page?.name}.</p>}
+                  {g.shared && <SharedPageUsage prefix="Also changes on" pages={g.shared.pages.filter(p => normPath(p.path) !== normPath(g.page?.path ?? "/"))} />}
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
                   {chip?.tone === "bad" && !missing && <p className="text-xs text-destructive">{missingInternalLink(l, data.pages) ? "This page doesn't exist. Edit the link destination to fix it." : "This address couldn't be reached. Check the destination."}</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}

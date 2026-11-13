@@ -2,8 +2,10 @@ import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
 import { useWalk } from "./submitWalkthroughStore";
-import { mergeSharedReviewLinks, stableReviewEdits, type SharedReviewObject } from "./sharedReviewLinks";
-import { liveSiteBase, loadNetLinks, netReviewLinks } from "./linkInventory";
+import { addSharedChromeRows, mergeSharedReviewLinks, stableReviewEdits, type SharedReviewObject } from "./sharedReviewLinks";
+import { liveSiteBase, loadNetLinks, netReviewLinks, requestFrameInventory, requestInventory } from "./linkInventory";
+import { shownPreviewFrame } from "./previewNavigate";
+import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { supabase } from "@/prototype/client";
 import { codePagePaths, loadSiteManifest } from "../siteManifest";
 import { RELAY, relayHeaders, type RelayState } from "./helper";
@@ -16,7 +18,7 @@ export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links:
 async function fetchObjectPages(names: string[]): Promise<{ usages: Record<string, PageRef[]>; shared: SharedReviewObject[] }> {
   const { data: registry, error: registryError } = await (supabase as any).from("object_registry").select("id,name,component_key,inline_edits,content").is("archived_at", null);
   if (registryError) throw registryError;
-  const matches = (registry ?? []).filter((r: any) => names.includes(r.name) || names.includes(r.component_key) || Object.keys(r.inline_edits ?? {}).some(k => k.startsWith("link:")));
+  const matches = (registry ?? []).filter((r: any) => names.includes(r.name) || names.includes(r.component_key) || Object.keys(stableReviewEdits(r.inline_edits) as object).length > 0);
   if (!matches.length) return { usages: {}, shared: [] };
   const { data, error } = await (supabase as any).from("object_page_usages")
     .select("object_registry_id, pages:page_id(name,path,archived_at)")
@@ -29,7 +31,7 @@ async function fetchObjectPages(names: string[]): Promise<{ usages: Record<strin
     for (const name of names.filter((n) => n === object.name || n === object.component_key))
       (out[name] ??= []).push({ name: p.name || p.path, path: p.path, sharedChange: { inlineEdits: object.inline_edits, content: object.content } });
   }
-  const shared = matches.map((r: any) => ({ id: r.id, name: r.name, inlineEdits: r.inline_edits, content: r.content, pages: (data ?? []).filter((u: any) => u.object_registry_id === r.id && u.pages && !u.pages.archived_at && typeof u.pages.path === "string").map((u: any) => ({ name: u.pages.name, path: u.pages.path })) }));
+  const shared = matches.map((r: any) => ({ id: r.id, name: r.name, componentKey: r.component_key, inlineEdits: r.inline_edits, content: r.content, pages: (data ?? []).filter((u: any) => u.object_registry_id === r.id && u.pages && !u.pages.archived_at && typeof u.pages.path === "string").map((u: any) => ({ name: u.pages.name, path: u.pages.path })) }));
   return { usages: out, shared };
 }
 async function fetchManagerPages(): Promise<ManagerPage[]> {
@@ -76,8 +78,19 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const objects = useQuery({ queryKey: ["walkthrough", "object-pages", names, sig], queryFn: () => fetchObjectPages(names), enabled, staleTime: 0, refetchOnMount: "always" });
   const pages = useQuery({ queryKey: ["walkthrough", "pages", sig], queryFn: fetchManagerPages, enabled, staleTime: 0, refetchOnMount: "always" });
   const links = useQuery({ queryKey: ["walkthrough", "links", sig], queryFn: fetchReviewLinks, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
-  const rows = useMemo(() => dropRevertedHandEdits(reviewPages.data ? relayChangedPages(reviewPages.data, pages.data ?? [], objects.data?.usages ?? {}, requests)
-    : reviewPages.data === null ? changedPages(requests, objects.data?.usages ?? {}) : [], pages.data ?? []), [reviewPages.data, requests, objects.data, pages.data]);
+  const rows = useMemo(() => {
+    const authoritative = reviewPages.data;
+    const active = (piece: { name: string; requestIds: string[] }) => {
+      const object = objects.data?.shared.find(o => o.name === piece.name || o.componentKey === piece.name);
+      const edits = object ? Object.keys(stableReviewEdits(object.inlineEdits) as object).length : undefined;
+      const sources = (requests ?? []).filter(r => piece.requestIds.includes(r.id));
+      // Empty overrides prove a hand-edit restore only when every recorded request is a hand edit.
+      return !(edits === 0 && sources.length === piece.requestIds.length && sources.length > 0 && sources.every(r => r.source === "content"));
+    };
+    const filtered = authoritative ? { ...authoritative, components: authoritative.components.filter(active), objects: authoritative.objects.filter(active) } : null;
+    const derived = filtered ? relayChangedPages(filtered, pages.data ?? [], objects.data?.usages ?? {}, requests) : authoritative === null ? changedPages(requests, objects.data?.usages ?? {}) : [];
+    return addSharedChromeRows(dropRevertedHandEdits(derived, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? [], filtered ? [...filtered.components, ...filtered.objects].map(piece => piece.name) : []);
+  }, [reviewPages.data, requests, objects.data, pages.data]);
   // Saved hand edits (Manual Edit Mode, Change This Link) re-read every list, so new destinations appear straight away.
   const client = useQueryClient();
   useEffect(() => {
@@ -93,8 +106,23 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
   const inventory = useQuery({ queryKey: ["walkthrough", "inventory", sig, changedPaths], queryFn: () => loadNetLinks(changedPaths, live), enabled: enabled && !!live && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
   const merged = useMemo(() => links.data ? mergeSharedReviewLinks(netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data, objects.data]);
+  const sharedPaths = [...new Set(merged?.groups.filter(group => group.shared).map(group => group.page?.path).filter((path): path is string => !!path) ?? [])].sort();
+  const sharedLabels = useQuery({ queryKey: ["walkthrough", "shared-labels", sig, sharedPaths], enabled: enabled && sharedPaths.length > 0, retry: false, queryFn: async () => {
+    const frame = shownPreviewFrame();
+    let base: string;
+    try { base = publicPreviewBase(frame?.src); } catch { return []; }
+    const inventories = await Promise.all(sharedPaths.map(async path => {
+      const url = publicPreviewPage(base, path);
+      return (frame ? await requestFrameInventory(frame, url) : null) ?? await requestInventory(url);
+    }));
+    return inventories.flatMap(item => item?.links ?? []);
+  } });
+  const labelled = merged ? { ...merged, groups: merged.groups.map(group => ({ ...group, links: group.links.map(link => {
+    const item = sharedLabels.data?.find(item => item.scope === link.scope && item.key === link.elementKey);
+    return item ? { ...link, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel } : link;
+  }) })) } : null;
   const inventoryPending = !!live && changedPaths.length > 0 && enabled && inventory.isFetching;
-  const linkResult: LinksResult = links.isError || objects.isError ? { status: "failed" } : merged && !links.isFetching && !pages.isFetching && !objects.isFetching && !inventoryPending ? { status: "ok", ...merged } : { status: "loading" };
+  const linkResult: LinksResult = links.isError || objects.isError ? { status: "failed" } : labelled && !links.isFetching && !pages.isFetching && !objects.isFetching && !inventoryPending ? { status: "ok", ...labelled } : { status: "loading" };
   const pagesStatus = reviewPages.isError || objects.isError || pages.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
   const fingerprintedRows = rows.map((row) => {
     const path = row.page?.path;
@@ -103,7 +131,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
       ...[...authoritative.components, ...authoritative.objects].filter(piece => (objects.data?.usages[piece.name] ?? []).some(p => path && normPath(p.path) === normPath(path))).flatMap(piece => piece.requestIds),
       ...(!path ? authoritative.sitewide.requestIds : [])] : (requests ?? []).filter(r => !path || (r.pages ?? (r.page ? [r.page] : [])).some(p => normPath(p.path) === normPath(path)) || (r.objects ?? []).some(n => (objects.data?.usages[n] ?? []).some(p => normPath(p.path) === normPath(path)))).map(r => r.id);
     const page = pages.data?.find(p => path && normPath(p.path) === normPath(path));
-    const shared = (objects.data?.shared ?? []).filter(o => path && o.pages.some(p => normPath(p.path) === normPath(path))).map(o => ({ id: o.id, edits: stableReviewEdits(o.inlineEdits), content: o.content ?? null })).sort((a,b) => a.id.localeCompare(b.id));
+    const shared = (objects.data?.shared ?? []).filter(o => row.shared ? o.id === row.shared.id : path && o.pages.some(p => normPath(p.path) === normPath(path))).map(o => ({ id: o.id, edits: stableReviewEdits(o.inlineEdits), content: o.content ?? null })).sort((a,b) => a.id.localeCompare(b.id));
     return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, sha: r.sha, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: stableReviewEdits(page?.inlineEdits), content: page?.content ?? null, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
   });
   const withSaved: LinksResult = linkResult.status === "ok" ? { ...mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), status: "ok" } : linkResult;

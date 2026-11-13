@@ -45,6 +45,15 @@ const tickManual = () => {
 };
 
 describe("Submit for Review walkthrough", () => {
+  it("never confirms a broken external target even after it has been opened", () => {
+    const link = { key: "/|https://example.com/missing", href: "https://example.com/missing", kind: "external", label: "Ideas & Advice", requestIds: [], status: { state: "broken" } };
+    m.data.links = { status: "ok", groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [link] }], unread: 0, partial: false, truncated: false };
+    render(<PanelHost open />);
+    act(() => walk.update(s => ({ ...s, step: "links" })));
+    fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
+    expect(screen.getByRole("button", { name: "Confirmed: Ideas & Advice" })).toBeDisabled();
+    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
+  });
   it.each(["pages", "links", "checklist"] as const)("Keep Editing is available on %s and preserves unchanged approvals", (step) => {
     m.data.links = { status: "failed" };
     const host = render(<PanelHost open onOpenChange={vi.fn()} />);

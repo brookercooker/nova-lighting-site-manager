@@ -12,6 +12,16 @@ beforeEach(() => {
   m.save.mockResolvedValue({ error: null });
 });
 describe("review link writes", () => {
+  it("pins a loaded footer by object key even when packaged href is stale", async () => {
+    m.inventory.links[0] = { ...m.inventory.links[0], scope: "object:footer", href: "/original", label: "Ideas & Advice" };
+    m.row.inline_edits["link:0.5.0.1"] = '{"href":"/team"}';
+    const result = await resolveReviewLink("/", "/team", "Link to Team", undefined, { scope: "object:footer", elementKey: "0.5.0.1" });
+    expect(result.table).toBe("object_registry");
+    expect(result.element.label).toBe("Ideas & Advice");
+    expect(result.href).toBe("/team");
+    await saveReviewLink(result, "/contact", false);
+    expect(m.save.mock.calls[0][0]).toBe("object_registry");
+  });
   it("adopts inventory fp only when absent for the unique Inspiration Gallery link", async () => {
     m.inventory.links = [{ ...m.inventory.links[0], key: "0.5.0.0", href: "/inspiration-gallery", originalHref: "/contact", label: "BOOK A CONSULTATION" }];
     m.row.inline_edits["link:0.5.0.0"] = '{"href":"/inspiration-gallery"}';
