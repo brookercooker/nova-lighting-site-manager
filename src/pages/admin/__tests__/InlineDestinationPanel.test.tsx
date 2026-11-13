@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import InlineDestinationPanel from "../InlineDestinationPanel";
 import { createReplay, type InlineEdits } from "@/lib/inlineEditCore";
 import type { InlineSelection } from "@/components/InlineEditSurface";
+import { remoteSelection } from "../remoteSelection";
 beforeEach(() => vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function setup(tag = "a", submit?: () => void) {
@@ -72,4 +73,27 @@ it("page search Enter never submits", () => {
   fireEvent.click(screen.getByRole("button", { name: "Choose a Page" }));
   expect(fireEvent.keyDown(screen.getByRole("textbox", { name: "Find a Page" }), { key: "Enter" })).toBe(false);
   expect(submit).not.toHaveBeenCalled();
+});
+it("restores the true shared original, refreshes the input and stores only override removal", () => {
+  const selection = remoteSelection({ key: "0", scope: "object:about", kind: "text", tag: "a", attrs: { href: "/contact" }, originalHref: "/locations" });
+  const change = vi.fn();
+  function Panel() {
+    const [edits, setEdits] = useState<InlineEdits>({ "link:0": '{"href":"/contact"}', "style:0": '{}' });
+    return <InlineDestinationPanel selection={selection} pages={[]} editsFor={() => edits} onChange={(scope, next) => { change(scope, next); setEdits(next); }} />;
+  }
+  render(<Panel />);
+  const field = screen.getByRole("textbox", { name: "Link Address" });
+  expect(field).toHaveValue("/contact");
+  fireEvent.click(screen.getByRole("button", { name: "Restore Original Link" }));
+  expect(field).toHaveValue("/locations");
+  expect(change).toHaveBeenLastCalledWith("object:about", { "style:0": '{}' });
+  fireEvent.blur(field);
+  expect(change).toHaveBeenCalledTimes(1);
+});
+it("does not offer a false restore when a remote frame reports only the edited address", () => {
+  const selection = remoteSelection({ key: "0", scope: "object:about", kind: "text", tag: "a", attrs: { href: "/contact" } });
+  const change = vi.fn();
+  render(<InlineDestinationPanel selection={selection} pages={[]} editsFor={() => ({ "link:0": '{"href":"/contact"}' })} onChange={change} />);
+  fireEvent.click(screen.getByRole("button", { name: "Restore Original Link" }));
+  expect(change).not.toHaveBeenCalled();
 });

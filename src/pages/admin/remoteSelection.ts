@@ -9,6 +9,8 @@ export interface SelectionSnapshot {
   tag: string;
   text?: string;
   originalText?: string;
+  originalHref?: string | null;
+  originalTarget?: "_blank" | null;
   context?: string | { section?: string; role?: string };
   html?: string;
   rect?: Partial<DOMRectInit>;
@@ -16,10 +18,18 @@ export interface SelectionSnapshot {
   style?: Record<string, string>;
   fingerprint?: Fingerprint;
   expandable?: { path: string; open: boolean };
-  link?: { key: string; scope: string; tag?: string; attrs?: Record<string, string | null>; fingerprint?: Fingerprint };
+  link?: { key: string; scope: string; tag?: string; attrs?: Record<string, string | null>; fingerprint?: Fingerprint; originalHref?: string | null; originalTarget?: "_blank" | null };
 }
 export type EditQuery = (op: "computed" | "measure" | "scrollTo" | "record", scope: string, key: string, props?: string[] | Record<string, number>) => Promise<unknown>;
 const snapshots = new WeakMap<HTMLElement, SelectionSnapshot>();
+const linkOriginals = new WeakMap<HTMLElement, { href: string | null; target: string | null } | null>();
+/** Unknown remote originals must never be inferred from already-replayed attributes. */
+export function selectionLinkOriginal(el: HTMLElement) {
+  return linkOriginals.has(el) ? linkOriginals.get(el) ?? null : originalLink(el);
+}
+const validOriginal = (value: { originalHref?: unknown; originalTarget?: unknown }) =>
+  (value.originalHref === undefined || value.originalHref === null || (typeof value.originalHref === "string" && value.originalHref.length <= 2048)) &&
+  (value.originalTarget === undefined || value.originalTarget === null || value.originalTarget === "_blank");
 export type FormatCommand = "bold" | "italic" | "underline" | "strike" | "color" | "size" | "weight" | "font" | "clear";
 export interface WordRange { key: string; scope: string; collapsed: boolean; text: string; marks: { bold: boolean; italic: boolean; underline: boolean; strike: boolean; color: string; size: string | number; weight: string | number; font: string } }
 export interface RemoteFormatting { range: WordRange | null; format: (command: FormatCommand, value?: string) => void }
@@ -61,7 +71,7 @@ export function validSnapshot(value: unknown): value is SelectionSnapshot {
         (s.context.role === undefined || typeof s.context.role === "string"))) && (s.html === undefined || typeof s.html === "string") &&
     (s.style === undefined || (!!s.style && typeof s.style === "object" && Object.values(s.style).every((v) => typeof v === "string"))) &&
     (s.expandable === undefined || (!!s.expandable && validPath(s.expandable.path) && typeof s.expandable.open === "boolean")) &&
-    (!s.link || (validPath(s.link.key) && typeof s.link.scope === "string"));
+    validOriginal(s) && (!s.link || (validPath(s.link.key) && typeof s.link.scope === "string" && validOriginal(s.link)));
 }
 
 /** Detached, inert DOM supports read-only panel queries, never impersonates a live Range. */
@@ -83,14 +93,15 @@ export function remoteSelection(snapshot: SelectionSnapshot, query?: EditQuery, 
   };
   el.scrollIntoView = () => { void query?.("scrollTo", snapshot.scope, snapshot.key); };
   let link: InlineSelection["link"];
-  const info = snapshot.link ?? ((snapshot.tag.toLowerCase() === "a" || snapshot.tag.toLowerCase() === "button" || snapshot.attrs?.href) ? { key: snapshot.key, scope: snapshot.scope, tag: snapshot.tag, attrs: snapshot.attrs } : undefined);
+  const info = snapshot.link ?? ((snapshot.tag.toLowerCase() === "a" || snapshot.tag.toLowerCase() === "button" || snapshot.attrs?.href) ? { key: snapshot.key, scope: snapshot.scope, tag: snapshot.tag, attrs: snapshot.attrs, originalHref: snapshot.originalHref, originalTarget: snapshot.originalTarget } : undefined);
   if (info) {
     const target = info.key === snapshot.key && info.scope === snapshot.scope ? el : document.createElement(info.tag ?? "a");
     for (const key of ["href", "target"]) {
       const value = info.attrs?.[key];
       if (typeof value === "string") target.setAttribute(key, value);
     }
-    originalLink(target); // Freeze the serialized original destination before panel edits.
+    linkOriginals.set(target, info.originalHref !== undefined ? { href: info.originalHref, target: info.originalTarget ?? null } : null);
+    // Keep the shared core verbatim; remote originals are transport metadata outside it.
     link = { key: info.key, scope: info.scope, el: target };
     if (target !== el) target.appendChild(el); // closest("a,button") for icon controls.
   }

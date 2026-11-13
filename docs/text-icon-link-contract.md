@@ -54,6 +54,10 @@ This closes the old parse/validation gap, not a live rendering check: the suppli
 
 ## Security
 
+### Original link selection metadata
+
+`edit-select.selection.link` (or the selection itself for a directly selected link) may supply `originalHref: string | null` and `originalTarget: "_blank" | null`, captured before replay. Manager uses this metadata outside the verbatim shared core. For older selection replies it requests the exact editor frame's v1 link inventory, matching both scope and key and reading `originalHref`. Current `attrs.href` is only a display fallback, never restoration authority. Until an original is reported, Restore is disabled; when known, Restore removes only the link override and immediately refreshes Link Address. Public must answer inventories in object-only editor mode too, including shared/header/footer scopes.
+
 - Validate exact origin and frame window, session and scope/key just as existing edit messages do. Preserve current payload caps.
 - New UI destinations accept only `https://` with a hostname, nonempty `mailto:`, nonempty telephone `tel:`, or paths beginning with a single `/`. Reject protocol-relative paths, backslashes, whitespace/control characters, javascript/data/http/ftp and other schemes. Never coerce unsafe values into links. Historical overrides continue through existing replay validation; do not broaden it.
 - Icons resolve only through the existing trusted Lucide set or parsed Material names. Never render supplied HTML, scripts, SVG event attributes or external icon URLs.

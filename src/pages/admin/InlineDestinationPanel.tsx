@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { detectLinkKind, linkAddress, type LinkKind } from "./linkKind";
 import { isInternalPath } from "./designChat/registerPage";
-import { originalLink, validLinkHref, type InlineEdits, type LinkEdit } from "@/lib/inlineEditCore";
+import { validLinkHref, type InlineEdits, type LinkEdit } from "@/lib/inlineEditCore";
+import { selectionLinkOriginal } from "./remoteSelection";
 import type { InlineSelection } from "@/components/InlineEditSurface";
 import { ToolField, ToolGroup } from "./designChat/ToolPanel";
 import { LINK_DESTINATION_ERROR, validTextLink } from "./textAdornment";
@@ -28,7 +29,8 @@ export default function InlineDestinationPanel({ selection, editsFor, onChange, 
   const value = edits[key];
   let edit: LinkEdit | undefined;
   try { edit = value ? JSON.parse(value) : undefined; } catch { /* Invalid stored edits remain available for repair. */ }
-  const original = target ? originalLink(target.el) : { href: null, target: null };
+  const knownOriginal = target ? selectionLinkOriginal(target.el) : null;
+  const original = knownOriginal ?? { href: target?.el.getAttribute("href") ?? null, target: target?.el.getAttribute("target") ?? null };
   const destination = edit?.unlinked ? "" : edit?.href ?? original.href ?? "";
   const blank = edit ? edit.target === "_blank" : original.target === "_blank";
   const [address, setAddress] = useState(destination);
@@ -72,10 +74,13 @@ export default function InlineDestinationPanel({ selection, editsFor, onChange, 
       <Switch checked={blank} disabled={!allowed(address) || !!edit?.unlinked} onCheckedChange={(on) => save(address, on)} />
     </label>
     <div className="flex flex-wrap gap-2">
-      {value !== undefined && <Button type="button" size="sm" variant="ghost" onClick={() => {
+      {value !== undefined && <Button type="button" size="sm" variant="ghost" disabled={!knownOriginal} onMouseDown={e => e.preventDefault()} onClick={() => {
+        if (!knownOriginal) return;
+        setAddress(knownOriginal.href ?? ""); setKind(detectLinkKind(knownOriginal.href ?? "")); setError(""); setOpen(false);
         const next = { ...edits }; delete next[key]; onChange(target.scope, next);
       }}><Undo2 className="mr-1 h-3.5 w-3.5" />Restore Original Link</Button>}
     </div>
+    {value !== undefined && !knownOriginal && <p className="text-xs text-muted-foreground">The original link hasn't been reported by this page yet. Restore is unavailable until it is known.</p>}
   </>;
   return embedded ? <div className="space-y-3">{content}</div> : <ToolGroup title="Link" icon={LinkIcon} defaultOpen>{content}</ToolGroup>;
 }

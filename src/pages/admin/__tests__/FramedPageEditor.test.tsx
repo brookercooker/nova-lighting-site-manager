@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import FramedPageEditor, { type FramedEditorController, type FramedPageEditorProps } from "../FramedPageEditor";
 import { editFrameUrl } from "../framedPageProtocol";
-import { remoteSelection, remoteExpansion, remoteTextRestore, selectionComputedStyle } from "../remoteSelection";
+import { remoteSelection, remoteExpansion, remoteTextRestore, selectionComputedStyle, selectionLinkOriginal } from "../remoteSelection";
 import { originalLink } from "@/lib/inlineEditCore";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -212,4 +212,18 @@ it("builds inert panel-compatible text, link, geometry and computed data from a 
   if (!selection.link) throw new Error("Missing link");
   expect(originalLink(selection.link.el)).toEqual({ href: "/contact", target: "_blank" });
   expect(selection.el.isConnected).toBe(false);
+});
+it("resolves a shared object's pre-replay original from the exact editor frame inventory", async () => {
+  const s = setup({ objectEdits: { "object:about": { "link:0": '{"href":"/contact"}' } } });
+  s.receive("edit-ready");
+  s.receive("edit-select", { selection: { key: "0", scope: "object:about", kind: "text", tag: "a", attrs: { href: "/contact" }, style: {}, rect: {} } });
+  let selection = vi.mocked(s.props.onSelect).mock.calls.at(-1)?.[0];
+  if (!selection?.link) throw new Error("Missing selection");
+  expect(selectionLinkOriginal(selection.link.el)).toBeNull();
+  await act(async () => {
+    s.receive("link-inventory", { v: 1, path: "/draft", links: [{ key: "0", scope: "object:about", href: "/contact", originalHref: "/locations" }] });
+  });
+  selection = vi.mocked(s.props.onSelect).mock.calls.at(-1)?.[0];
+  if (!selection?.link) throw new Error("Missing selection");
+  expect(selectionLinkOriginal(selection.link.el)).toEqual({ href: "/locations", target: null });
 });

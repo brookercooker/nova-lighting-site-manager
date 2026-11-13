@@ -9,6 +9,7 @@ import { acceptFrameScroll, restoreFrameScroll } from "./designChat/frameScroll"
 import { parseFrameSections, type FrameSection } from "./frameSections";
 import { rememberFrameObjects } from "./frameObjectUsages";
 import { isTextEditKey, retainTextOrigins, textEditPath } from "./textEditOrigins";
+import { requestFrameInventory } from "./designChat/linkInventory";
 
 export interface FramedEditorController { exit: () => void; query: EditQuery; scrollToSlot?: (slot: string) => void; scrollToSection?: (key: string) => void; sectionAction?: (key: string, action: "up" | "down" | "delete") => void }
 export interface FramedPageEditorProps {
@@ -238,6 +239,17 @@ export default function FramedPageEditor(props: FramedPageEditorProps) {
         if (selectedSnapshot.current?.key !== snapshot.key || selectedSnapshot.current?.scope !== snapshot.scope) wordRange.current = null;
         selectedSnapshot.current = snapshot;
         selectSnapshot(snapshot);
+        const link = snapshot.link ?? snapshot;
+        const linkEdits = link.scope === "page" ? latest.current.edits : latest.current.objectEdits[link.scope] ?? {};
+        if (link.originalHref === undefined && linkEdits[`link:${link.key}`] !== undefined && frame.current && target) {
+          void requestFrameInventory(frame.current, target).then(inventory => {
+            if (version !== selectionVersion.current || exited.current) return;
+            const original = inventory?.links.find(item => item.scope === link.scope && item.key === link.key);
+            if (original?.originalHref === undefined) return;
+            link.originalHref = original.originalHref;
+            selectSnapshot(snapshot);
+          });
+        }
         // Query only missing read-only data; replies cannot overwrite a later selection.
         if (!snapshot.style || !snapshot.rect) void Promise.all([
           snapshot.style ? Promise.resolve(snapshot.style) : query("computed", snapshot.scope, snapshot.key),
