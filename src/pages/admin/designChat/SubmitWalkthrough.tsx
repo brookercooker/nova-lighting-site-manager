@@ -359,7 +359,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
 export function WalkthroughCheckBar(): ReactNode {
   const s = useWalk();
   // The lookups only mount while checking, so an idle preview never queries anything.
-  return s.checking ? <CheckBar c={s.checking} /> : null;
+  return s.checking?.kind === "page" ? <CheckBar c={s.checking} /> : null;
 }
 
 function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"]> }) {

@@ -264,7 +264,7 @@ function AdminShell() {
     designChat.setReviewOpen(true);
     setChatCollapsed(false);
     if (phone) phoneChat.show();
-  }, [walkthrough.open, phone]);
+  }, [walkthrough.open, walkthrough.selectedLink?.sequence, walkthrough.linkNote, phone]);
   useEffect(() => {
     try { localStorage.setItem("siteManager:chatCollapsed", String(chatCollapsed)); } catch { /* no storage: ignore */ }
   }, [chatCollapsed]);
@@ -393,7 +393,7 @@ function AdminShell() {
                   <Save className="h-4 w-4" aria-hidden />{finishing ? "Saving…" : layout.labels && !compact ? "Save Changes" : "Save"}
                 </Button>
               )}
-              {phone && <PhoneMoreMenu showView={tab === "preview"} isAdmin={isAdmin} onPassword={() => setPwOpen(true)} onReview={() => { if (walk.get().open || walk.get().checking) designChat.setReviewOpen(true); openPhoneChat(); }} onChat={() => { setPhonePane("main"); }} />}
+              {phone && <PhoneMoreMenu onOpenMenu={() => { if (reviewActive) phoneChat.close(); }} showView={tab === "preview"} isAdmin={isAdmin} onPassword={() => setPwOpen(true)} onReview={() => { if (walk.get().open || walk.get().checking) designChat.setReviewOpen(true); openPhoneChat(); }} onChat={() => { setPhonePane("main"); }} />}
             </div>
           </header>
           <WaitProgress progress={saveProgress} className="shrink-0 border-b bg-background px-3 py-2" />
@@ -588,7 +588,7 @@ function AdminShell() {
 }
 
 /** Phone top-bar overflow: account, tools, review and preview size. */
-function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { showView: boolean; isAdmin: boolean; onPassword: () => void; onReview: () => void; onChat: () => void }) {
+function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat, onOpenMenu }: { showView: boolean; isAdmin: boolean; onPassword: () => void; onReview: () => void; onChat: () => void; onOpenMenu: () => void }) {
   const modeSwitch = useModeSwitchActions(onChat);
   const { device, setDevice, state, editing, mode, objectOpen, setReviewOpen } = useDesignChat();
   const review = useWalk();
@@ -605,7 +605,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
     <>
     <SubmitConfirmDialog open={submitConfirm} onOpenChange={setSubmitConfirm} fallback />
     <ModePageChooser {...modeSwitch.chooserProps} />
-    <MoreMenu open={menuOpen} onOpenChange={setMenuOpen}>
+    <MoreMenu open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (open) onOpenMenu(); }}>
       <MoreMenuTrigger asChild>
         <Button ref={triggerRef} type="button" variant="outline" className="nova-phone-menu h-11 shrink-0 gap-1.5 px-2" aria-label="Menu" title="Menu"><Menu className="h-4 w-4 shrink-0" aria-hidden /><span className="nova-phone-menu-label">Menu</span></Button>
       </MoreMenuTrigger>

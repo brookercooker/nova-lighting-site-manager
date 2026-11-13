@@ -7,6 +7,8 @@ import { LinkCheckBridge, useLinkCheckBridge } from "../useLinkCheckBridge";
 import { walk, useWalk } from "../submitWalkthroughStore";
 
 const m = vi.hoisted(() => ({ state: null as any, data: null as any, preview: null as any, show: vi.fn(), review: vi.fn() }));
+vi.mock("../openReviewDestination", () => ({ openReviewDestination: vi.fn(() => true) }));
+import { openReviewDestination } from "../openReviewDestination";
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, preview: m.preview, setReviewOpen: m.review, refreshSoon: vi.fn(), showPreviewPath: m.show, selectPage: vi.fn() }) }));
 vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
@@ -16,6 +18,7 @@ const ORIGIN = "https://site.example";
 const team = { key: "/a|/team", href: "/team", kind: "internal" as const, label: "Team", requestIds: ["r1"], status: null };
 const row = { key: "page:/a", page: { name: "About", path: "/a" }, how: "Changed by the builder", fingerprint: "v1" };
 beforeEach(() => {
+  vi.mocked(openReviewDestination).mockReset().mockReturnValue(true);
   m.review.mockClear();
   walk.reset();
   m.preview = null;
@@ -137,6 +140,33 @@ function Bridge({ active, links = [] }: { active: boolean; links?: any[] }) {
 }
 const ready = (v = 2) => ({ source: "nova-site", type: "link-check-ready", v, enabled: true });
 describe("frame bridge row selection", () => {
+  it("opens a changed destination and unlocks only its own approval", () => {
+    const f = frameWith();
+    render(<LinkCheckBridge root={{ current: document.body }} frameKey="open-changed" />);
+    act(() => window.dispatchEvent(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow })));
+    expect(openReviewDestination).toHaveBeenCalledWith(expect.objectContaining({ href: ORIGIN + "/team" }));
+    expect(walk.get().verificationOpened[team.key]).toBe(ownLinkPrint(team));
+    expect(f.src).toBe(ORIGIN + "/a"); f.remove();
+  });
+  it("opens unchanged links but never marks unrelated rows as opened", () => {
+    const f = frameWith(); render(<LinkCheckBridge root={{ current: document.body }} frameKey="open-unchanged" />);
+    act(() => window.dispatchEvent(new MessageEvent("message", { data: click({ match: null, raw: "/wall", href: ORIGIN + "/wall", label: "Wall" }), origin: ORIGIN, source: f.contentWindow })));
+    expect(openReviewDestination).toHaveBeenCalledOnce(); expect(walk.get().verificationOpened).toEqual({}); f.remove();
+  });
+  it("uses inventory identity for two links sharing a destination, even with match:null", () => {
+    m.data.links.groups[0].links = [ { ...team, key: "card", elementKey: "0.1", scope: "page", label: "Card" }, { ...team, key: "image", elementKey: "0.2", scope: "page", label: null, image: { alt: "", src: "" } } ];
+    const f = frameWith(); render(<LinkCheckBridge root={{ current: document.body }} frameKey="duplicate" />);
+    act(() => window.dispatchEvent(new MessageEvent("message", { data: click({ match: null, label: null, elementKey: "0.2", scope: "page" }), origin: ORIGIN, source: f.contentWindow })));
+    expect(walk.get().selectedLink?.key).toBe("image");
+    expect(Object.keys(walk.get().verificationOpened)).toEqual(["image"]); f.remove();
+  });
+  it("shows one popup-blocked note and never unlocks Approve", () => {
+    vi.mocked(openReviewDestination).mockReturnValue(false);
+    const f = frameWith(); render(<LinkCheckBridge root={{ current: document.body }} frameKey="blocked" />);
+    act(() => window.dispatchEvent(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow })));
+    expect(walk.get().linkNote).toBe("Your browser blocked the new tab. Use the open icon on the tile.");
+    expect(walk.get().verificationOpened).toEqual({}); f.remove();
+  });
   it("reopens the phone review panel through the real bridge without navigating the preview", () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     const f = frameWith();

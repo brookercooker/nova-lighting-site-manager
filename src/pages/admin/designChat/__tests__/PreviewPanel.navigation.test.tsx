@@ -12,6 +12,7 @@ import { SubmitWalkthroughPanel } from "../SubmitWalkthrough";
 const context = vi.hoisted(() => ({ chat: null as unknown }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => context.chat }));
 vi.mock("../DrawLayer", () => ({ default: () => <div>Drawing</div> }));
+vi.mock("../openReviewDestination", () => ({ openReviewDestination: vi.fn(() => true) }));
 vi.mock("../pageSelection", () => ({ loadManualPages: async () => [] }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => ({ rows: [], pages: [{name:"Team",path:"/team",build_status:"ready"}], links: {status:"ok",unread:0,groups:[{label:"Homepage",page:{name:"Homepage",path:"/"},links:[{key:"team",href:"/team",kind:"internal",label:"Team",requestIds:[],status:null}]}]}}) }));
 afterEach(() => { cleanup(); walk.reset(); });
@@ -31,7 +32,7 @@ function setup(overrides: Partial<DesignChat> = {}) {
 }
 
 describe("floating preview navigation", () => {
-  it("removes Design Check shielding for Step 2 and accepts clicks as tile selection, never navigation", () => {
+  it("removes Design Check shielding for Step 2 and accepts clicks without preview navigation", () => {
     walk.update(w => ({...w,open:true,step:"pages",checking:{key:"page:/",kind:"page",name:"Homepage"}}));
     const {chat,view,rerender,container} = setup({state:{publish:{open:1},review:{enabled:true}} as any,preview:{frames:[{id:1,url:"https://public.example/"}],shownId:1,loaded:true,finish:vi.fn()} as any,showPreviewPath:vi.fn(),setReviewOpen:vi.fn()});
     const frame = container.querySelector("iframe");

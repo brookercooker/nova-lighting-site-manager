@@ -2,7 +2,9 @@ import { useEffect, useRef, type RefObject } from "react";
 import { frameOrigin, isLinkCheckReady, linkCheckList, parseLinkClick, postLinkCheck, postLinkFocus, type LinkCheckEntry, type LinkClick } from "./linkCheck";
 import { publicLinkAddress } from "../linkDisplay";
 import { shownPreviewFrame } from "./previewNavigate";
-import { matchChangedLink } from "./linkCheck";
+import { changedLinkForClick } from "./linkCheck";
+import { openReviewDestination } from "./openReviewDestination";
+import { ownLinkPrint } from "./SubmitWalkthrough";
 import { useDesignChat } from "./DesignChatContext";
 import { useWalkthroughData } from "./useWalkthroughData";
 import { useWalk, walk } from "./submitWalkthroughStore";
@@ -26,8 +28,11 @@ export function LinkCheckBridge({ root, frameKey }: { root: RefObject<HTMLElemen
   }, [data.links, root, frameKey]);
   useLinkCheckBridge(root, true, frameKey, links, (click) => {
     const groups = data.links.status === "ok" ? data.links.groups : [];
-    const link = click.match ? matchChangedLink(groups, click.path, click.match) ?? groups.flatMap(g => g.links).find(l => l.href === click.match) : null;
+    const link = changedLinkForClick(groups, click);
+    const opened = openReviewDestination(click);
     walk.selectLink(link?.key ?? null);
+    if (opened && link) walk.openedVerification(link.key, ownLinkPrint(link));
+    if (!opened) walk.update(w => ({ ...w, linkNote: "Your browser blocked the new tab. Use the open icon on the tile." }));
     setReviewOpen?.(true);
   });
   return null;

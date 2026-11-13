@@ -29,15 +29,11 @@ it("also distinguishes images sharing the same destination without merging their
   expect(screen.getByRole("button", { name: "Correct link: Image to /about · 2 of 2" })).toBeEnabled();
   expect(keys()).toEqual(["first", "second"]);
 });
-it("checking-bar approval waits for opening and uses the same own-link fingerprint", () => {
+it("links never display a checking bar or grant approvals through it", () => {
   walk.update(s => ({ ...s, checking: { key: "a", kind: "link", name: "Our Story" } }));
   render(<WalkthroughCheckBar />);
-  expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
-  act(() => walk.openedVerification("a", ownLinkPrint(a)));
-  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-  expect(walk.get().linkTicked).toContain("a");
-  fireEvent.click(screen.getByRole("button", { name: "Back" }));
-  expect(walk.get().step).toBe("links");
+  expect(screen.queryByRole("region", { name: "Checking Changes" })).toBeNull();
+  expect(walk.get().linkTicked).toEqual([]);
 });
 it("uses a neutral counter until changed-link membership is known", () => {
   m.data.links = { status: "loading" };

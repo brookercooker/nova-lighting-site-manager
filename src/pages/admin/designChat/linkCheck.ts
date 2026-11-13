@@ -1,7 +1,7 @@
 import { normPath, type ManagerPage, type ChangedRow, type LinkGroup, type LinkKind, type ReviewLink } from "./submitWalkthrough";
 
 /** Verify Changed Links: the frame bridge and the per-page checks of the Submit for Review walkthrough. */
-export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string | null };
+export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string | null; elementKey?: string; scope?: string; inventoryIndex?: number };
 const KINDS: LinkKind[] = ["internal", "external", "mail", "phone", "anchor"];
 export const KIND_TEXT: Record<LinkKind, string> = { internal: "A page on your site", external: "A different website", mail: "An email address", phone: "A phone number", anchor: "A section of this page" };
 
@@ -70,7 +70,10 @@ export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | n
   if (d.label != null && typeof d.label !== "string") return null;
   if (d.path != null && !(str(d.path, 300) && /^\/(?!\/)/.test(d.path))) return null;
   const label = typeof d.label === "string" && d.label.trim() ? d.label.trim().slice(0, 300) : null;
-  return { raw: d.raw, href: d.href, kind: d.kind, label, path: d.path ?? null, match: d.match };
+  return { raw: d.raw, href: d.href, kind: d.kind, label, path: d.path ?? null, match: d.match,
+    ...(typeof d.elementKey === "string" && /^(?:link:)?\d+(?:\.\d+)*$/.test(d.elementKey) ? { elementKey: d.elementKey.replace(/^link:/, "") } : {}),
+    ...(str(d.scope, 300) && (d.scope === "page" || d.scope.startsWith("object:")) ? { scope: d.scope } : {}),
+    ...(Number.isInteger(d.inventoryIndex) && d.inventoryIndex >= 0 && d.inventoryIndex < 500 ? { inventoryIndex: d.inventoryIndex } : {}) };
 }
 
 /** The changed links that appear on one page: its own plus changed shared-piece links (Header, Footer). */
@@ -80,7 +83,21 @@ export function pageLinks(groups: LinkGroup[], path: string | undefined): Review
 }
 /** The changed link a click refers to (same key the Links step uses), or null when it isn't one. */
 export function matchChangedLink(groups: LinkGroup[], path: string | null | undefined, raw: string): ReviewLink | null {
-  return pageLinks(groups, path ?? undefined).find(l => l.href === raw) ?? null;
+  const matches = pageLinks(groups, path ?? undefined).filter(l => l.href === raw);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/** Prefer exact inventory identity, then unique reported wording; a shared destination alone is never enough. */
+export function changedLinkForClick(groups: LinkGroup[], click: LinkClick): ReviewLink | null {
+  const links = pageLinks(groups, click.path ?? undefined);
+  if (click.elementKey) {
+    const matches = links.filter(l => l.elementKey === click.elementKey && l.scope === (click.scope ?? "page") && l.inventoryIndex === click.inventoryIndex);
+    return matches.length === 1 ? matches[0] : null;
+  }
+  const matches = links.filter(l => l.href === click.raw || l.href === click.match || l.href === click.href);
+  const named = matches.filter(l => click.label && [l.label, l.visibleText, l.ariaLabel, l.image?.alt].includes(click.label));
+  const pool = named.length ? named : matches;
+  return pool.length === 1 ? pool[0] : null;
 }
 
 /** Only reported visible content supplies excerpts; destination names are the final fallback. */

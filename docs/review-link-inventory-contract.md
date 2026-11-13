@@ -33,3 +33,7 @@ Public replies after rendered links and draft overrides are ready:
 Existing inventory consumers ignore these optional extra fields. The direct review writer requires known target and a valid existing or supplied fingerprint; until Public supplies them, it offers Open in Manual Edit and performs no direct write.
 
 Manager uses the existing row-confirmed save helper with an updated_at compare, existing inline change summaries and contentSync. Successful saves reset native/local input undo, as successful Manual Save does; this does not introduce post-save database Undo or relay Undo.
+
+## Preview verification clicks (v2, additive identity)
+
+During Verify Changed Links, Public still prevents navigation in the preview and posts its existing `link-click` reply. Manager opens the validated resolved `href` separately with no opener/referrer and records opening permission only for the identified changed row. Send `elementKey` (the same original dotted key as inventory), `scope`, and `inventoryIndex` when a key is repeated, alongside `raw`, resolved `href`, `kind`, visible `label`, current `path`, and `match`. These additive fields identify image/card links sharing a destination; no new message version is needed. Without them Manager can match unique destination/wording only and does not guess among identical links. `match:null` does not override a supplied exact current identity. Public must continue suppressing all preview navigation; Design Check remains inert.
