@@ -45,5 +45,4 @@
 - User Management uses GET for user lists and POST for actions, and decodes function error responses centrally so failed requests explain their actual cause.
 - Image deletion merges public usage with saved page/object references, confirms single/bulk actions and reuses the five-second deferred delete; remove correct bucket files before rows and stop on storage failure.
 - Read nested AGENTS.md; admin rules cover picker scrolling and authoritative retry snapshots to preserve context.
-- Label search: see admin rules.
-- Manager libraries share a content-width container and the existing label list in a dialog; narrow card layouts reuse all item actions so no separate data or action paths diverge.
+- Yellow background with black text is ONLY for selected objects, selected images, selected videos, and the preview where selected items are shown above the chat. It is NOT for label chips or filter chips. Labels and filters keep their colour.

@@ -121,6 +121,7 @@ export default function LabelPicker({
             <Popover key={path}>
               <span
                 className="nova-label-selected text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1 border min-w-0 max-w-full"
+                style={{ "--nova-label-bg": c.bg, "--nova-label-border": c.border, "--nova-label-text": c.text } as React.CSSProperties}
               >
                 <PopoverTrigger asChild>
                   <button type="button" className="inline-flex items-center gap-1 min-w-0 focus:outline-none" title={`Change color — ${c.name}`}>

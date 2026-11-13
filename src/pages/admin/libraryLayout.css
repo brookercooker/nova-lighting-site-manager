@@ -76,7 +76,7 @@
 }
 
 .nova-label-search-chip { background:hsl(var(--background)); border-color:hsl(var(--border)); color:hsl(var(--foreground)); }
-.nova-label-selected, .nova-label-selected:hover { background:hsl(var(--tag-selected)) !important; border-color:hsl(var(--tag-selected)) !important; color:hsl(var(--tag-selected-foreground)) !important; }
+.nova-label-selected, .nova-label-selected:hover { background:var(--nova-label-bg) !important; border-color:var(--nova-label-border) !important; color:var(--nova-label-text) !important; }
 .nova-library-content .nova-label-result[role="checkbox"] { width:100%; height:44px; border:0; box-shadow:none; }
 .nova-label-management > aside { width:100%; min-width:0; position:static; }
 .nova-label-management > aside > div { border:0; background:transparent; }

@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/prototype/client";
 import { leafOf, matchesLabelFilter } from "./labelPath";
+import { Check } from "lucide-react";
+import { colorFor } from "./labelColors";
 import { useLabelsForScope } from "./useAllLabels";
 import { libraryImageCandidates } from "./imageTileSrc";
 import LibraryImageThumbnail from "./LibraryImageThumbnail";
@@ -142,13 +144,15 @@ export default function ImagePickerDialog({
               <button
                 key={l}
                 title={l}
+                aria-pressed={label === l}
+                style={{ "--nova-label-bg": colorFor(l, labelRows.find(row => row.path === l)?.color_index).bg, "--nova-label-border": colorFor(l, labelRows.find(row => row.path === l)?.color_index).border, "--nova-label-text": colorFor(l, labelRows.find(row => row.path === l)?.color_index).text } as React.CSSProperties}
                 onClick={() => setLabel(label === l ? "" : l)}
 
                 className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                  label === l ? "bg-tag-selected text-tag-selected-foreground border-tag-selected" : "hover:bg-muted text-muted-foreground"
+                  label === l ? "nova-label-selected" : "hover:bg-muted text-muted-foreground"
                 }`}
               >
-                {leafOf(l)}
+                {leafOf(l)}{label === l && <Check className="inline h-3 w-3 ml-1" aria-hidden />}
 
               </button>
             ))}
