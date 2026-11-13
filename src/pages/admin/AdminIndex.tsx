@@ -381,7 +381,7 @@ function AdminShell() {
               </nav>
 
               {phone && !reviewActive && (
-                <Button type="button" size="sm" data-capture-primary className="absolute left-1/2 h-11 -translate-x-1/2 gap-1.5 px-2" aria-label="Capture" title="Capture" onClick={() => navigate("/manage/capture")}>
+                <Button type="button" size="sm" data-capture-primary className="absolute left-1/2 h-11 -translate-x-1/2 min-w-28 gap-1.5 px-5 max-[340px]:min-w-24 max-[340px]:px-3" aria-label="Capture" title="Capture" onClick={() => navigate("/manage/capture")}>
                   <Camera className="h-4 w-4 shrink-0" aria-hidden /><span className="truncate">Capture</span>
                 </Button>
               )}
