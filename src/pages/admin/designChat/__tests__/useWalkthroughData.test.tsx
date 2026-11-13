@@ -135,3 +135,17 @@ it("waits for inventory, caches page wording/originals across changed requests, 
  expect(result.groups[0].links[0]).toMatchObject({label:"BOOK A CONSULTATION",originalHref:"/contact"});
  expect(hook.result.current.inventoryUnavailable).toBe(true);
 });
+
+it("edits one original inventory link three times without changing group count",()=>{
+ const make=(href:string)=>({key:"/|"+href,href,kind:"external" as const,label:"Book a Consultation",scope:"page",elementKey:"0.1",requestIds:[],status:null});
+ let base: import("../submitWalkthrough").ReviewLinks={groups:[{page:{name:"Homepage",path:"/"},label:"Homepage",links:[make("https://gooogle.com"),{...make("/contact"),elementKey:"0.2"},{...make("/gallery"),elementKey:"0.3"}]}],unread:0,partial:false,truncated:false};
+ for(const href of ["https://google.com","https://google.com/maps","https://google.com/three"]){base=mergeSavedReviewLinks(base,[{path:"/",link:make(href)}],[],{});expect(base.groups[0].links).toHaveLength(3);expect(base.groups[0].links.filter(l=>l.elementKey==="0.1")).toHaveLength(1);expect(base.groups[0].links[0].href).toBe(href);}
+});
+
+it("session saves replace the same inventory identity rather than accumulating old destinations",async()=>{
+ const {walk}=await import("../submitWalkthroughStore");walk.reset();
+ const make=(href:string)=>({key:"/|"+href,href,kind:"external" as const,label:"Book a Consultation",scope:"page",elementKey:"0.1",requestIds:[],status:null});
+ let link: import("../submitWalkthrough").ReviewLink=make("https://gooogle.com");const group={page:{name:"Homepage",path:"/"},label:"Homepage",links:[link]};
+ for(const href of ["https://google.com","https://google.com/maps","https://google.com/final"]){walk.editLink({link,group,rows:[],fingerprint:"own"});walk.savedLink("/",make(href));link=walk.get().savedReviewLinks[0].link;expect(walk.get().savedReviewLinks).toHaveLength(1);expect(link.key).toBe("/|page|0.1");}
+ expect(walk.get().verificationOpened).toEqual({});expect(walk.get().linkTicked).toEqual([]);walk.reset();
+});

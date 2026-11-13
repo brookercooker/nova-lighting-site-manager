@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
+import { reviewLinkIdentity, stableReviewRows } from "./reviewLinkIdentity";
 import { useWalk } from "./submitWalkthroughStore";
 import { addSharedChromeRows, mergeSharedReviewLinks, stableReviewEdits, type SharedReviewObject } from "./sharedReviewLinks";
 import { liveSiteBase, loadNetLinks, netReviewLinks, requestFrameInventory, requestInventory, retainInventoryMetadata, type InventoryLink } from "./linkInventory";
@@ -123,7 +124,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   } });
   const labelled = merged ? { ...merged, groups: merged.groups.map(group => ({ ...group, links: group.links.map(link => {
     const item = sharedLabels.data?.links.find(item => item.scope === link.scope && item.key === link.elementKey && (group.shared || normPath(item.inventoryPath) === normPath(group.page?.path ?? "/")));
-    return item ? { ...link, originalHref: item.originalHref ?? link.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
+    return item ? { ...link, elementKey: item.key, scope: item.scope, originalHref: item.originalHref ?? link.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
   }) })) } : null;
   const siteInventory = useQuery({ queryKey: ["walkthrough", "site-hosts", pages.data?.map(p => p.path)], enabled: enabled && walkState.step === "links" && !!pages.data?.length, staleTime: 300_000, retry: false, queryFn: async () => {
     let base: string; try { base = publicPreviewBase(shownPreviewFrame()?.src); } catch { return []; }
@@ -148,18 +149,21 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     const shared = (objects.data?.shared ?? []).filter(o => row.shared ? o.id === row.shared.id : path && o.pages.some(p => normPath(p.path) === normPath(path))).map(o => ({ id: o.id, edits: stableReviewEdits(o.inlineEdits), content: o.content ?? null })).sort((a,b) => a.id.localeCompare(b.id));
     return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, sha: r.sha, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: stableReviewEdits(page?.inlineEdits), content: page?.content ?? null, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
   });
-  const withSaved: LinksResult = linkResult.status === "ok" ? { ...mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), status: "ok" } : linkResult;
+  const withSaved: LinksResult = linkResult.status === "ok" ? { ...stableReviewRows(mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {})), status: "ok" } : linkResult;
   return { inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data?.links ?? [])], inventoryUnavailable: sharedLabels.data?.unavailable || sharedLabels.isError, retryInventory: () => { void sharedLabels.refetch(); }, rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
 }
 
 /** Saved rows bridge relay lag only; an authoritative net inventory wins, including an empty net result. */
-export function mergeSavedReviewLinks(base: ReviewLinks, saved: { path: string; link: import("./submitWalkthrough").ReviewLink }[], pages: ManagerPage[], nets: Record<string, unknown>) {
+export function mergeSavedReviewLinks(base: ReviewLinks, saved: { path: string; link: import("./submitWalkthrough").ReviewLink; replacedKeys?: string[] }[], pages: ManagerPage[], nets: Record<string, unknown>) {
   const groups = base.groups.map(g => ({ ...g, links: [...g.links] }));
   for (const x of saved) {
     if (normPath(x.path) in nets) continue;
-    let g = groups.find(g => x.link.scope?.startsWith("object:") ? `object:${g.shared?.id}` === x.link.scope : g.links.some(l => l.key === x.link.key) || (x.link.key.startsWith("|") ? !g.page : g.page && normPath(g.page.path) === normPath(x.path)));
+    let g = groups.find(g => x.link.scope?.startsWith("object:") ? `object:${g.shared?.id}` === x.link.scope : g.links.some(l => l.key === x.link.key || x.replacedKeys?.includes(l.key) || reviewLinkIdentity(l, g.page?.path ?? x.path) === reviewLinkIdentity(x.link, x.path)) || (x.link.key.startsWith("|") ? !g.page : g.page && normPath(g.page.path) === normPath(x.path)));
     if (!g) { const page = pages.find(p => normPath(p.path) === normPath(x.path)); g = { page: { path: x.path, name: page?.name ?? x.path }, label: page?.name ?? x.path, links: [] }; groups.push(g); }
-    if (!g.links.some(l => l.key === x.link.key)) g.links.push(x.link);
+    const identity = reviewLinkIdentity(x.link, x.path);
+    const at = g.links.findIndex(l => reviewLinkIdentity(l, g.page?.path ?? x.path) === identity || x.replacedKeys?.includes(l.key));
+    g.links = g.links.filter((l, i) => i === at || !(reviewLinkIdentity(l, g.page?.path ?? x.path) === identity || x.replacedKeys?.includes(l.key)));
+    if (at >= 0) g.links[at] = x.link; else g.links.push(x.link);
   }
   return { ...base, groups };
 }

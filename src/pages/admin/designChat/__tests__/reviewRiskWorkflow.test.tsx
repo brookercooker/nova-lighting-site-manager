@@ -3,13 +3,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SubmitWalkthroughPanel, ownLinkPrint } from "../SubmitWalkthrough";
 import { walk } from "../submitWalkthroughStore";
 import type { ReviewLink } from "../submitWalkthrough";
-const m = vi.hoisted(() => ({ data: null as any, trust: vi.fn(), show: vi.fn() }));
+const m = vi.hoisted(() => ({ data: null as any, trust: vi.fn(), domains: [] as string[], show: vi.fn() }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: { publish: { open: 3 }, review: { enabled: true } }, preview: null, showPreviewPath: m.show }) }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
-vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: [], isAdmin: true, pending: false, error: "", change: m.trust }), TrustedDomainList: () => null }));
+vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: m.domains, isAdmin: true, pending: false, error: "", change: m.trust }), TrustedDomainList: () => null }));
 const a: ReviewLink = { key: "a", href: "https://example.com/a", originalHref: "/about", kind: "external", label: "Our Story", requestIds: [], status: null };
 beforeEach(() => {
-  walk.reset(); m.trust.mockClear();
+  walk.reset(); m.trust.mockClear(); m.domains=[];
   m.data = { rows: [], pages: [{ name: "About", path: "/about", build_status: "ready" }], links: { status: "ok", groups: [{ label: "Homepage", page: { name: "Homepage", path: "/" }, links: [a, { ...a, key: "b", href: "/missing", kind: "internal", label: "Missing" }, { ...a, key: "c", href: "/about", kind: "internal", label: "About" }] }], unread: 0 } };
   walk.update(s => ({ ...s, open: true, step: "links", autoOpen: false }));
 });
@@ -58,4 +58,19 @@ it("duplicate jump expands and selects the related row without opening a destina
   fireEvent.click(screen.getByText("Same destination as: More Stories"));
   fireEvent.click(screen.getAllByRole("button", {name:"Show Related Link"})[0]);
   expect(walk.get().selectedLink?.key).toBe("d"); expect(walk.get().verificationOpened).toEqual({});
+});
+it("untrust immediately restores full actions and resets matching group/footer progress",()=>{
+ m.domains=["example.com"];m.data.links.groups[0].links=[a];
+ walk.update(s=>({...s,verificationOpened:{a:ownLinkPrint(a)},linkApprovals:{a:ownLinkPrint(a)},linkTicked:["a"],groupExpansion:{"/":true}}));
+ const view=render(<SubmitWalkthroughPanel onKeepEditing={()=>{}}/>);
+ expect(screen.getByText("1 of 1 links approved")).toBeInTheDocument();
+ m.domains=[];view.rerender(<SubmitWalkthroughPanel onKeepEditing={()=>{}}/>);
+ expect(screen.getByRole("button",{name:"Confirmed: Our Story"})).toBeDisabled();expect(screen.getByRole("button",{name:"Correct link: Our Story"})).toBeEnabled();
+ expect(screen.getByRole("link",{name:"Open Link to Verify"})).toBeInTheDocument();expect(screen.getByText("Open link to confirm")).toBeInTheDocument();
+ expect(screen.getByText("0 of 1 links approved")).toBeInTheDocument();expect(screen.getByRole("button",{name:"Homepage · 0 of 1"})).toBeInTheDocument();
+});
+it("legacy handled rows retain review-again and correction actions",()=>{
+ m.data.links.groups[0].links=[a];walk.update(s=>({...s,linkReplaced:{a:ownLinkPrint(a)},groupExpansion:{"/":true}}));
+ render(<SubmitWalkthroughPanel onKeepEditing={()=>{}}/>);expect(screen.getByRole("button",{name:"Review Again"})).toBeInTheDocument();expect(screen.getByRole("button",{name:"Correct link: Our Story"})).toBeEnabled();
+ fireEvent.click(screen.getByRole("button",{name:"Review Again"}));expect(walk.get().linkReplaced.a).toBeUndefined();expect(screen.getByText("0 of 1 links approved")).toBeInTheDocument();
 });

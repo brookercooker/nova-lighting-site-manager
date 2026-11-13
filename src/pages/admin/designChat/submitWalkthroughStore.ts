@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { normPath, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
+import { reviewLinkIdentity } from "./reviewLinkIdentity";
 
 /** How long after Change This Link a refetched page keeps its approvals (re-pinned to the new fingerprint). */
 export const REPIN_MS = 120_000;
@@ -14,7 +15,7 @@ export type WalkState = {
   groupExpansion: Record<string, boolean>;
   openingLink: { key: string; path: string; name: string; href: string; entries?: import("./linkCheck").LinkCheckEntry[]; failed?: boolean } | null;
   reviewEdit: { link: ReviewLink; group: LinkGroup; rows: ChangedRow[]; fingerprint: string } | null;
-  savedReviewLinks: { path: string; link: ReviewLink }[];
+  savedReviewLinks: { path: string; link: ReviewLink; replacedKeys?: string[] }[];
   /** Actual verification-tab clicks only, keyed by link key and its own fingerprint. */
   verificationOpened: Record<string, string>;
   /** Explicit exceptions for missing pages, tied to the link's own fingerprint. */
@@ -77,13 +78,16 @@ export const walk = {
   savedLink(path: string, link: ReviewLink) {
     const edit = state.reviewEdit;
     if (!edit) return;
+    const stableKey = reviewLinkIdentity(link, path);
+    const previous = state.savedReviewLinks.filter(x => reviewLinkIdentity(x.link, x.path) === stableKey || x.link.key === edit.link.key);
+    const replacedKeys = [...new Set([edit.link.key, ...previous.flatMap(x => [x.link.key, ...(x.replacedKeys ?? [])])])];
     walk.update(s => ({ ...s, reviewEdit: null, repin: { path: normPath(path), until: Date.now() + REPIN_MS },
       verificationOpened: Object.fromEntries(Object.entries(s.verificationOpened).filter(([k]) => k !== edit.link.key && k !== link.key)),
       keptMissing: Object.fromEntries(Object.entries(s.keptMissing).filter(([k]) => k !== edit.link.key && k !== link.key)),
       linkTicked: s.linkTicked.filter(k => k !== edit.link.key && k !== link.key),
       linkApprovals: Object.fromEntries(Object.entries(s.linkApprovals).filter(([k]) => k !== edit.link.key && k !== link.key)),
-      linkReplaced: { ...s.linkReplaced, [edit.link.key]: edit.fingerprint },
-      savedReviewLinks: [...s.savedReviewLinks.filter(x => x.link.key !== link.key), { path, link }] }));
+      linkReplaced: Object.fromEntries(Object.entries(s.linkReplaced).filter(([k]) => k !== edit.link.key && k !== stableKey)),
+      savedReviewLinks: [...s.savedReviewLinks.filter(x => !previous.includes(x)), { path, link: { ...link, key: stableKey }, replacedKeys }] }));
   },
   /** Change This Link: remember the return point (step "links", which link) and close the walkthrough. */
   startFix(fix: Omit<LinkFix, "saved" | "returning">) { walk.update(s => ({ ...s, open: false, checking: null, selectedLink: null, linkNote: null, step: "links", fix: { ...fix, saved: false } })); },

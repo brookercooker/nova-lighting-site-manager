@@ -262,6 +262,16 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   const orderedKeys = useRef<{ signature: string; groups: string[]; links: Record<string, string[]> }>({ signature: "", groups: [], links: {} });
   const groupId = (g: LinkGroup) => g.shared?.id ?? g.page?.path ?? g.label;
   const rawGroups = data.links.status === "ok" ? data.links.groups : [];
+  const priorDomains = useRef(trust.domains);
+  useEffect(() => {
+    if (data.links.status !== "ok") return;
+    const removed = priorDomains.current.filter(domain => !trust.domains.includes(domain));
+    priorDomains.current = trust.domains;
+    if (!removed.length) return;
+    const keys = new Set(rawGroups.flatMap(g => g.links).filter(l => removed.includes(domainOf(l.href) ?? "")).map(l => l.key));
+    const clear = (map: Record<string,string>) => Object.fromEntries(Object.entries(map).filter(([k]) => !keys.has(k)));
+    walk.update(w => ({ ...w, verificationOpened: clear(w.verificationOpened), linkApprovals: clear(w.linkApprovals), linkReplaced: clear(w.linkReplaced), linkTicked: w.linkTicked.filter(k => !keys.has(k)) }));
+  }, [trust.domains.join("|"), data.links.status]);
   const names = Object.fromEntries(rawGroups.flatMap(g => g.links.map(l => [l.key, linkText(l, data.pages)])));
   const known = (data.inventoryLinks ?? []).map(l => domainOf(l.href)).filter((h): h is string => !!h);
   const riskFlags = Object.assign({}, ...rawGroups.map(g => groupRisks(g, names, known, trust.domains))) as Record<string, import("./linkRisk").RiskFlag[]>;
@@ -347,14 +357,15 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
                   {chip?.tone === "bad" && !missing && <p className="text-xs text-destructive">{missingInternalLink(l, data.pages) ? "This page doesn't exist. Edit the link destination to fix it." : "This address couldn't be reached. Check the destination."}</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}
-                  {st !== "replaced" && <>
+                  <>
+                    {st === "replaced" && <Button variant="link" className="h-11 px-0" onClick={e => { e.stopPropagation(); walk.update(w => ({ ...w, linkReplaced: Object.fromEntries(Object.entries(w.linkReplaced).filter(([k]) => k !== l.key)) })); }}>Review Again</Button>}
                     {tabUrl && <Button asChild variant="ghost" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm text-muted-foreground"><a data-verify-link href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden />Open Link to Verify</a></Button>}
                     <div className="grid grid-cols-2 gap-2">
                       <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" aria-label={`Confirmed: ${publicLinkAddress(friendlyName)}`} aria-pressed={st === "done"} disabled={!enabled} aria-describedby={hintId} onClick={e => { e.stopPropagation(); if (enabled) walk.confirmLink(l.key, own, st !== "done"); }}><Check aria-hidden className={cn("h-4 w-4", st === "done" && "rounded-full bg-foreground text-background p-0.5")} />Confirmed</Button>
                       <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant="default" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" disabled={opening} aria-label={`Correct link: ${publicLinkAddress(friendlyName)}`} onClick={e => { e.stopPropagation(); onChange(l, g); }}><Pencil aria-hidden />Correct</Button>
                     </div>
                     <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : opening ? `Opening ${s.openingLink?.name}…` : st === "done" ? "Approved" : !opened ? "Open link to confirm" : ""}</p>
-                  </>}
+                  </>
                   {st === "done" && host && trust.isAdmin && !trust.domains.includes(host) && !flags.some(f => ["lookalike", "punycode", "insecure"].includes(f.kind)) && <Button variant="outline" className="h-auto min-h-11 w-full whitespace-normal break-all px-2 text-xs" disabled={trust.pending} onClick={e => { e.stopPropagation(); void trust.change(host); }}>Trust {host}</Button>}
                   {s.reviewEdit?.link.key === l.key && <div data-review-editor onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}><ReviewLinkEditor pages={data.pages} knownDomains={known} trustedDomains={trust.domains} /></div>}
                 </li>

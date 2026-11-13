@@ -19,3 +19,11 @@ it("trusted domains starts collapsed with its actual count",()=>{
  render(<TrustedDomainList trust={{domains:["example.com"],isAdmin:true,pending:false,error:"",change:vi.fn()}}/>);
  const toggle=screen.getByRole("button",{name:"Trusted Domains (1)"});expect(toggle).toHaveAttribute("aria-expanded","false");expect(screen.queryByText("example.com")).toBeNull();fireEvent.click(toggle);expect(screen.getByText("example.com")).toBeInTheDocument();
 });
+it("confirms untrust inline and Cancel never removes a shared domain",()=>{
+ const change=vi.fn();render(<TrustedDomainList trust={{domains:["google.com"],records:[{domain:"google.com",author:"brooklyngull",created_by:"staff",created_at:"2026-11-12T12:00:00Z"}],isAdmin:true,pending:false,error:"",change}}/>);
+ fireEvent.click(screen.getByRole("button",{name:"Trusted Domains (1)"}));
+ fireEvent.click(screen.getByRole("button",{name:"Remove Trusted Domain: google.com"}));expect(change).not.toHaveBeenCalled();
+ expect(screen.getByText("Stop trusting google.com? Links to it will need review again.")).toBeInTheDocument();
+ expect(screen.getByText(/Added by brooklyngull/)).toBeInTheDocument();fireEvent.click(screen.getByRole("button",{name:"Cancel"}));expect(change).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole("button",{name:"Remove Trusted Domain: google.com"}));fireEvent.click(screen.getByRole("button",{name:"Stop Trusting"}));expect(change).toHaveBeenCalledWith("google.com",true);
+});

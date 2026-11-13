@@ -29,12 +29,12 @@ it("prefills current destination and target, suggests friendly pages and saves w
   fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
   await waitFor(() => expect(m.notify).toHaveBeenCalled());
   expect(m.save).toHaveBeenCalledWith(expect.anything(), "/gallery", true);
-  expect(walk.get()).toMatchObject({ open: true, step: "links", fix: null, reviewEdit: null, ticked: ["page:/"], linkTicked: ["/|/team"], linkReplaced: { [link.key]: "own" }, savedReviewLinks: [{ path: "/", link: { href: "/gallery", key: "/|/gallery" } }] });
+  expect(walk.get()).toMatchObject({ open: true, step: "links", fix: null, reviewEdit: null, ticked: ["page:/"], linkTicked: ["/|/team"], linkReplaced: {}, savedReviewLinks: [{ path: "/", link: { href: "/gallery", key: "/|page|0.5.0.1" } }] });
   expect(m.fallback).not.toHaveBeenCalled();
   act(() => walk.reconcile({ "page:/": "p2" }, { "/|/team": "l1", "/|/contact": "old", "/|/gallery": "new" }, { "/|/contact": "own", "/|/gallery": "new" }));
   expect(walk.get().ticked).toEqual(["page:/"]);
   expect(walk.get().linkTicked).toEqual(["/|/team"]);
-  expect(walk.get().linkReplaced[link.key]).toBe("own");
+  expect(walk.get().linkReplaced[link.key]).toBeUndefined();
 });
 it("validation and save errors retain the typed destination", async () => {
   render(<ReviewLinkEditor pages={pages} />);
@@ -86,7 +86,7 @@ it("editing a confirmed link replaces the old confirmation and leaves the new li
   fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/gallery" } });
   fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
   await waitFor(() => expect(m.notify).toHaveBeenCalled());
-  expect(walk.get().linkReplaced[link.key]).toBe("own");
+  expect(walk.get().linkReplaced[link.key]).toBeUndefined();
   expect(walk.get().linkTicked).not.toContain(link.key);
   expect(walk.get().linkTicked).not.toContain("/|/gallery");
 });
