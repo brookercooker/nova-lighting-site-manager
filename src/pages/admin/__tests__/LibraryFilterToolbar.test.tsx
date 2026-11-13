@@ -5,10 +5,16 @@ import LibraryFilterToolbar from "../LibraryFilterToolbar";
 import { clearLibraryFilters } from "../libraryFilters";
 const h=vi.hoisted(()=>({applied:vi.fn(),phone:true}));
 vi.mock("../designChat/useManagerLayout",()=>({useManagerLayout:()=>({phone:h.phone})}));
-vi.mock("../useAllLabels",()=>({useLabelsForScope:()=>({data:[{path:"footer",name:"Footer",color_index:0},{path:"room",name:"Room",color_index:1}]})}));
+vi.mock("../useAllLabels",()=>({useInvalidateLabels:()=>()=>{},registerLabelPath:vi.fn(),useLabelsForScope:()=>({data:[{path:"footer",name:"Footer",color_index:0},{path:"room",name:"Room",color_index:1}]})}));
 afterEach(()=>{cleanup();h.applied.mockClear();h.phone=true;});
 function Harness(){const [f,setF]=useState(clearLibraryFilters());return <LibraryFilterToolbar scope="objects" noun="Objects" search="" onSearch={()=>{}} value={f} onApply={next=>{h.applied(next);setF(next);}} fields={[{v:"all",label:"All Fields"},{v:"name",label:"Name"}]} sort="newest" onSort={()=>{}} sortOptions={[{v:"newest",label:"Recently Modified"}]} count={8} countResults={next=>next.labels.length ? 3 : 8} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"used",label:"In Use"},{v:"none",label:"Not Used"}]} onAdd={()=>{}} onEdit={()=>{}} editing={false}/>;}
 describe("staged library panel",()=>{
+  it("opens the existing manager from the Labels section and scoped header event",()=>{
+    render(<Harness/>);fireEvent.click(screen.getByRole("button",{name:"Filter"}));
+    fireEvent.click(screen.getByRole("button",{name:"Manage Labels"}));expect(screen.getByRole("heading",{name:"Manage Labels"})).toBeInTheDocument();
+    cleanup();render(<Harness/>);fireEvent(window,new CustomEvent("nova:manage-library-labels",{detail:"images"}));expect(screen.queryByRole("heading",{name:"Manage Labels"})).toBeNull();
+    fireEvent(window,new CustomEvent("nova:manage-library-labels",{detail:"objects"}));expect(screen.getByRole("heading",{name:"Manage Labels"})).toBeInTheDocument();
+  });
   it("previews results without applying and discards on closing",()=>{
     render(<Harness/>);fireEvent.click(screen.getByRole("button",{name:"Filter"}));
     fireEvent.click(screen.getByRole("button",{name:"Footer"}));
@@ -26,7 +32,7 @@ describe("staged library panel",()=>{
     render(<Harness/>);fireEvent.click(screen.getByRole("button",{name:"Filter"}));fireEvent.click(screen.getByRole("button",{name:"Custom"}));
     fireEvent.change(screen.getByLabelText("From"),{target:{value:"2026-11-14"}});fireEvent.change(screen.getByLabelText("To"),{target:{value:"2026-11-13"}});
     expect(screen.getByRole("button",{name:"Show 0 Results"})).toBeDisabled();
-    fireEvent.click(screen.getByRole("button",{name:"+ More"}));expect(within(screen.getByRole("dialog")).getByRole("textbox",{name:"Find Labels"})).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByRole("textbox",{name:"Search Labels"})).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:"Clear Dates"}));expect(screen.getByRole("button",{name:"Show 8 Results"})).toBeEnabled();
   });
 });

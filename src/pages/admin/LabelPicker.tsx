@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
+import LabelSearchList from "./LabelSearchList";
+import { useLabelUsageCounts } from "./useLabelUsageCounts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
-import { Plus, X, Tag, Palette, ChevronRight, Check } from "lucide-react";
+import { X, Tag, Check } from "lucide-react";
 import {
   useLabelsForScope,
   registerLabelPath,
@@ -23,6 +24,8 @@ interface Props {
   triggerLabel?: string;
   className?: string;
   compact?: boolean;
+  inline?: boolean;
+  onDone?: () => void;
 }
 
 /**
@@ -33,10 +36,11 @@ interface Props {
 export default function LabelPicker({
   scope, value, onChange,
   placeholder = "Search labels…",
-  triggerLabel = "Add label", className = "", compact = false,
+  triggerLabel = "Add label", className = "", compact = false, inline = false, onDone,
 }: Props) {
   const { data: allLabels = [] } = useLabelsForScope(scope);
   const invalidate = useInvalidateLabels(scope);
+  const { data: usageCounts = {} } = useLabelUsageCounts(scope);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [pendingColor, setPendingColor] = useState<number | null>(null);
@@ -49,15 +53,6 @@ export default function LabelPicker({
     return m;
   }, [allLabels]);
 
-  const term = q.trim().toLowerCase();
-  // Selected labels stay in the list (with a check) so the picker reads like a
-  // checklist instead of making chosen labels disappear.
-  const matches = allLabels
-    .filter((l) => (term ? l.path.toLowerCase().includes(term) : true))
-    .sort((a, b) => Number(value.includes(b.path)) - Number(value.includes(a.path)))
-    .slice(0, 80);
-  const exactMatch = term && allLabels.some((l) => l.path.toLowerCase() === term);
-
   const add = (path: string) => {
     if (!path || value.includes(path)) { setQ(""); return; }
     onChange([...value, path]);
@@ -67,10 +62,10 @@ export default function LabelPicker({
   const toggle = (path: string) => {
     if (value.includes(path)) onChange(value.filter((x) => x !== path));
     else onChange([...value, path]);
-    setQ("");
   };
 
-  const createNew = async () => {
+  const createNew = async (requested?: string) => {
+    const term = (requested ?? q).trim().toLowerCase();
     setCreateError(null);
     if (!term) return;
     const parent = pendingParentId ? allLabels.find((r) => r.id === pendingParentId) ?? null : null;
@@ -110,6 +105,10 @@ export default function LabelPicker({
     await setLabelColorById(row.id, idx);
     invalidate();
   };
+
+  const creationOptions = q.trim() && !allLabels.some(l => l.name.toLowerCase().includes(q.trim().toLowerCase())) ? <div className="mt-2 space-y-2"><label className="block text-xs">Nest Label Under<select aria-label="Nest Label Under" className="mt-1 h-11 w-full rounded border bg-background px-2" value={pendingParentId ?? ""} onChange={e => setPendingParentId(e.target.value || null)}><option value="">Top Level</option>{allLabels.filter(l => l.depth < MAX_DEPTH - 1).map(l => <option key={l.id} value={l.id}>{l.path}</option>)}</select></label><ColorSwatchPicker value={pendingColor ?? pickLeastUsedColor(allLabels.map(l => l.color_index))} onChange={setPendingColor} /></div> : null;
+
+  if (inline) return <><LabelSearchList labels={allLabels} selected={value} counts={usageCounts} onToggle={toggle} onQueryChange={setQ} onCreate={query => void createNew(query)} />{creationOptions}{createError && <p role="alert" className="text-xs text-destructive">{createError}</p>}<Button className="mt-3 h-11" onClick={onDone}>Done</Button></>;
 
   return (
     <div className={`min-w-0 max-w-full ${className}`}>
@@ -192,98 +191,7 @@ export default function LabelPicker({
               </Button>
             </div>
           </div>
-          <Command shouldFilter={false}>
-            <CommandInput placeholder={placeholder} value={q} onValueChange={setQ} />
-            <CommandList>
-              {matches.length === 0 && !term && (
-                <CommandEmpty>Start typing to search…</CommandEmpty>
-              )}
-              {matches.length === 0 && term && !exactMatch && (
-                <CommandEmpty>No matching labels.</CommandEmpty>
-              )}
-              {matches.length > 0 && (
-                <CommandGroup heading="Tap to select · picker stays open">
-                  {matches.map((l) => {
-                    const c = colorFor(l.path, l.color_index);
-                    const segs = l.path.split(LABEL_SEP);
-                    const selected = value.includes(l.path);
-                    return (
-                      <CommandItem
-                        key={l.id}
-                        value={l.path}
-                        onSelect={() => toggle(l.path)}
-                        aria-selected={selected}
-                        className={`min-h-11 ${selected ? "font-medium" : ""}`}
-                      >
-                        <span
-                          className={`w-4 h-4 mr-2 shrink-0 rounded border flex items-center justify-center ${selected ? "" : "border-muted-foreground/40"}`}
-                          style={selected ? { background: c.border, borderColor: c.border } : undefined}
-                          aria-hidden
-                        >
-                          {selected && <Check className="w-3 h-3 text-background" />}
-                        </span>
-                        <Tag className="w-3.5 h-3.5 mr-2 shrink-0" style={{ color: c.iconStroke, fill: c.iconFill }} />
-                        <span className="truncate">
-                          {segs.map((s, i) => (
-                            <span key={i}>
-                              {i > 0 && <ChevronRight className="inline w-3 h-3 mx-0.5 text-muted-foreground align-[-2px]" />}
-                              <span className={i === segs.length - 1 ? "" : "text-muted-foreground"}>{s}</span>
-                            </span>
-                          ))}
-                        </span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              )}
-              {term && !exactMatch && (
-                <CommandGroup heading="Create">
-                  <div className="px-2 pb-2 space-y-2">
-                    {!term.includes(LABEL_SEP) && (
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Nest Label Under:</div>
-                        <select
-                          value={pendingParentId ?? ""}
-                          onChange={(e) => setPendingParentId(e.target.value || null)}
-                          className="w-full h-7 border rounded px-1 text-xs bg-background"
-                        >
-                          <option value="">— Top level —</option>
-                          {allLabels.filter((l) => l.depth < MAX_DEPTH - 1).map((l) => (
-                            <option key={l.id} value={l.id}>{l.path.split(LABEL_SEP).join(" › ")}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
-                        <Palette className="w-3 h-3" /> Color (Auto If Unset)
-                      </div>
-                      <ColorSwatchPicker
-                        value={pendingColor ?? pickLeastUsedColor(allLabels.map((l) => l.color_index))}
-                        onChange={setPendingColor}
-                      />
-                    </div>
-                    {createError && <div className="text-[11px] text-destructive">{createError}</div>}
-                  </div>
-                  <CommandItem value={`__create__${term}`} onSelect={createNew}>
-                    <Plus className="w-3.5 h-3.5 mr-2" />
-                    Create &ldquo;{term.includes(LABEL_SEP) ? term.split(LABEL_SEP).join(" › ") : term}&rdquo;
-                  </CommandItem>
-                </CommandGroup>
-              )}
-              {term && exactMatch && (
-                <CommandGroup heading="Already Exists">
-                  <CommandItem
-                    value={`__exists__${term}`}
-                    onSelect={() => add(term)}
-                  >
-                    <Tag className="w-3.5 h-3.5 mr-2 opacity-60" />
-                    Apply &ldquo;{term}&rdquo;
-                  </CommandItem>
-                </CommandGroup>
-              )}
-            </CommandList>
-          </Command>
+          <div className="p-3"><LabelSearchList labels={allLabels} selected={value} counts={usageCounts} onToggle={toggle} onQueryChange={setQ} onCreate={query => void createNew(query)} />{creationOptions}{createError && <p role="alert" className="text-xs text-destructive">{createError}</p>}</div>
         </PopoverContent>
       </Popover>
     </div>

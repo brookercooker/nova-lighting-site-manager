@@ -55,7 +55,7 @@ describe("library picker", () => {
     setup("objects");
     await screen.findByTitle("Flyer");
     fireEvent.click(screen.getByRole("button", { name: "More Labels" }));
-    const list = screen.getByRole("listbox");
+    const list = screen.getByRole("group", { name: "Label Results" });
     const scrollLock = vi.fn();
     document.addEventListener("wheel", scrollLock);
     document.addEventListener("touchmove", scrollLock);
@@ -96,11 +96,13 @@ describe("library picker", () => {
     expect(screen.getByLabelText("Search Objects")).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "Homepage" }));
     fireEvent.click(screen.getByRole("button", { name: "More Labels" }));
-    fireEvent.click(screen.getByRole("option", { name: "Marketing, 2 items" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Marketing" }));
+    fireEvent.click(within(screen.getAllByRole("dialog").at(-1) as HTMLElement).getByRole("button", { name: "Done" }));
     expect(screen.getByRole("button", { name: "Homepage" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Any Label" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "More Labels" }));
-    fireEvent.click(screen.getByRole("option", { name: "Marketing, 2 items" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Marketing" }));
+    fireEvent.click(within(screen.getAllByRole("dialog").at(-1) as HTMLElement).getByRole("button", { name: "Done" }));
     expect(screen.getByRole("button", { name: "Marketing" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByRole("button", { name: "Any Label" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^All$/ }));
@@ -131,7 +133,8 @@ describe("library picker", () => {
     expect(before).toHaveLength(8);
     for (const path of ["Rare 9", "Rare 8"]) {
       fireEvent.click(screen.getByRole("button", { name: "More Labels" }));
-      fireEvent.click(screen.getByRole("option", { name: `${path}, 0 items` }));
+      fireEvent.click(screen.getByRole("checkbox", { name: path }));
+      fireEvent.click(within(screen.getAllByRole("dialog").at(-1) as HTMLElement).getByRole("button", { name: "Done" }));
     }
     expect(order()).toEqual([...before, "Rare 9", "Rare 8"]);
     fireEvent.click(screen.getByRole("button", { name: "Rare 9" }));
@@ -165,12 +168,13 @@ describe("library picker", () => {
     const group = screen.getByRole("group", { name: "Filter by Label" });
     expect(group.querySelectorAll("[data-label-chips] button[title]")).toHaveLength(8);
     fireEvent.click(screen.getByRole("button", { name: "More Labels" }));
-    expect(within(screen.getByRole("listbox")).getAllByRole("option")).toHaveLength(212);
-    expect(screen.getByRole("option", { name: "Rooms/Lobby, 1 items" })).toHaveTextContent("1");
-    expect(screen.getByRole("option", { name: "Folder/Label 204, 0 items" })).toHaveTextContent("0");
-    fireEvent.change(screen.getByRole("combobox", { name: "Search Labels" }), { target: { value: "Rooms/Lobby" } });
-    await waitFor(() => expect(within(screen.getByRole("listbox")).getAllByRole("option")).toHaveLength(1));
-    fireEvent.click(screen.getByRole("option", { name: "Rooms/Lobby, 1 items" }));
+    expect(within(screen.getByRole("group", { name: "Label Results" })).getAllByRole("checkbox")).toHaveLength(212);
+    expect(screen.getByRole("checkbox", { name: "Rooms/Lobby" })).toHaveTextContent("1");
+    expect(screen.getByRole("checkbox", { name: "Folder/Label 204" })).toHaveTextContent("0");
+    fireEvent.change(screen.getByRole("textbox", { name: "Search Labels" }), { target: { value: "Lobby" } });
+    await waitFor(() => expect(within(screen.getByRole("group", { name: "Label Results" })).getAllByRole("checkbox")).toHaveLength(1));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Rooms/Lobby" }));
+    fireEvent.click(within(screen.getAllByRole("dialog").at(-1) as HTMLElement).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(cards()).toHaveLength(1));
     expect(within(group).getByRole("button", { name: "Lobby" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Clear Label" }));
@@ -180,10 +184,11 @@ describe("library picker", () => {
     labelData.rows = Array.from({ length: 205 }, (_, n) => ({ path: `Folder/Label ${n}`, color_index: 7 }));
     setup(); await screen.findByText("60 of 70 shown");
     fireEvent.click(screen.getByRole("button", { name: "More Labels" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Search Labels" }), { target: { value: "Label 204" } });
-    await waitFor(() => expect(within(screen.getByRole("listbox")).getAllByRole("option")).toHaveLength(1));
-    fireEvent.keyDown(screen.getByRole("combobox", { name: "Search Labels" }), { key: "ArrowDown" });
-    fireEvent.keyDown(screen.getByRole("combobox", { name: "Search Labels" }), { key: "Enter" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search Labels" }), { target: { value: "Label 204" } });
+    await waitFor(() => expect(within(screen.getByRole("group", { name: "Label Results" })).getAllByRole("checkbox")).toHaveLength(1));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Search Labels" }), { key: "ArrowDown" });
+    fireEvent.keyDown(screen.getByRole("checkbox", { name: "Folder/Label 204" }), { key: "Enter" });
+    fireEvent.click(within(screen.getAllByRole("dialog").at(-1) as HTMLElement).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Label 204" })).toHaveAttribute("aria-pressed", "true"));
     expect(screen.getByRole("group", { name: "Filter by Label" }).querySelectorAll("[data-label-chips] button[title]")).toHaveLength(8);
     expect(screen.getByText("No images match")).toBeInTheDocument();

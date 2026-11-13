@@ -393,19 +393,19 @@ export default function PagesTab() {
   const pager = usePager(filtered.length);
   return (
     <div className="space-y-4">
-      {view === "audit" && <select aria-label="Pages View" value={view} onChange={e => setView(e.target.value as typeof view)} className="h-11 max-w-full rounded border bg-background px-2"><option value="static">Static Pages</option><option value="landing">Landing Pages</option><option value="audit">Link Audit</option></select>}
+      <div role="tablist" aria-label="Pages View" className="grid grid-cols-3 rounded-md border bg-background">{([['static', 'Static Pages'], ['landing', 'Landing Pages'], ['audit', 'Link Audit']] as const).map(([key, label]) => <Button key={key} role="tab" aria-selected={view === key} variant={view === key ? "default" : "ghost"} className="h-11 min-w-0 rounded-none px-1 text-xs" onClick={() => setView(key)}>{label}</Button>)}</div>
 
     {view === "audit" ? (
       <LinkAuditView pages={pages as any} />
     ) : view === "landing" ? (
-      <LandingPagesView navigation={<select aria-label="Pages View" value={view} onChange={e => setView(e.target.value as typeof view)} className="h-10 max-w-[120px] rounded border bg-background px-1 text-xs"><option value="static">Static Pages</option><option value="landing">Landing Pages</option><option value="audit">Link Audit</option></select>} />
+      <LandingPagesView />
     ) : (
     <div className="nova-library-layout flex gap-4 items-start">
 
 
 
       <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <LibraryFilterToolbar labelUsageCounts={usageCounts} navigation={<select aria-label="Pages View" value={view} onChange={e => setView(e.target.value as typeof view)} className="h-10 max-w-[110px] rounded border bg-background px-1 text-xs"><option value="static">Static Pages</option><option value="landing">Landing Pages</option><option value="audit">Link Audit</option></select>} scope="static" noun="Pages" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Status" extraOptions={[{ v: "all", label: "All Statuses" }, { v: "ready", label: "Ready" }, { v: "draft", label: "Draft" }]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={
+        <LibraryFilterToolbar labelUsageCounts={usageCounts} scope="static" noun="Pages" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Status" extraOptions={[{ v: "all", label: "All Statuses" }, { v: "ready", label: "Ready" }, { v: "draft", label: "Draft" }]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={
       <TagsPanel
         scope="static"
         usageCounts={usageCounts}

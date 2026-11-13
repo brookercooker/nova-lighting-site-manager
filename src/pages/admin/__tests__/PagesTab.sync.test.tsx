@@ -18,7 +18,7 @@ vi.mock("../designChat/DesignChatContext", () => ({ useDesignChatOptional: () =>
 vi.mock("../useThumbnailCapture", () => ({ useAutoCaptureThumbnails: vi.fn(), regenerateThumbnail: vi.fn() }));
 vi.mock("../signedThumb", () => ({ SignedThumbImg: () => null }));
 vi.mock("../LabelsCell", () => ({ default: () => null }));
-vi.mock("../useAllLabels", () => ({ useLabelsForScope: () => ({ data: [] }) }));
+vi.mock("../useAllLabels", () => ({ useInvalidateLabels: () => () => {}, registerLabelPath: vi.fn(), useLabelsForScope: () => ({ data: [] }) }));
 vi.mock("../TagsPanel", () => ({ default: () => null }));
 vi.mock("../CreatePageDialog", () => ({ default: () => null }));
 vi.mock("../LandingPagesView", () => ({ default: () => null }));

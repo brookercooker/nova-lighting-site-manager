@@ -626,6 +626,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
         <MoreMenuItem onClick={onPassword}><KeyRound className="mr-2 h-4 w-4" />Change Password</MoreMenuItem>
         <MoreMenuItem onClick={() => supabase.auth.signOut()}><LogOut className="mr-2 h-4 w-4" />Sign Out</MoreMenuItem>
         <MoreMenuSeparator /><MoreMenuLabel>Tools</MoreMenuLabel>
+        {/^\/manage\/(objects|images|videos|pages)$/.test(window.location.pathname) && new URLSearchParams(window.location.search).get("tab") !== "audit" && <MoreMenuItem onSelect={() => { const path = window.location.pathname; const scope = path.includes('/objects') ? 'objects' : path.includes('/images') ? 'images' : path.includes('/videos') ? 'videos' : path.includes('/pages') ? (new URLSearchParams(window.location.search).get('tab') === 'landing' ? 'landing' : new URLSearchParams(window.location.search).get('tab') === 'audit' ? 'links' : 'static') : null; if (scope) window.dispatchEvent(new CustomEvent('nova:manage-library-labels', { detail: scope })); }}>Manage Labels</MoreMenuItem>}
         <MoreMenuItem onClick={() => navigate("/manage/pages")}><FileText className="mr-2 h-4 w-4" />Pages</MoreMenuItem>
         <HeaderActions menuItems onExpand={onReview} />
         {!editing && <div className="px-2 py-1"><SubmitButton onRequestSubmit={() => { setMenuOpen(false); setSubmitConfirm(true); }} /></div>}

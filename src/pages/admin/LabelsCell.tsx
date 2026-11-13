@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
-import { Tag } from "lucide-react";
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { labelCount } from "./labelSearch";
 import LabelPicker from "./LabelPicker";
-import { useLabelsForScope, type LabelScope } from "./useAllLabels";
-import { colorFor } from "./labelColors";
+import { type LabelScope } from "./useAllLabels";
 
 interface Props {
   scope: LabelScope;
@@ -19,34 +20,13 @@ interface Props {
  */
 export default function LabelsCell({ scope, value, onChange, itemName }: Props) {
   const [open, setOpen] = useState(false);
-  const { data: allLabels = [] } = useLabelsForScope(scope);
   const count = value.length;
-  const hasAny = count > 0;
-
-  const tint = useMemo(() => {
-    if (!hasAny) return null;
-    const map = new Map(allLabels.map((l) => [l.path, l.color_index]));
-    return colorFor(value[0], map.get(value[0]) ?? null);
-  }, [hasAny, value, allLabels]);
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title={hasAny ? `${count} label${count === 1 ? "" : "s"} — click to edit` : "No labels — click to add"}
-        aria-label={hasAny ? `${count} labels, edit` : "Add Labels"}
-        className={`inline-flex min-h-9 sm:min-h-0 items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-medium transition-colors ${
-          hasAny ? "" : "border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted"
-        }`}
-        style={hasAny && tint ? { background: tint.bg, borderColor: tint.border, color: tint.text } : undefined}
-      >
-        <Tag
-          className="w-3.5 h-3.5"
-          style={hasAny && tint ? { color: tint.iconStroke, fill: tint.iconFill } : undefined}
-        />
-        <span className="tabular-nums">{hasAny ? count : "0"}</span>
-      </button>
+      <Button type="button" variant="ghost" className="h-11 w-full min-w-0 justify-between gap-2 px-2 text-xs" aria-label={`Edit Labels${itemName ? ` for ${itemName}` : ""}`} onClick={() => setOpen(true)}>
+        <span>Labels</span><span className="flex min-w-0 items-center gap-1"><span className="truncate">{labelCount(count)}</span><ChevronRight className="h-4 w-4 shrink-0" /></span>
+      </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
@@ -61,7 +41,9 @@ export default function LabelsCell({ scope, value, onChange, itemName }: Props) 
               scope={scope}
               value={value}
               onChange={onChange}
-              triggerLabel="Add label"
+              triggerLabel="Add Label"
+              inline
+              onDone={() => setOpen(false)}
             />
           </div>
         </DialogContent>
