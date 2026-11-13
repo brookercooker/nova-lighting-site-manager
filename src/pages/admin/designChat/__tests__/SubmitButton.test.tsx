@@ -41,7 +41,7 @@ const confirmLinks = () => {
   }
 };
 const tickManual = () => {
-  for (const t of ["Check the design of changed pages", "Verify destinations of changed links", "Check site appearance on different device types", "Confirm that all pages are ready to be published"])
+  for (const t of ["I have checked the design of changed pages", "I have verified the destinations of changed links", "I have checked the site appearance on different device types", "I have confirmed that all pages are ready to be published"])
     fireEvent.click(within(dialog()).getByRole("checkbox", { name: t }));
 };
 
@@ -98,10 +98,10 @@ describe("Submit for Review walkthrough", () => {
     confirmLinks();
     expect(within(dialog()).getByRole("button", { name: /About · 1 of 1/ })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "I have verified the destinations of changed links" })).not.toBeChecked();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, href: "/changed" }] }] } };
     host.rerender(<PanelHost open />);
-    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "I have verified the destinations of changed links" })).not.toBeChecked();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Back" }));
     expect(dialog()).toHaveTextContent("Changed since you approved it");
     expect(within(dialog()).getByRole("button", { name: /^Approve:/ })).toHaveAttribute("aria-pressed", "false");
@@ -180,19 +180,19 @@ describe("Submit for Review walkthrough", () => {
     const submit = within(dialog()).getByRole("button", { name: "Submit for Review" });
     expect(submit).toBeDisabled();
     expect(walk.get().checks).toEqual([]);
-    expect(within(dialog()).getByRole("checkbox", { name: "Check the design of changed pages" })).not.toBeChecked();
-    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "I have checked the design of changed pages" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "I have verified the destinations of changed links" })).not.toBeChecked();
     tickManual();
     expect(submit).toBeEnabled();
     expect(m.post).not.toHaveBeenCalled();
   });
-  it("flips checklist sentences from first person to past tense", () => {
+  it("keeps the same first-person attestation before and after ticking", () => {
     m.data.rows = [];
     render(<PanelHost open onOpenChange={vi.fn()} />);
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    const box = within(dialog()).getByRole("checkbox", { name: "Check site appearance on different device types" });
+    const box = within(dialog()).getByRole("checkbox", { name: "I have checked the site appearance on different device types" });
     fireEvent.click(box);
-    expect(within(dialog()).getByRole("checkbox", { name: "Checked site appearance on different device types" })).toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "I have checked the site appearance on different device types" })).toBeChecked();
     expect(dialog()).not.toHaveTextContent("wording and pictures");
   });
   it("skips the links step when no links changed and hides that checklist item", () => {

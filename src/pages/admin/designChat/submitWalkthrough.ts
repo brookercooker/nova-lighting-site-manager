@@ -174,10 +174,10 @@ export type ChecklistItem = { id: string; todo: string; done: string; locked: bo
 /** Four explicit reviewer attestations, independent of page/link approvals. */
 export function checklistItems(rows: ChangedRow[], hasLinks: boolean, pagesDone: boolean, linksDone: boolean): ChecklistItem[] {
   return [
-    { id: "pages", todo: "Check the design of changed pages", done: "Checked the design of changed pages", locked: false },
-    { id: "links", todo: "Verify destinations of changed links", done: "Verified destinations of changed links", locked: false },
-    { id: "phone", todo: "Check site appearance on different device types", done: "Checked site appearance on different device types", locked: false },
-    { id: "unintended", todo: "Confirm that all pages are ready to be published", done: "Confirmed that all pages are ready to be published", locked: false },
+    { id: "pages", todo: "I have checked the design of changed pages", done: "I have checked the design of changed pages", locked: false },
+    { id: "links", todo: "I have verified the destinations of changed links", done: "I have verified the destinations of changed links", locked: false },
+    { id: "phone", todo: "I have checked the site appearance on different device types", done: "I have checked the site appearance on different device types", locked: false },
+    { id: "unintended", todo: "I have confirmed that all pages are ready to be published", done: "I have confirmed that all pages are ready to be published", locked: false },
   ];
 }
 
