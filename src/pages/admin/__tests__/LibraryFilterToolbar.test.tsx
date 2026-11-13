@@ -9,6 +9,10 @@ vi.mock("../useAllLabels",()=>({useInvalidateLabels:()=>()=>{},registerLabelPath
 afterEach(()=>{cleanup();h.applied.mockClear();h.phone=true;});
 function Harness(){const [f,setF]=useState(clearLibraryFilters());return <LibraryFilterToolbar scope="objects" noun="Objects" search="" onSearch={()=>{}} value={f} onApply={next=>{h.applied(next);setF(next);}} fields={[{v:"all",label:"All Fields"},{v:"name",label:"Name"}]} sort="newest" onSort={()=>{}} sortOptions={[{v:"newest",label:"Recently Modified"}]} count={8} countResults={next=>next.labels.length ? 3 : 8} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"used",label:"In Use"},{v:"none",label:"Not Used"}]} onAdd={()=>{}} onEdit={()=>{}} editing={false}/>;}
 describe("staged library panel",()=>{
+  it.each(["images", "videos"] as const)("uses the existing uploader instead of Add buttons for %s", scope => {
+    render(<LibraryFilterToolbar scope={scope} noun={scope === "images" ? "Images" : "Videos"} search="" onSearch={()=>{}} value={clearLibraryFilters()} onApply={()=>{}} fields={[]} sort="newest" onSort={()=>{}} sortOptions={[]} count={0} countResults={()=>0} onAdd={()=>{}} onEdit={()=>{}} editing={false} />);
+    expect(screen.queryByRole("button", { name: scope === "images" ? "Add Image" : "Add Video" })).toBeNull();
+  });
   it("removes the floating Add command during Edit without changing the desktop Add command",()=>{
     const props = {scope:"objects" as const,noun:"Objects",search:"",onSearch:()=>{},value:clearLibraryFilters(),onApply:()=>{},fields:[],sort:"newest",onSort:()=>{},sortOptions:[],count:0,countResults:()=>0,onAdd:()=>{},onEdit:()=>{}};
     const {rerender}=render(<LibraryFilterToolbar {...props} editing={false}/>);

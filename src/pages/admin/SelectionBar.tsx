@@ -28,12 +28,12 @@ export default function SelectionBar({ count, itemLabel = "item", onClear, child
         </span>
       </div>
       {hint && <span className="text-xs text-muted-foreground hidden md:inline">{hint}</span>}
-      <fieldset disabled={count === 0} className="flex min-w-0 items-center gap-1.5 flex-wrap">{children}</fieldset>
+      <fieldset disabled={count === 0} className="flex min-w-0 items-center gap-1.5 flex-wrap [&_button]:min-h-11">{children}</fieldset>
       <Button
         size="sm"
         variant="ghost"
         onClick={onClear}
-        className="ml-auto h-8 text-muted-foreground hover:text-foreground"
+        className="ml-auto h-11 text-muted-foreground hover:text-foreground"
       >
         <X className="w-3.5 h-3.5 mr-1" /> Clear
       </Button>

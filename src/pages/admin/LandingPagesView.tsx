@@ -524,7 +524,7 @@ export default function LandingPagesView({ navigation }: { navigation?: React.Re
         onOpenChange={(o) => { if (!o) setConfirmBulkDelete(null); }}
         title={`Delete ${confirmBulkDelete?.length ?? 0} landing page${(confirmBulkDelete?.length ?? 0) === 1 ? "" : "s"}?`}
         description="This permanently removes the landing page record. You'll have 5 seconds to undo."
-        confirmLabel="Delete permanently"
+        confirmLabel="Delete"
         destructive
         onConfirm={() => confirmBulkDelete && doDeleteBulk(confirmBulkDelete)}
       />

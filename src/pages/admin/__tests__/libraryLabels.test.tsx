@@ -16,6 +16,14 @@ describe("library label rules", () => {
     expect(cardLabelSummary(["a", "b", "c", "d"], []).visible.map(l => l.path)).toEqual(["a", "b"]);
     expect(cardLabelSummary([], [])).toEqual({ visible: [], remaining: 0 });
   });
+  it("narrow grid cards retain one named label and an accurate remaining count", () => {
+    expect(cardLabelSummary(["Residential", "Hospitality", "Retail"], [], 1)).toEqual({ visible: [{ path: "Residential", name: "Residential", colorIndex: undefined }], remaining: 2 });
+    const apply = vi.fn();
+    render(<LibraryCardLabels compact scope="objects" paths={["Residential", "Hospitality"]} onFilter={apply} />);
+    fireEvent.click(screen.getByRole("button", { name: "Filter by Residential" }));
+    expect(apply).toHaveBeenCalledWith("Residential");
+    expect(screen.getByLabelText("1 more labels")).toHaveTextContent("+1");
+  });
   it("click-to-filter uses the full stored path and preserves existing filters", () => {
     const apply = vi.fn();
     render(<LibraryCardLabels scope="objects" paths={["photos/abcdefghijklmnop"]} onFilter={apply} />);

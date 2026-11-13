@@ -1,3 +1,4 @@
+import ObjectBulkDeleteDialog from "./ObjectBulkDeleteDialog";
 import LibraryFieldDialog from "./LibraryFieldDialog";
 import { useLibraryView } from "./libraryView";
 import { addLibraryLabelFilter } from "./libraryLabels";
@@ -116,6 +117,7 @@ export default function ObjectsTab() {
   const [showArchived, setShowArchived] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState<ObjectRegistryRow | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ObjectRegistryRow | null>(null);
+  const [bulkDeleteTargets, setBulkDeleteTargets] = useState<ObjectRegistryRow[]>([]);
   const [editReady, setEditReady] = useState<ObjectRegistryRow | null>(null);
   const [copyFrom, setCopyFrom] = useState<ObjectRegistryRow | null>(null);
   const [renameTarget, setRenameTarget] = useState<ObjectRegistryRow | null>(null);
@@ -299,7 +301,7 @@ export default function ObjectsTab() {
     setConfirmDelete(null);
     try {
       await deletePermanent.mutateAsync(o.id);
-      toast.success(`Permanently deleted "${o.name}"`);
+      toast.success(`Deleted "${o.name}"`);
     } catch (e: any) {
       toast.error(e?.message ?? "Delete failed");
     }
@@ -326,9 +328,10 @@ export default function ObjectsTab() {
           itemLabel="object"
           onClear={() => setSelected(new Set())}
         >
-          <Button size="sm" variant="outline" onClick={() => bulkArchive([...selected].filter((id) => !objects.find((o) => o.id === id)?.site_wide))}>
+          {showArchived ? <Button size="sm" variant="outline" onClick={async () => { for (const id of selected) await restore.mutateAsync(id); setSelected(new Set()); }}><RotateCcw className="w-3.5 h-3.5 mr-1.5" />Restore</Button> : <Button size="sm" variant="outline" onClick={() => bulkArchive([...selected].filter((id) => !objects.find((o) => o.id === id)?.site_wide))}>
             <Archive className="w-3.5 h-3.5 mr-1.5" /> Archive
-          </Button>
+          </Button>}
+          <Button size="sm" variant="destructive" disabled={deletePermanent.isPending} onClick={() => setBulkDeleteTargets([...objects, ...archived].filter(o => selected.has(o.id)))}><Trash2 className="w-3.5 h-3.5 mr-1.5" />Delete</Button>
         </SelectionBar>
 
 
@@ -369,7 +372,7 @@ export default function ObjectsTab() {
                             disabled={!!obj.site_wide}
                             onSelect={() => setConfirmDelete(obj)}
                           >
-                            <AlertTriangle className="w-4 h-4 mr-2" /> Delete Permanently…
+                            <AlertTriangle className="w-4 h-4 mr-2" /> Delete
                           </DropdownMenuItem>
                         </>} />)}</div>
         <ObjectPreviewDialog obj={preview} onClose={() => setPreview(null)} />
@@ -427,10 +430,11 @@ export default function ObjectsTab() {
           onConfirm={() => confirmArchive && doArchive(confirmArchive)}
         />
 
+        <ObjectBulkDeleteDialog targets={bulkDeleteTargets} onClose={() => setBulkDeleteTargets([])} usagesFor={usagesForObject} remove={id => deletePermanent.mutateAsync(id)} onDeleted={id => { setSelected(cur => { const next = new Set(cur); next.delete(id); return next; }); setBulkDeleteTargets(cur => cur.filter(o => o.id !== id)); }} />
         <ConfirmDialog
           open={!!confirmDelete}
           onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}
-          title={`Permanently delete "${confirmDelete?.name ?? ""}"?`}
+          title={`Delete "${confirmDelete?.name ?? ""}"?`}
           description={
             confirmDelete && (
               <div className="space-y-2">
@@ -462,7 +466,7 @@ export default function ObjectsTab() {
               </div>
             )
           }
-          confirmLabel="Delete permanently"
+          confirmLabel="Delete"
           destructive
           onConfirm={() => confirmDelete && doDeletePermanent(confirmDelete)}
         />

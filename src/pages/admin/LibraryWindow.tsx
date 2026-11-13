@@ -24,5 +24,5 @@ export default function LibraryWindow({ children, kind, compact = false, grid = 
     observer.observe(el);
     return () => observer.disconnect();
   }, [near]);
-  return <div ref={ref} data-library-window={kind} className={grid ? "nova-library-grid-window" : near ? "min-w-0" : compact ? "min-w-0 h-[77px]" : kind === "image" ? "min-w-0 aspect-square" : "min-w-0 aspect-video"} style={!grid && !near && height ? { height, aspectRatio: "auto" } : undefined}>{near ? children() : grid ? <><div className="aspect-[4/3]" /><div className="h-[114px]" /></> : null}</div>;
+  return <div ref={ref} data-library-window={kind} className={grid ? "nova-library-grid-window" : near ? "min-w-0" : compact ? "min-w-0 h-[77px]" : kind === "image" ? "min-w-0 aspect-square" : "min-w-0 aspect-video"} style={!grid && !near && height ? { height, aspectRatio: "auto" } : undefined}>{near ? children() : grid ? <><div className="aspect-[4/3]" /><div className="h-[134px]" /></> : null}</div>;
 }

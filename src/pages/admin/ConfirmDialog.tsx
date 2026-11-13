@@ -18,6 +18,8 @@ interface Props {
   secondaryLabel?: string;
   onSecondary?: () => void;
   busy?: boolean;
+  confirmDisabled?: boolean;
+  keepOpenOnConfirm?: boolean;
   confirmIcon?: ReactNode;
   secondaryIcon?: ReactNode;
   cancelIcon?: ReactNode;
@@ -28,10 +30,10 @@ interface Props {
 export default function ConfirmDialog({
   open, onOpenChange, title, description,
   confirmLabel = "Confirm", destructive = true, onConfirm,
-  cancelLabel = "Cancel", secondaryLabel, onSecondary, busy = false, confirmIcon, secondaryIcon, cancelIcon, primaryFirst = false,
+  cancelLabel = "Cancel", secondaryLabel, onSecondary, busy = false, confirmDisabled = false, keepOpenOnConfirm = false, confirmIcon, secondaryIcon, cancelIcon, primaryFirst = false,
 }: Props) {
-  const cancel = <AlertDialogCancel className="mt-0 gap-2" disabled={busy}>{cancelIcon}{cancelLabel}</AlertDialogCancel>;
-  const secondary = secondaryLabel ? <Button type="button" variant="outline" className="gap-2" disabled={busy} onClick={onSecondary}>{secondaryIcon}{secondaryLabel}</Button> : null;
+  const cancel = <AlertDialogCancel className="mt-0 h-11 gap-2" disabled={busy}>{cancelIcon}{cancelLabel}</AlertDialogCancel>;
+  const secondary = secondaryLabel ? <Button type="button" variant="outline" className="h-11 gap-2" disabled={busy} onClick={onSecondary}>{secondaryIcon}{secondaryLabel}</Button> : null;
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent className={secondaryLabel ? "max-w-[calc(100vw-32px)] sm:max-w-2xl" : undefined}>
@@ -45,9 +47,9 @@ export default function ConfirmDialog({
           {!primaryFirst && cancel}
           {!primaryFirst && secondary}
           <AlertDialogAction
-            disabled={busy}
-            onClick={(event) => { if (secondaryLabel || busy) event.preventDefault(); onConfirm(); }}
-            className={cn("gap-2", destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "")}
+            disabled={busy || confirmDisabled}
+            onClick={(event) => { if (secondaryLabel || busy || keepOpenOnConfirm) event.preventDefault(); onConfirm(); }}
+            className={cn("h-11 gap-2", destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : "")}
           >
             {confirmIcon}{confirmLabel}
           </AlertDialogAction>

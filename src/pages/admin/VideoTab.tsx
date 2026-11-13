@@ -705,18 +705,18 @@ export default function VideoTab() {
         filteredCount={filtered.length}
         onSelectAllFiltered={() => setSelected(new Set(filtered.map((v) => v.id)))}
       />} />
-<div hidden={listEditing}>        <div
+<div hidden={listEditing} className="space-y-2">        <div
           onDrop={onDrop}
           onDragEnter={onDragEnter}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
-          className={`border-2 border-dashed rounded-lg py-3 px-3 text-center text-sm transition-colors ${
+          className={`flex min-h-14 items-center justify-between gap-2 border border-dashed rounded-lg py-1 px-3 text-sm transition-colors ${
             dragActive
               ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/40"
               : "text-muted-foreground hover:border-primary hover:bg-primary/5"
           }`}
                   >
-          {dragActive
+          <div className="min-w-0">{dragActive
             ? `Drop ${dragCount || ""} file${dragCount === 1 ? "" : "s"} to upload`
             : uploadProgress
               ? `Uploading ${uploadProgress.done} of ${uploadProgress.total}…`
@@ -727,12 +727,12 @@ export default function VideoTab() {
             150 MB per file maximum.
           </div>
 
-          <Button variant="outline" className="mt-2 h-11" disabled={busy} onClick={() => fileRef.current?.click()}>Choose Files</Button>
+          </div><Button variant="outline" className="h-11 shrink-0" disabled={busy} onClick={() => fileRef.current?.click()}>Choose Files</Button>
           <input ref={fileRef} type="file" accept="video/*" multiple hidden aria-label="Upload Videos" onChange={onPick} />
         </div>
 
         {/* External link add row */}
-        <div className="nova-library-url flex items-stretch gap-2">
+        <div className="flex min-w-0 items-stretch gap-2">
           <div className="flex items-stretch flex-1 min-w-0 rounded-lg border-2 border-border focus-within:border-primary bg-background overflow-hidden">
             <div className="flex items-center pl-3 pr-2 text-muted-foreground">
               <LinkIcon className="w-4 h-4" />
@@ -742,10 +742,10 @@ export default function VideoTab() {
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") addExternalLink(); }}
-              className="flex-1 border-0 rounded-none h-11 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-2"
+              className="min-w-0 flex-1 border-0 rounded-none h-11 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-2"
             />
           </div>
-          <Button onClick={addExternalLink} disabled={linkBusy || !linkUrl.trim()} className="h-11">
+          <Button onClick={addExternalLink} disabled={linkBusy || !linkUrl.trim()} className="h-11 shrink-0 px-2 text-xs">
             Add Link
           </Button>
         </div>
@@ -797,7 +797,7 @@ export default function VideoTab() {
           </Button>
         </SelectionBar>
 
-        <div data-library-grid-scope="videos" data-library-items={libraryView} className={libraryView === "grid" ? "nova-library-items-grid" : "min-w-0"}>{shown.map(v => <LibraryWindow key={v.id} kind="video" compact grid={libraryView === "grid"}>{() => <LibraryListRow view={libraryView} labelScope="videos" labels={v.tags} onLabelFilter={path => setFilterTags(cur => addLibraryLabelFilter(cur, path))} name={v.name} date={formatRelative(v.created_at)} thumbnail={<SignedThumbImg url={v.poster_url} alt={v.name} className="h-14 w-14 object-cover" fallback={<Play className="h-6 w-6 text-muted-foreground" />} />} badges={<><span>{v.archived_at ? "Archived" : sourceLabel(v)}</span></>} onOpen={() => setDetail(v)} draggable onDragStart={e => onTileDragStart(e,v.id)} selection={listEditing ? <input type="checkbox" checked={selected.has(v.id)} aria-label={`Select ${v.name}`} onChange={() => setSelected(cur => {const next=new Set(cur);next.has(v.id)?next.delete(v.id):next.add(v.id);return next;})} /> : undefined} menu={<><LabelsCell scope="videos" value={v.tags} itemName={v.name} onChange={next => { next.filter(t => !v.tags.includes(t)).forEach(t => addTag(v.id, t)); v.tags.filter(t => !next.includes(t)).forEach(t => removeTag(v.id, t)); }} /><DropdownMenuItem onSelect={() => setFieldEdit({id:v.id,name:v.name,value:v.name,field:"name"})}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem><DropdownMenuItem onSelect={() => setFieldEdit({id:v.id,name:v.name,value:v.description ?? "",field:"description"})}><FileText className="mr-2 h-4 w-4" />Edit Description</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(playbackUrl(v),"_blank","noopener,noreferrer")}><ExternalLink className="mr-2 h-4 w-4" />Open in New Tab</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(buildVideoRef({id:v.slug_id,name:v.name,source:v.source_type,url:playbackUrl(v),altUrl:v.alt_url,posterUrl:v.poster_url})).then(()=>toast.success("Reference copied"),()=>toast.error("Copy failed"))}><Copy className="mr-2 h-4 w-4" />Copy Reference</DropdownMenuItem><DropdownMenuItem onSelect={() => downloadOriginalVideo(v)}><Download className="mr-2 h-4 w-4" />{v.source_type === "upload" ? "Download Original" : "Open Source"}</DropdownMenuItem><DropdownMenuItem onSelect={() => v.archived_at ? unarchive([v.id]) : archive([v.id])}>{v.archived_at ? <ArchiveRestore className="mr-2 h-4 w-4" /> : <Archive className="mr-2 h-4 w-4" />}{v.archived_at ? "Restore" : "Archive"}</DropdownMenuItem><DropdownMenuItem onSelect={() => requestDelete([v])} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Delete Video</DropdownMenuItem></>} />}</LibraryWindow>)}</div>
+        <div data-library-grid-scope="videos" data-library-items={libraryView} className={libraryView === "grid" ? "nova-library-items-grid" : "min-w-0"}>{shown.map(v => <LibraryWindow key={v.id} kind="video" compact grid={libraryView === "grid"}>{() => <LibraryListRow view={libraryView} labelScope="videos" labels={v.tags} onLabelFilter={path => setFilterTags(cur => addLibraryLabelFilter(cur, path))} name={v.name} date={formatRelative(v.created_at)} thumbnail={<SignedThumbImg url={v.poster_url} alt={v.name} className="h-14 w-14 object-cover" fallback={<Play className="h-6 w-6 text-muted-foreground" />} />} badges={<><span>{v.archived_at ? "Archived" : sourceLabel(v)}</span></>} onOpen={() => setDetail(v)} draggable onDragStart={e => onTileDragStart(e,v.id)} selection={listEditing ? <input type="checkbox" checked={selected.has(v.id)} aria-label={`Select ${v.name}`} onChange={() => setSelected(cur => {const next=new Set(cur);next.has(v.id)?next.delete(v.id):next.add(v.id);return next;})} /> : undefined} menu={<><LabelsCell scope="videos" value={v.tags} itemName={v.name} onChange={next => { next.filter(t => !v.tags.includes(t)).forEach(t => addTag(v.id, t)); v.tags.filter(t => !next.includes(t)).forEach(t => removeTag(v.id, t)); }} /><DropdownMenuItem onSelect={() => setFieldEdit({id:v.id,name:v.name,value:v.name,field:"name"})}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem><DropdownMenuItem onSelect={() => setFieldEdit({id:v.id,name:v.name,value:v.description ?? "",field:"description"})}><FileText className="mr-2 h-4 w-4" />Edit Description</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(playbackUrl(v),"_blank","noopener,noreferrer")}><ExternalLink className="mr-2 h-4 w-4" />Open in New Tab</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(buildVideoRef({id:v.slug_id,name:v.name,source:v.source_type,url:playbackUrl(v),altUrl:v.alt_url,posterUrl:v.poster_url})).then(()=>toast.success("Reference copied"),()=>toast.error("Copy failed"))}><Copy className="mr-2 h-4 w-4" />Copy Reference</DropdownMenuItem>{v.source_type === "upload" && <DropdownMenuItem onSelect={() => downloadOriginalVideo(v)}><Download className="mr-2 h-4 w-4" />Download Original</DropdownMenuItem>}<DropdownMenuItem onSelect={() => v.archived_at ? unarchive([v.id]) : archive([v.id])}>{v.archived_at ? <ArchiveRestore className="mr-2 h-4 w-4" /> : <Archive className="mr-2 h-4 w-4" />}{v.archived_at ? "Restore" : "Archive"}</DropdownMenuItem><DropdownMenuItem onSelect={() => requestDelete([v])} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem></>} />}</LibraryWindow>)}</div>
         {!isLoading && visibleCount < filtered.length && (
           <div ref={sentinelRef} className="py-6 flex flex-col items-center gap-2">
             <div className="text-xs text-muted-foreground">
@@ -847,7 +847,7 @@ export default function VideoTab() {
           description={
             <>
               {confirmDelete && <InUseWarning items={confirmDelete.vids.map((v) => ({ label: v.name, usages: usagesFor(v.id) }))} />}
-              <p>Uploaded files will be removed from storage. External links only remove the registry entry. You have 5 seconds to undo.</p>
+              <p>Uploaded files will be removed from storage. External links only remove the registry entry. This cannot be undone after the 5-second undo window.</p>
             </>
           }
           confirmLabel="Delete"
@@ -1025,7 +1025,7 @@ function VideoDetail({
         </Button>
         <Button size="sm" variant="outline" onClick={() => downloadOriginalVideo(v)}>
           <Download className="w-4 h-4 mr-1" />
-          {v.source_type === "upload" ? "Download Original" : "Open Source"}
+          {v.source_type === "upload" ? "Download Original" : "Open in New Tab"}
         </Button>
         {v.archived_at ? (
           <Button size="sm" variant="outline" onClick={onUnarchive}>
