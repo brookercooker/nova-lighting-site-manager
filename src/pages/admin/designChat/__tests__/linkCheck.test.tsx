@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isLinkCheckReady, linkCheckList, linksNeedChecking, parseLinkClick, pageChecks } from "../linkCheck";
-import { SubmitWalkthroughPanel, walkProgress } from "../SubmitWalkthrough";
+import { SubmitWalkthroughPanel, linkFingerprints, ownLinkPrint, walkProgress } from "../SubmitWalkthrough";
 import { LinkCheckBridge, useLinkCheckBridge } from "../useLinkCheckBridge";
 import { walk, useWalk } from "../submitWalkthroughStore";
 
@@ -12,7 +12,7 @@ vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 
 const ORIGIN = "https://site.example";
-const team = { key: "/a|/team", href: "/team", kind: "internal", label: "Team", requestIds: ["r1"], status: null };
+const team = { key: "/a|/team", href: "/team", kind: "internal" as const, label: "Team", requestIds: ["r1"], status: null };
 const row = { key: "page:/a", page: { name: "About", path: "/a" }, how: "Changed by the builder", fingerprint: "v1" };
 beforeEach(() => {
   m.review.mockClear();
@@ -29,12 +29,12 @@ function frameWith(src = ORIGIN + "/a") {
   document.body.appendChild(f);
   return f;
 }
-const click = (over: Record<string, unknown> = {}) => ({ source: "nova-site", type: "link-click", v: 2, match: "/team", raw: "/team", href: ORIGIN + "/team", kind: "internal", label: "Team", path: "/a", ...over });
+const click = (over: Record<string, unknown> = {}) => ({ source: "nova-site", type: "link-click", v: 2, match: "/team", raw: "/team", href: ORIGIN + "/team", kind: "internal" as const, label: "Team", path: "/a", ...over });
 
 describe("link-click validation", () => {
   it("accepts a well-formed click from the frame's exact origin and window", () => {
     const f = frameWith();
-    expect(parseLinkClick(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow }), f, ["/team"])).toMatchObject({ raw: "/team", kind: "internal", label: "Team" });
+    expect(parseLinkClick(new MessageEvent("message", { data: click(), origin: ORIGIN, source: f.contentWindow }), f, ["/team"])).toMatchObject({ raw: "/team", kind: "internal" as const, label: "Team" });
     f.remove();
   });
   it.each([
@@ -77,7 +77,7 @@ const openLinks = () => { act(() => walk.update(s => ({ ...s, open: true, step: 
 describe("inline link verification", () => {
   it("requires opening before ticking and permits unchecking", () => {
     openLinks();
-    const box = screen.getByRole("checkbox", { name: "Looks right" });
+    const box = screen.getByRole("checkbox", { name: /^Looks right\s*:/ });
     expect(box).toBeDisabled();
     expect(box).toHaveAttribute("aria-describedby");
     fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
@@ -94,20 +94,20 @@ describe("inline link verification", () => {
     m.data.links.groups[0].links.push({ ...team, key: "other", href: "/other", kind: "external" });
     openLinks();
     fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
-    const boxes = screen.getAllByRole("checkbox", { name: "Looks right" });
+    const boxes = screen.getAllByRole("checkbox", { name: /^Looks right\s*:/ });
     expect(boxes[0]).toBeEnabled(); expect(boxes[1]).toBeDisabled();
   });
   it("missing pages cannot approve even with a legacy Keep decision", () => {
     m.data.pages = []; openLinks();
     fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
     act(() => { walk.confirmLink(team.key, "fp", true); walk.update(s => ({ ...s, keptMissing: { [team.key]: "old" } })); });
-    expect(screen.getByRole("checkbox", { name: "Looks right" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /^Looks right\s*:/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
   it.each([["mail", "mailto:a@b.co"], ["phone", "tel:+15550100"]])("keeps %s address verification immediate", (kind, href) => {
     m.data.links.groups[0].links = [{ ...team, kind, href }]; openLinks();
     expect(screen.queryByRole("link", { name: "Open Link to Verify" })).toBeNull();
-    expect(screen.getByRole("checkbox", { name: "Looks right" })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: /^Looks right\s*:/ })).toBeEnabled();
   });
   it("keeps draft tokens only in safe opening URLs", () => {
     m.preview = { shownId: 4, frames: [{ id: 4, url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/a?__lovable_token=test-credential" }] };
@@ -120,7 +120,7 @@ describe("inline link verification", () => {
   it("clears opening permission when a link fingerprint changes", () => {
     openLinks(); fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
     act(() => walk.reconcile({}, undefined, { [team.key]: "new" }));
-    expect(screen.getByRole("checkbox", { name: "Looks right" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: /^Looks right\s*:/ })).toBeDisabled();
   });
 });
 
@@ -202,4 +202,33 @@ describe("links needing checks", () => {
     expect(within(link).queryByText("Not Reviewed")).toBeNull();
     f.remove();
   });
+});
+
+it("retains Contact approval through another link save, page revision and session restore", () => {
+  const contact = { ...team, key: "/a|/contact", href: "/contact", label: null, elementKey: "0.1", scope: "page", target: null };
+  const gallery = { ...team, key: "/a|/gallery", href: "/gallery", elementKey: "0.2", scope: "page" };
+  m.data.links.groups[0].links = [contact, gallery];
+  walk.confirmLink(contact.key, ownLinkPrint(contact), true);
+  walk.openedVerification(contact.key, ownLinkPrint(contact));
+  walk.editLink({ link: gallery as any, group: m.data.links.groups[0], rows: [], fingerprint: ownLinkPrint(gallery) });
+  walk.savedLink("/a", { ...gallery, key: "/a|/team", href: "/team" } as any);
+  m.data.rows[0].fingerprint = "new page";
+  m.data.links.groups[0].links.push({ ...gallery, key: "/a|/team", href: "/team" });
+  m.data.links.groups[0].links[0] = { ...contact, requestIds: ["new request"] };
+  walk.reconcile({ "page:/a": "new page" }, linkFingerprints(m.data), linkFingerprints(m.data));
+  expect(walk.get().linkTicked).toEqual([contact.key]);
+  expect(walk.get().verificationOpened[contact.key]).toBe(ownLinkPrint(contact));
+  walk.restoreSession();
+  walk.reconcile({ "page:/a": "new page" }, linkFingerprints(m.data), linkFingerprints(m.data));
+  expect(walk.get().linkTicked).toEqual([contact.key]);
+});
+it.each([{ href: "/changed" }, { target: "_blank" }, { elementKey: "0.9" }, { scope: "object:x" }])("invalidates only the changed link for %j even during repin", change => {
+  const contact = { ...team, key: "/a|/contact", href: "/contact", elementKey: "0.1", scope: "page" };
+  walk.confirmLink(team.key, ownLinkPrint(team as any), true);
+  walk.confirmLink(contact.key, ownLinkPrint(contact as any), true);
+  walk.update(s => ({ ...s, repin: { path: "/a", until: Date.now() + 10000 } }));
+  const prints = { [team.key]: ownLinkPrint({ ...team, ...change } as any), [contact.key]: ownLinkPrint(contact as any) };
+  walk.reconcile({}, prints, prints);
+  expect(walk.get().linkTicked).toEqual([contact.key]);
+  expect(walk.get().changed).toContain(team.key);
 });

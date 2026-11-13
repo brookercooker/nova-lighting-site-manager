@@ -245,11 +245,11 @@ function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: Walkthrou
 }
 
 export function linkFingerprints(data: WalkthroughData): Record<string, string> {
-  return Object.fromEntries(data.links.status === "ok" ? data.links.groups.flatMap(g => g.links.map(l => [l.key, changeFingerprint({ page: g.page?.path, links: g.links.map(x => ({ key: x.key, href: x.href, requestIds: x.requestIds })).sort((a,b) => a.key.localeCompare(b.key)), pageChange: data.rows.find(r => r.page?.path === g.page?.path)?.fingerprint })])) : []);
+  return ownLinkFingerprints(data);
 }
 
-/** One link's own fingerprint: its key, address and the requests that changed it. Unaffected by hand edits elsewhere on the page. */
-export const ownLinkPrint = (l: ReviewLink) => changeFingerprint({ key: l.key, href: l.href, requestIds: [...l.requestIds].sort() });
+/** Only this link's destination, target and stored identity invalidate its decisions. */
+export const ownLinkPrint = (l: ReviewLink) => changeFingerprint({ key: l.key, href: l.href, target: l.target ?? null, elementKey: l.elementKey ?? null, scope: l.scope ?? null });
 export function ownLinkFingerprints(data: WalkthroughData): Record<string, string> {
   return Object.fromEntries(data.links.status === "ok" ? data.links.groups.flatMap(g => g.links.map(l => [l.key, ownLinkPrint(l)])) : []);
 }
@@ -272,7 +272,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   return (
     <div ref={listRef} className="space-y-4">
       {s.linkNote && <p role="status" className="rounded-md border bg-secondary p-3 text-sm">{s.linkNote}</p>}
-      <p className="text-xs text-muted-foreground">Approvals are remembered in this tab until the draft changes or is submitted.</p>
+      <p className="text-xs text-muted-foreground">Approvals are remembered in this tab until that link’s destination, target or identity changes, or the draft is submitted. Replaced links count as handled in the total.</p>
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}
       {(partial || truncated) && <p className="text-xs text-muted-foreground">Some links may be missing from this list.</p>}
 {(() => { const all = groups.flatMap(g => g.links); const left = all.filter(l => linkNeedsCheck(l, s, data.pages)).length;
@@ -301,10 +301,10 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
               return (
                 <li key={l.key} data-walk-link={l.key} className={cn("space-y-2 min-w-0 rounded-md border p-3", (s.selectedLink?.key === l.key || s.checking?.key === l.key) && "border-primary bg-primary/5 ring-2 ring-ring ring-offset-2")}>
                   <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{publicLinkAddress(friendlyName)}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[st]}</Badge></div>
-                  {s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
+                  {st === "todo" && s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <p className="break-all font-mono text-xs text-muted-foreground">{address}</p>
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
-                  {chip?.tone === "bad" && <p className="text-xs text-destructive">{missingInternalLink(l, data.pages) ? "This page doesn't exist. Edit the link destination to fix it." : "This address couldn't be reached. Check the destination."}</p>}
+                  {chip?.tone === "bad" && !missing && <p className="text-xs text-destructive">{missingInternalLink(l, data.pages) ? "This page doesn't exist. Edit the link destination to fix it." : "This address couldn't be reached. Check the destination."}</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}
                   {st === "replaced" ? null : <div className="flex flex-wrap items-start gap-1 pt-1">
                     {!manual && <Button type="button" variant="outline" className="h-11 px-2 text-sm sm:h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => onShow(l, g)}><Eye className="h-4 w-4" aria-hidden />Show on Page</Button>}
@@ -312,11 +312,11 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                     <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant={missing ? "default" : "outline"} className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => onChange(l, g)}><Pencil aria-hidden />Edit Link Destination</Button>
                   </div>}
                   {st !== "replaced" && <div className="space-y-1">
-                    <label className={cn("flex min-h-11 items-center gap-3 text-sm", enabled ? "cursor-pointer" : "text-muted-foreground")}>
-                      <Checkbox className="h-5 w-5" checked={!missing && s.linkTicked.includes(l.key)} disabled={!enabled} aria-disabled={!enabled} aria-describedby={hintId} onCheckedChange={value => { if (enabled) walk.confirmLink(l.key, linkFingerprints(data)[l.key], value === true); }} />
-                      Looks right
+                    <label htmlFor={`${hintId}-box`} className={cn("flex min-h-11 items-center gap-3 text-sm", enabled ? "cursor-pointer" : "text-muted-foreground")}>
+                      <Checkbox id={`${hintId}-box`} aria-labelledby={`${hintId}-label`} className="h-5 w-5" checked={!missing && s.linkTicked.includes(l.key)} disabled={!enabled} aria-disabled={!enabled} aria-describedby={hintId} onCheckedChange={value => { if (enabled) walk.confirmLink(l.key, linkFingerprints(data)[l.key], value === true); }} />
+                      <span id={`${hintId}-label`}>Looks right<span className="sr-only">: {publicLinkAddress(friendlyName)}</span></span>
                     </label>
-                    <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : manual ? "Check that this address is correct, then tick Looks right." : !opened ? "Open the link first, then check this box." : "Check that this is the right destination."}</p>
+                    <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : st === "done" ? "Approved" : manual ? "Check that this address is correct, then tick Looks right." : !opened ? "Open the link first, then check this box." : "Check that this is the right destination."}</p>
                   </div>}
                   {s.reviewEdit?.link.key === l.key && <ReviewLinkEditor pages={data.pages} />}
                 </li>

@@ -28,7 +28,7 @@ export type WalkState = {
   linkReplaced: Record<string, string>;
   /** Set while Change This Link is open in Manual Edit Mode; cleared by Keep Editing and normal mode exits. */
   fix: LinkFix | null;
-  /** The page just saved through Change This Link: its approval and confirmed links follow the hand save instead of resetting. */
+  /** The page just saved through Change This Link: its page approval follows the hand save; links always retain their own fingerprints. */
   repin: { path: string; until: number } | null;
 };
 const initial = (): WalkState => ({ keptMissing: {}, verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], selectedLink: null, linkNote: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
@@ -113,17 +113,15 @@ export const walk = {
       return { ...s, [field]: map, [ticks]: toggle(s[ticks], key, !approved), changed: s.changed.filter(k => k !== key) };
     });
   },
-  /** `own` is each link's own fingerprint (key, address, requests); Replaced by Hand uses it because hand saves change the page-level link fingerprint. */
+  /** `links` and `own` use each link’s destination, target and identity; never repin link decisions after a page save. */
   reconcile(pages: Record<string, string>, links?: Record<string, string>, own?: Record<string, string>) {
     const pin = state.repin && state.repin.until > Date.now() ? state.repin.path : null;
     if (state.repin && !pin) state = { ...state, repin: null };
     if (pin) {
       const pinned = (k: string) => k === "page:" + pin || (k.includes("|") && normPath(k.split("|")[0] || "/") === pin);
       const pg = Object.entries(state.approvals).filter(([k, v]) => pinned(k) && pages[k] && pages[k] !== v);
-      const ln = links ? Object.entries(state.linkApprovals).filter(([k, v]) => pinned(k) && links[k] && links[k] !== v) : [];
-      if (pg.length || ln.length) state = { ...state, repin: null,
-        approvals: { ...state.approvals, ...Object.fromEntries(pg.map(([k]) => [k, pages[k]])) },
-        linkApprovals: { ...state.linkApprovals, ...Object.fromEntries(ln.map(([k]) => [k, links![k]])) } };
+      if (pg.length) state = { ...state, repin: null,
+        approvals: { ...state.approvals, ...Object.fromEntries(pg.map(([k]) => [k, pages[k]])) } };
     }
     const invalid = Object.entries(state.approvals).filter(([k,v]) => pages[k] !== v).map(([k]) => k);
     const badLinks = links ? Object.entries(state.linkApprovals).filter(([k,v]) => links[k] !== v).map(([k]) => k) : [];

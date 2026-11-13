@@ -35,7 +35,7 @@ const confirmLinks = () => {
     const controls = within(row);
     const open = controls.queryByRole("link", { name: "Open Link to Verify" });
     if (open) fireEvent.click(open);
-    const box = controls.queryByRole("checkbox", { name: "Looks right" });
+    const box = controls.queryByRole("checkbox", { name: /^Looks right\s*:/ });
     if (box) fireEvent.click(box);
   }
 };
@@ -77,7 +77,7 @@ describe("Submit for Review walkthrough", () => {
     expect(link.closest("li")).not.toBeNull();
     expect(link.parentElement).toContainElement(within(dialog()).getByRole("button", { name: "About" }));
   });
-  it("invalidates a link approval when its group changes and unticks the derived checklist", () => {
+  it("invalidates a link approval when its own destination changes and unticks the derived checklist", () => {
     m.data.pages = [{ name: "Team", path: "/team", build_status: "ready" }];
     const link = { key: "/a|/team", href: "/team", kind: "internal", label: "Team", requestIds: ["first"], status: null };
     m.data.links = { status: "ok", groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [link] }] };
@@ -89,7 +89,7 @@ describe("Submit for Review walkthrough", () => {
     expect(within(dialog()).getByText("Confirmed")).toBeInTheDocument();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("checkbox", { name: "I checked the links that changed." })).toBeChecked();
-    m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, requestIds: ["first", "later"] }] }] } };
+    m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, href: "/changed" }] }] } };
     host.rerender(<PanelHost open />);
     expect(within(dialog()).getByRole("checkbox", { name: /^Check the links that changed\./ })).not.toBeChecked();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Back" }));

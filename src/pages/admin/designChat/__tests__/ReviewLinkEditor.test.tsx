@@ -31,7 +31,7 @@ it("prefills current destination and target, suggests friendly pages and saves w
   expect(m.save).toHaveBeenCalledWith(expect.anything(), "/gallery", true);
   expect(walk.get()).toMatchObject({ open: true, step: "links", fix: null, reviewEdit: null, ticked: ["page:/"], linkTicked: ["/|/team"], linkReplaced: { [link.key]: "own" }, savedReviewLinks: [{ path: "/", link: { href: "/gallery", key: "/|/gallery" } }] });
   expect(m.fallback).not.toHaveBeenCalled();
-  act(() => walk.reconcile({ "page:/": "p2" }, { "/|/team": "l2", "/|/contact": "old", "/|/gallery": "new" }, { "/|/contact": "own", "/|/gallery": "new" }));
+  act(() => walk.reconcile({ "page:/": "p2" }, { "/|/team": "l1", "/|/contact": "old", "/|/gallery": "new" }, { "/|/contact": "own", "/|/gallery": "new" }));
   expect(walk.get().ticked).toEqual(["page:/"]);
   expect(walk.get().linkTicked).toEqual(["/|/team"]);
   expect(walk.get().linkReplaced[link.key]).toBe("own");
@@ -42,7 +42,7 @@ it("validation and save errors retain the typed destination", async () => {
   const field = screen.getByLabelText("New Destination");
   fireEvent.change(field, { target: { value: "http://bad.example" } });
   fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
-  expect(screen.getByRole("alert")).toHaveTextContent("Use https://"); expect(m.save).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Save New Link" })).toBeDisabled(); expect(m.save).not.toHaveBeenCalled();
   expect(field).toHaveValue("http://bad.example");
   m.save.mockRejectedValue(new Error("Your new link couldn't be saved. Try again."));
   fireEvent.change(field, { target: { value: "/gallery" } });
@@ -56,7 +56,7 @@ it("pre-existing saved/preview mismatch offers Manual without a changed-since-op
   await screen.findByRole("button", { name: "Open in Manual Edit" });
   expect(screen.queryByRole("button", { name: "Save New Link" })).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
-  expect(screen.getByRole("status")).toHaveTextContent("saved link and the page don't match yet");
+  expect(screen.getByText(/saved link and the page don't match yet/)).toHaveAttribute("role", "status");
 });
 it("resolution failure offers only the existing Manual fallback, including shared-page selection", async () => {
   m.resolve.mockRejectedValue(new Error("We couldn't find this link on the page"));
@@ -94,4 +94,19 @@ it("legacy wrong state is safely dropped without changing current approvals", ()
   walk.update(s => ({ ...s, linkWrong: { [link.key]: "legacy" } }));
   expect(walk.get()).not.toHaveProperty("linkWrong");
   expect(walk.get().linkTicked).toEqual(["/|/team"]);
+});
+
+it.each(["javascript:alert(1)", "//host", "plain words", ""])("blocks invalid destination %s during typing", async value => {
+  render(<ReviewLinkEditor pages={pages} />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  fireEvent.change(screen.getByLabelText("New Destination"), { target: { value } });
+  expect(screen.getByRole("button", { name: "Save New Link" })).toBeDisabled();
+  expect(m.save).not.toHaveBeenCalled();
+});
+it("allows a syntactically valid future page without saving automatically", async () => {
+  render(<ReviewLinkEditor pages={pages} />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/future" } });
+  expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled();
+  expect(m.save).not.toHaveBeenCalled();
 });
