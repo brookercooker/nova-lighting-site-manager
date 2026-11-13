@@ -59,6 +59,17 @@ describe("review pages fetch", () => {
     const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
     await waitFor(() => expect(hook.result.current.links.status).toBe("failed"));
   });
+  it("Retry clears a failed link source as well as reloading page inventories", async () => {
+    let failed = true;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("review-pages") ? new Response(JSON.stringify(body)) : failed ? new Response("", { status: 503 }) : new Response(JSON.stringify({ ok: true, groups: [] }))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(hook.result.current.links.status).toBe("failed"));
+    failed = false;
+    hook.result.current.retryInventory?.();
+    await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
+  });
   it("includes all new Pricing inventory links even when the relay has no Pricing group", async () => {
     m.nets.mockResolvedValue({ "/draft/experiment": [0, 1, 2].map(i => ({ key: `0.${i}`, scope: "page", href: i === 0 ? "/brands" : "/contact", label: i === 0 ? "Discuss pricing" : `Pricing ${i}`, publishedHref: null })) });
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));

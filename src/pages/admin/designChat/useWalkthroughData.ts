@@ -115,7 +115,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const sharedLabels = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "shared-labels", sig, sharedPaths], enabled: enabled && sharedPaths.length > 0, retry: false, queryFn: async () => {
     const frame = shownPreviewFrame();
     let base: string;
-    try { base = publicPreviewBase(frame?.src); } catch { return { links: [] as (InventoryLink & { inventoryPath: string })[], unavailable: true }; }
+    try { base = publicPreviewBase(embed ?? frame?.src); } catch { return { links: [] as (InventoryLink & { inventoryPath: string })[], unavailable: true }; }
     const inventories = await Promise.all(sharedPaths.map(async path => {
       const url = publicPreviewPage(base, path);
       const fresh = (frame ? await requestFrameInventory(frame, url) : null) ?? await requestInventory(url);
@@ -154,7 +154,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   });
   const comparable = linkResult.status === "ok" ? enrichReviewLinks(mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), sharedLabels.data?.links ?? []) : null;
   const withSaved: LinksResult = comparable ? { ...stableReviewRows(comparedReviewLinks(comparable)), status: "ok" } : linkResult;
-  return { comparisonUnavailable: comparable?.groups.some(g => g.links.some(l => publishedComparison(l) === "unknown")), inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data?.links ?? [])], inventoryUnavailable: sharedLabels.data?.unavailable || sharedLabels.isError, retryInventory: () => { void sharedLabels.refetch(); void inventory.refetch(); }, rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
+  return { comparisonUnavailable: comparable?.groups.some(g => g.links.some(l => publishedComparison(l) === "unknown")), inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data?.links ?? [])], inventoryUnavailable: sharedLabels.data?.unavailable || sharedLabels.isError, retryInventory: () => { void sharedLabels.refetch(); void inventory.refetch(); if (links.isError) void links.refetch(); if (reviewPages.isError) void reviewPages.refetch(); if (objects.isError) void objects.refetch(); if (pages.isError) void pages.refetch(); }, rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
 }
 
 /** Adopt only unique authoritative identities; duplicate destinations never authorize a guess. */

@@ -24,6 +24,7 @@ export function retainInventoryMetadata(fresh: Inventory | null, previous?: Inve
 }
 export const MAX_INVENTORY = 500;
 export const INVENTORY_TIMEOUT_MS = 3000;
+export const INVENTORY_LOAD_TIMEOUT_MS = 15000;
 /** Ask the already-synchronized preview first; never read its cross-origin DOM or accept sibling replies. */
 export function requestFrameInventory(frame: HTMLIFrameElement, url: string, timeoutMs = INVENTORY_TIMEOUT_MS): Promise<Inventory | null> {
   const requested = new URL(url);
@@ -36,7 +37,7 @@ export function requestFrameInventory(frame: HTMLIFrameElement, url: string, tim
     const receive = (e: MessageEvent) => {
       if (e.origin !== requested.origin || e.source !== source) return;
       const inventory = parseInventory(e.data);
-      if (inventory && normPath(inventory.path) === normPath(requested.pathname)) finish(inventory);
+      if (inventory && inventory.complete !== false && normPath(inventory.path) === normPath(requested.pathname)) finish(inventory);
     };
     const ask = () => source?.postMessage({ source: "nova-manager", type: "link-inventory-request", v: 1 }, requested.origin);
     window.addEventListener("message", receive);
@@ -81,16 +82,25 @@ export function requestInventory(url: string, timeoutMs = INVENTORY_TIMEOUT_MS, 
     frame.setAttribute("aria-hidden", "true"); frame.tabIndex = -1; frame.title = "Link Inventory";
     frame.style.cssText = "position:fixed;left:-10000px;top:0;width:1280px;height:800px;border:0;visibility:hidden";
     let done = false;
+    let responseTimer: ReturnType<typeof setTimeout> | undefined;
+    let repeat: ReturnType<typeof setInterval> | undefined;
     const ask = () => { try { frame.contentWindow?.postMessage({ source: "nova-manager", type: "link-inventory-request", v: 1 }, origin); } catch { /* removed */ } };
-    const finish = (inv: Inventory | null) => { if (done) return; done = true; clearTimeout(t); window.removeEventListener("message", on); frame.remove(); resolve(inv); };
+    const finish = (inv: Inventory | null) => { if (done) return; done = true; clearTimeout(t); clearTimeout(responseTimer); clearInterval(repeat); window.removeEventListener("message", on); frame.remove(); resolve(inv); };
+    const loaded = () => {
+      if (done || responseTimer !== undefined) return;
+      clearTimeout(t);
+      responseTimer = setTimeout(() => finish(null), timeoutMs);
+      repeat = setInterval(ask, 500);
+      ask();
+    };
     const on = (e: MessageEvent) => {
       if (e.origin !== origin || e.source !== frame.contentWindow) return;
-      if (e.data?.source === "nova-site" && e.data?.type === "preview-ready") { ask(); return; }
-      const inv = parseInventory(e.data); if (inv && normPath(inv.path) === normPath(new URL(url).pathname)) finish(inv);
+      if (e.data?.source === "nova-site" && e.data?.type === "preview-ready") { loaded(); return; }
+      const inv = parseInventory(e.data); if (inv && inv.complete !== false && normPath(inv.path) === normPath(new URL(url).pathname)) finish(inv);
     };
     window.addEventListener("message", on);
-    frame.addEventListener("load", ask);
-    const t = setTimeout(() => finish(null), timeoutMs);
+    frame.addEventListener("load", loaded);
+    const t = setTimeout(() => finish(null), Math.max(INVENTORY_LOAD_TIMEOUT_MS, timeoutMs));
     frame.src = url; doc.body.appendChild(frame);
   });
 }
@@ -143,13 +153,15 @@ export async function loadNetLinks(paths: string[], live: string | null, request
   if (!paths.length) return {};
   let draft: string; try { draft = publicPreviewBase(embed ?? visibleFrame?.src); } catch { return {}; }
   const out: Record<string, InventoryLink[]> = {};
-  await Promise.all([...new Set(paths)].map(async p => {
+  for (const p of [...new Set(paths)]) {
     const draftUrl = publicPreviewPage(draft, p);
     const [d, l] = await Promise.all([(async () => {
       const shown = visibleFrame ? await requestFrameInventory(visibleFrame, draftUrl) : null;
-      return shown && shown.complete !== false ? shown : await request(draftUrl);
+      if (shown && shown.complete !== false) return shown;
+      const first = await request(draftUrl);
+      return first && first.complete !== false ? first : await request(draftUrl);
     })(), live ? request(publicPreviewPage(live, p)) : Promise.resolve(null)]);
     if (d && d.complete !== false) out[normPath(p)] = reviewPageInventory(d, l);
-  }));
+  }
   return out;
 }
