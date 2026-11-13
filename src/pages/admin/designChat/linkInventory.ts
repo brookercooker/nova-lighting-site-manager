@@ -80,7 +80,7 @@ const kindOf = (href: string): LinkKind => /^mailto:/i.test(href) ? "mail" : /^t
 export function diffInventories(draft: Inventory, live: Inventory): InventoryLink[] {
   const liveBy = new Map(live.links.map(l => [l.scope + "|" + l.key, l.href]));
   const seen = new Set<string>();
-  return draft.links.filter(l => { const before = liveBy.get(l.scope + "|" + l.key); const id = l.scope + "|" + l.key; if (seen.has(id)) return false; seen.add(id); return before !== l.href; });
+  return draft.links.map(l => ({ ...l, originalHref: liveBy.get(l.scope + "|" + l.key) ?? l.originalHref })).filter(l => { const before = liveBy.get(l.scope + "|" + l.key); const id = l.scope + "|" + l.key; if (seen.has(id)) return false; seen.add(id); return before !== l.href; });
 }
 /** Replace each page group that has both inventories with its net changes; pages without them keep the existing rows. */
 export function netReviewLinks(base: ReviewLinks, nets: Record<string, InventoryLink[]>, pages: ManagerPage[]): ReviewLinks {
@@ -103,7 +103,7 @@ function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): Revi
     const key = `${path}|${l.href}`;
     if (out.some(x => x.key === key)) continue;
     const was = prior.find(x => x.key === key);
-    out.push({ ...(was ?? { key, href: l.href, kind: kindOf(l.href), requestIds: [], status: null }), elementKey: l.key, scope: l.scope, target: l.target ?? null, label: l.label, ...(l.ariaLabel ? { ariaLabel: l.ariaLabel } : {}), ...(l.visibleText ? { visibleText: l.visibleText } : {}), ...(l.image ? { image: l.image } : {}) });
+    out.push({ ...(was ?? { key, href: l.href, kind: kindOf(l.href), requestIds: [], status: null }), originalHref: l.originalHref, elementKey: l.key, scope: l.scope, target: l.target ?? null, label: l.label, ...(l.ariaLabel ? { ariaLabel: l.ariaLabel } : {}), ...(l.visibleText ? { visibleText: l.visibleText } : {}), ...(l.image ? { image: l.image } : {}) });
   }
   return out;
 }

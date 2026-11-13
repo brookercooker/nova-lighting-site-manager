@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({ state: null as any, post: vi.fn(), refresh: vi.fn(
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, setReviewOpen: m.review, refreshSoon: m.refresh, showPreviewPath: m.show, selectPage: vi.fn() }) }));
 vi.mock("../helper", () => ({ postToHelper: m.post }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
+vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: [], isAdmin: false, pending: false, error: "", change: vi.fn() }), TrustedDomainList: () => null }));
 const page = (key: string, name: string) => ({ key: "page:" + key, page: { name, path: key }, how: "Changed by the builder" });
 beforeEach(() => {
   vi.clearAllMocks();
@@ -95,7 +96,7 @@ describe("Submit for Review walkthrough", () => {
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
     confirmLinks();
-    expect(within(dialog()).getByRole("button", { name: /About · 1 of 1/ })).toHaveAttribute("aria-expanded", "false");
+    expect(within(dialog()).getByRole("button", { name: /About · done/ })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("checkbox", { name: "I checked the links that changed." })).toBeChecked();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, href: "/changed" }] }] } };

@@ -21,6 +21,9 @@ import { shownPreviewFrame } from "./previewNavigate";
 import { ReviewLinkEditor } from "./ReviewLinkEditor";
 import { publicLinkAddress } from "../linkDisplay";
 import { SharedPageUsage } from "./SharedPageUsage";
+import { domainOf, groupRisks, riskRank } from "./linkRisk";
+import { ReviewDestination, ReviewRiskFlags } from "./ReviewLinkRiskDetails";
+import { useTrustedDomains, TrustedDomainList } from "./trustedDomains";
 import { ReviewLinkTitle } from "./ReviewLinkTitle";
 
 const missingInternalLink = (link: ReviewLink, pages: ManagerPage[]) =>
@@ -262,15 +265,32 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   const s = useWalk();
   const { preview } = useDesignChat();
   const { phone } = useManagerLayout();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const completedGroups = useRef<Set<string>>(new Set());
+  const trust = useTrustedDomains();
+  const expanded = s.groupExpansion;
+  const setExpanded = (fn: (e: Record<string, boolean>) => Record<string, boolean>) => walk.update(w => ({ ...w, groupExpansion: fn(w.groupExpansion) }));
+  const manuallyOpened = useRef(new Set<string>(Object.keys(s.groupExpansion).filter(k => s.groupExpansion[k])));
+  const orderedKeys = useRef<{ signature: string; groups: string[]; links: Record<string, string[]> }>({ signature: "", groups: [], links: {} });
+  const groupId = (g: LinkGroup) => g.shared?.id ?? g.page?.path ?? g.label;
+  const rawGroups = data.links.status === "ok" ? data.links.groups : [];
+  const names = Object.fromEntries(rawGroups.flatMap(g => g.links.map(l => [l.key, linkText(l, data.pages)])));
+  const known = (data.inventoryLinks ?? []).map(l => domainOf(l.href)).filter((h): h is string => !!h);
+  const riskFlags = Object.assign({}, ...rawGroups.map(g => groupRisks(g, names, known, trust.domains))) as Record<string, import("./linkRisk").RiskFlag[]>;
+  const sortSignature = changeFingerprint(rawGroups.map(g => [groupId(g), g.links.map(l => [l.key, l.href, l.originalHref])])) ;
+  if (data.links.status === "ok" && orderedKeys.current.signature !== sortSignature) {
+    const rank = (l: ReviewLink) => riskRank(l, data.pages, riskFlags[l.key] ?? []);
+    const sorted = rawGroups.map(g => ({ ...g, links: [...g.links].sort((a,b) => rank(a)-rank(b)) })).sort((a,b) => Math.min(...a.links.map(rank))-Math.min(...b.links.map(rank)));
+    orderedKeys.current = { signature: sortSignature, groups: sorted.map(groupId), links: Object.fromEntries(sorted.map(g => [groupId(g), g.links.map(l => l.key)])) };
+  }
+  const orderedGroups = [...rawGroups].sort((a,b) => orderedKeys.current.groups.indexOf(groupId(a))-orderedKeys.current.groups.indexOf(groupId(b))).map(g => ({ ...g, links: [...g.links].sort((a,b) => (orderedKeys.current.links[groupId(g)] ?? []).indexOf(a.key)-(orderedKeys.current.links[groupId(g)] ?? []).indexOf(b.key)) }));
+  const completedGroups = useRef<Set<string>>(new Set(Object.keys(s.groupCompleted).filter(k => s.groupCompleted[k])));
   const groupProgress = data.links.status === "ok" ? data.links.groups.map(g => `${g.shared?.id ?? g.page?.path ?? g.label}:${g.links.every(l => !linkNeedsCheck(l, s, data.pages))}`).join("|") : "";
   useEffect(() => {
     if (data.links.status !== "ok") return;
     const complete = new Set(data.links.groups.filter(g => g.links.every(l => !linkNeedsCheck(l, s, data.pages))).map(g => g.shared?.id ?? g.page?.path ?? g.label));
-    const newly = [...complete].filter(id => !completedGroups.current.has(id));
+    const reopened = [...completedGroups.current].filter(id => !complete.has(id));
+    const newly = [...complete].filter(id => !completedGroups.current.has(id) && !manuallyOpened.current.has(id));
     completedGroups.current = complete;
-    if (newly.length) setExpanded(e => ({ ...e, ...Object.fromEntries(newly.map(id => [id, false])) }));
+    if (newly.length || reopened.length) walk.update(w => ({ ...w, groupCompleted: Object.fromEntries(data.links.status === "ok" ? data.links.groups.map(g => [groupId(g), complete.has(groupId(g))]) : []), groupExpansion: { ...w.groupExpansion, ...Object.fromEntries(newly.map(id => [id, false])), ...Object.fromEntries(reopened.map(id => [id, true])) } }));
   }, [groupProgress]);
   useEffect(() => {
     if (data.links.status !== "ok" || !s.selectedLink) return;
@@ -283,12 +303,15 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
     const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-walk-link]") ?? []).find(el => el.dataset.walkLink === s.selectedLink?.key);
     row?.scrollIntoView?.({ block: "nearest" });
     row?.querySelector<HTMLElement>("[data-verify-link]")?.focus({ preventScroll: true });
-  }, [s.selectedLink, data.links.status]);
+  }, [s.selectedLink, data.links.status, changeFingerprint(expanded)]);
   if (data.links.status === "failed") return <p role="status" className="text-sm">Links couldn't be listed right now. Open the changed pages and click the links you added or changed.</p>;
   if (data.links.status !== "ok") return <p className="text-sm text-muted-foreground">Listing the changed links…</p>;
-  const { groups, unread, partial, truncated } = data.links;
+  const { unread, partial, truncated } = data.links;
+  const groups = orderedGroups;
   return (
     <div ref={listRef} className="space-y-4">
+      <TrustedDomainList trust={trust} />
+      <div className="grid grid-cols-2 gap-2"><Button variant="ghost" className="h-11 px-2 text-xs" onClick={() => { manuallyOpened.current.clear(); setExpanded(() => Object.fromEntries(groups.map(g => [groupId(g), false]))); }}>Collapse All</Button><Button variant="ghost" className="h-11 px-2 text-xs" onClick={() => { groups.forEach(g => manuallyOpened.current.add(groupId(g))); setExpanded(() => Object.fromEntries(groups.map(g => [groupId(g), true]))); }}>Expand All</Button></div>
       {s.linkNote && <p role="status" className="rounded-md border bg-secondary p-3 text-sm">{s.linkNote}</p>}
       <p className="text-xs text-muted-foreground">Approvals are remembered in this tab until that link’s destination, target or identity changes, or the draft is submitted. Replaced links count as handled in the total.</p>
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}
@@ -302,8 +325,8 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
         const open = expanded[id] ?? handled < g.links.length;
         return (
         <section key={g.label + (g.page?.path ?? "")} aria-label={g.label}>
-          <h3 className="mb-2"><Button type="button" variant="ghost" className="min-h-11 h-auto w-full justify-between whitespace-normal px-0 text-left text-sm font-semibold" aria-expanded={open} onClick={() => setExpanded(e => ({ ...e, [id]: !open }))}><span className="min-w-0 break-words">{g.label} · {handled} of {g.links.length}</span><ChevronDown aria-hidden className={cn("h-4 w-4 shrink-0", !open && "-rotate-90")} /></Button></h3>
-          {g.shared && <SharedPageUsage pages={g.shared.pages} />}
+          <h3 className="mb-2"><Button type="button" variant="ghost" className="min-h-11 h-auto w-full justify-between whitespace-normal px-0 text-left text-sm font-semibold" aria-expanded={open} onClick={() => { if (!open) manuallyOpened.current.add(id); else manuallyOpened.current.delete(id); setExpanded(e => ({ ...e, [id]: !open })); }}><span className="min-w-0 break-words">{g.label} · {handled === g.links.length ? "done" : `${handled} of ${g.links.length}`}</span>{handled === g.links.length && <Check aria-hidden className="h-4 w-4 shrink-0" />}<ChevronDown aria-hidden className={cn("h-4 w-4 shrink-0", !open && "-rotate-90")} /></Button></h3>
+          {g.shared && <div><Badge variant="secondary">Site-wide · {g.shared.pages.length} Pages</Badge><SharedPageUsage pages={g.shared.pages} /></div>}
           {open && <ul className="space-y-2">
             {g.links.map((l) => {
               const chip = linkChip(l, data.pages);
@@ -315,10 +338,12 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
               const own = ownLinkPrint(l);
               const opened = s.verificationOpened[l.key] === own;
               const opening = s.openingLink?.key === l.key;
-              const enabled = !missing && !opening && (manual || opened);
+              const enabled = !missing && !opening && opened;
               const dest = l.kind === "internal" || l.kind === "anchor" ? sitePath(l.href, l.href, g.page?.path ?? "/") : null;
               const embed = preview?.frames.find(f => f.id === preview.shownId)?.url ?? preview?.frames.at(-1)?.url;
-              const tabUrl = dest ? draftPageUrl(dest, embed) : l.kind === "external" && /^https:\/\//i.test(l.href) ? l.href : null;
+              const tabUrl = dest ? draftPageUrl(dest, embed) : /^(https?:|mailto:|tel:)/i.test(l.href) ? l.href : null;
+              const flags = riskFlags[l.key] ?? [];
+              const host = domainOf(l.href);
               const hintId = `verify-${encodeURIComponent(l.key)}`;
               const name = linkText(l, data.pages);
               const friendlyName = name === linkAddress(l) ? `Text link on ${g.page?.name ?? "Homepage"}` : name;
@@ -329,19 +354,21 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                   className={cn("space-y-2 min-w-0 rounded-md border p-3 cursor-pointer transition-colors hover:bg-accent active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", st === "done" && "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 active:bg-foreground/10", (s.selectedLink?.key === l.key || s.checking?.key === l.key) && "border-primary bg-primary/5 ring-2 ring-ring ring-offset-2")}>
                   <ReviewLinkTitle key={`${l.key}|${l.image?.src ?? ""}`} link={name === linkAddress(l) ? { ...l, label: friendlyName } : l} pages={data.pages} />
                   {st === "todo" && s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
-                  <p className="break-all font-mono text-xs text-muted-foreground">{address}</p>
-                  {g.shared && <SharedPageUsage prefix="Also changes on" pages={g.shared.pages.filter(p => normPath(p.path) !== normPath(g.page?.path ?? "/"))} />}
+                  <ReviewDestination link={l} pages={data.pages} flags={flags} trusted={!!host && trust.domains.includes(host)} />
+                  <ReviewRiskFlags flags={flags} onJump={key => walk.selectLink(key)} />
+                  {g.shared && <SharedPageUsage pages={g.shared.pages} />}
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
                   {chip?.tone === "bad" && !missing && <p className="text-xs text-destructive">{missingInternalLink(l, data.pages) ? "This page doesn't exist. Edit the link destination to fix it." : "This address couldn't be reached. Check the destination."}</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}
                   {st !== "replaced" && <>
-                    {tabUrl && !manual && <Button asChild variant="ghost" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm text-muted-foreground"><a data-verify-link href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden />Open Link to Verify</a></Button>}
+                    {tabUrl && <Button asChild variant="ghost" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm text-muted-foreground"><a data-verify-link href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden />Open Link to Verify</a></Button>}
                     <div className="grid grid-cols-2 gap-2">
                       <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" aria-label={`Confirmed: ${publicLinkAddress(friendlyName)}`} aria-pressed={st === "done"} disabled={!enabled} aria-describedby={hintId} onClick={e => { e.stopPropagation(); if (enabled) walk.confirmLink(l.key, own, st !== "done"); }}><Check aria-hidden className={cn("h-4 w-4", st === "done" && "rounded-full bg-foreground text-background p-0.5")} />Confirmed</Button>
                       <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant="default" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" disabled={opening} aria-label={`Correct link: ${publicLinkAddress(friendlyName)}`} onClick={e => { e.stopPropagation(); onChange(l, g); }}><Pencil aria-hidden />Correct</Button>
                     </div>
-                    <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : opening ? `Opening ${s.openingLink?.name}…` : st === "done" ? "Approved" : manual ? "Check that this address is correct, then tap Confirmed." : !opened ? "Open the link first, then tap Confirmed." : "Check that this is the right destination."}</p>
+                    <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : opening ? `Opening ${s.openingLink?.name}…` : st === "done" ? "Approved" : !opened ? "Open the link first, then tap Confirmed." : "Check that this is the right destination."}</p>
                   </>}
+                  {st === "done" && host && trust.isAdmin && !trust.domains.includes(host) && !flags.some(f => ["lookalike", "punycode", "insecure"].includes(f.kind)) && <Button variant="outline" className="h-auto min-h-11 w-full whitespace-normal break-all px-2 text-xs" disabled={trust.pending} onClick={e => { e.stopPropagation(); void trust.change(host); }}>Trust {host}</Button>}
                   {s.reviewEdit?.link.key === l.key && <div data-review-editor onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}><ReviewLinkEditor pages={data.pages} /></div>}
                 </li>
               );
@@ -349,7 +376,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
           </ul>}
         </section>
       ); })}
-      {phone && groups.some(g => g.links.some(l => linkNeedsCheck(l, s, data.pages))) && <Button type="button" variant="outline" className="min-h-11 h-auto w-full whitespace-normal px-2" onClick={() => {
+      {groups.some(g => g.links.some(l => linkNeedsCheck(l, s, data.pages))) && <Button type="button" variant="outline" className="min-h-11 h-auto w-full whitespace-normal px-2" onClick={() => {
         const all = groups.flatMap(g => g.links.map(l => ({ l, g })));
         const at = all.findIndex(x => x.l.key === s.checking?.key || x.l.key === s.selectedLink?.key);
         const next = [...all.slice(at + 1), ...all.slice(0, at + 1)].find(x => linkNeedsCheck(x.l, s, data.pages));

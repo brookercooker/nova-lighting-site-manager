@@ -30,12 +30,13 @@ describe("Links step from the saved draft", () => {
     walk.fixSaved(); walk.finishFix();
     expect(walk.get().step).toBe("links");
     expect(walk.get().linkReplaced).toEqual({ "/|/contact": "own" });
-    walk.reconcile({ "page:/": "p2" }, { "/|/x": "l2" }, { "/|/contact": "own" });
+    walk.reconcile({ "page:/": "p2" }, { "/|/x": "l1" }, { "/|/contact": "own" });
     expect(walk.get().ticked).toContain("page:/");
     expect(walk.get().linkTicked).toContain("/|/x");
     expect(walk.get().approvals["page:/"]).toBe("p2");
     // Later changes are checked again as usual.
     walk.reconcile({ "page:/": "p3" }, { "/|/x": "l2" }, { "/|/contact": "own" });
     expect(walk.get().ticked).not.toContain("page:/");
+    expect(walk.get().linkTicked).not.toContain("/|/x");
   });
 });

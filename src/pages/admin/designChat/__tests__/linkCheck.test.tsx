@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({ state: null as any, data: null as any, preview: nu
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, preview: m.preview, setReviewOpen: m.review, refreshSoon: vi.fn(), showPreviewPath: m.show, selectPage: vi.fn() }) }));
 vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
+vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: [], isAdmin: false, pending: false, error: "", change: vi.fn() }), TrustedDomainList: () => null }));
 
 const ORIGIN = "https://site.example";
 const team = { key: "/a|/team", href: "/team", kind: "internal" as const, label: "Team", requestIds: ["r1"], status: null };
@@ -85,7 +86,7 @@ describe("inline link verification", () => {
     fireEvent.click(box);
     expect(walk.get().linkTicked).toEqual([team.key]);
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: /About · 1 of 1/ }));
+    fireEvent.click(screen.getByRole("button", { name: /About · done/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Confirmed:/ }));
     expect(walk.get().linkTicked).toEqual([]);
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
@@ -95,8 +96,11 @@ describe("inline link verification", () => {
     m.data.links.groups[0].links.push({ ...team, key: "other", href: "/other", kind: "external" });
     openLinks();
     fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
-    const boxes = screen.getAllByRole("button", { name: /^Confirmed:/ });
-    expect(boxes[0]).toBeEnabled(); expect(boxes[1]).toBeDisabled();
+    const rows = document.querySelectorAll<HTMLElement>("[data-walk-link]");
+    const openedRow = Array.from(rows).find(r => r.dataset.walkLink === team.key);
+    const otherRow = Array.from(rows).find(r => r.dataset.walkLink === "other");
+    expect(openedRow && within(openedRow).getByRole("button", { name: /^Confirmed:/ })).toBeEnabled();
+    expect(otherRow && within(otherRow).getByRole("button", { name: /^Confirmed:/ })).toBeDisabled();
   });
   it("missing pages cannot approve even with a legacy Keep decision", () => {
     m.data.pages = []; openLinks();
@@ -105,9 +109,10 @@ describe("inline link verification", () => {
     expect(screen.getByRole("button", { name: /^Confirmed:/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
-  it.each([["mail", "mailto:a@b.co"], ["phone", "tel:+15550100"]])("keeps %s address verification immediate", (kind, href) => {
+  it.each([["mail", "mailto:a@b.co"], ["phone", "tel:+15550100"]])("requires opening %s before confirmation", (kind, href) => {
     m.data.links.groups[0].links = [{ ...team, kind, href }]; openLinks();
-    expect(screen.queryByRole("link", { name: "Open Link to Verify" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Confirmed:/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
     expect(screen.getByRole("button", { name: /^Confirmed:/ })).toBeEnabled();
   });
   it("keeps draft tokens only in safe opening URLs", () => {
@@ -197,9 +202,9 @@ describe("links needing checks", () => {
     expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ type: "link-check-focus" }), ORIGIN);
     expect(walk.get().openingLink?.path).toBe("/a");
     act(() => walk.confirmLink("/a|/team", "fp", true));
-    expect(screen.getByRole("button", { name: /About · 1 of 1/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /About · done/ })).toHaveAttribute("aria-expanded", "false");
     act(() => walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], linkTicked: [] })));
-    fireEvent.click(screen.getByRole("button", { name: /About · 0 of 1/ }));
+    if (screen.getByRole("button", { name: /About · 0 of 1/ }).getAttribute("aria-expanded") === "false") fireEvent.click(screen.getByRole("button", { name: /About · 0 of 1/ }));
     const link = document.querySelector("[data-walk-link='/a|/team']") as HTMLElement;
     expect(within(link).queryByText("Needs Checking")).toBeNull();
     expect(within(link).queryByText("Not Reviewed")).toBeNull();
@@ -289,7 +294,7 @@ it("inner verification, confirmation and Correct never activate the card", () =>
   fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
   const confirm = screen.getByRole("button", { name: "Confirmed: Team" });
   fireEvent.click(confirm);
-  fireEvent.click(screen.getByRole("button", { name: /About · 1 of 1/ }));
+  fireEvent.click(screen.getByRole("button", { name: /About · done/ }));
   const reopened = screen.getByRole("button", { name: "Confirmed: Team" });
   expect(reopened).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(reopened);

@@ -860,6 +860,24 @@ export type Database = {
           },
         ]
       }
+      trusted_review_domains: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          domain: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          domain: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          domain?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

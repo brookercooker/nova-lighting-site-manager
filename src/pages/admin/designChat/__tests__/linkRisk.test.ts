@@ -1,0 +1,28 @@
+import { describe, expect, it } from "vitest";
+import { domainOf, registeredDomain, hostWarnings, mismatch, groupRisks, riskRank, differingCharacters } from "../linkRisk";
+import { walk } from "../submitWalkthroughStore";
+import type { ReviewLink } from "../submitWalkthrough";
+const link = (key: string, href: string, originalHref?: string): ReviewLink => ({ key, href, originalHref, kind: href.startsWith("/") ? "internal" : "external", label: key, requestIds: [], status: null });
+describe("review destination rules", () => {
+  it("uses the public suffix list, not the last two hostname segments", () => expect(registeredDomain("www.shop.example.co.uk")).toBe("example.co.uk"));
+  it.each(["lnstagram.com", "instagrarn.com", "instagra-m.com", "instgram.com", "instagramm.com"])("warns about confusable %s", host => expect(hostWarnings(`https://${host}`, [], []).some(f => f.expected === "instagram.com")).toBe(true));
+  it("uses other inventory hosts as comparison candidates", () => expect(hostWarnings("https://novalightng.com", ["novalighting.com"], [])[0]?.expected).toBe("novalighting.com"));
+  it("still flags a typo when that same host appears in the current inventory", () => expect(hostWarnings("https://lnstagram.com", ["lnstagram.com", "instagram.com"], []).some(f => f.expected === "instagram.com")).toBe(true));
+  it("exact trusted hosts skip lookalike only", () => { expect(hostWarnings("https://lnstagram.com", [], ["lnstagram.com"])).toEqual([]); expect(hostWarnings("http://lnstagram.com", [], ["lnstagram.com"]).map(f => f.kind)).toEqual(["insecure"]); });
+  it("compares registrable domains for inventory lookalikes", () => expect(hostWarnings("https://shop.lnstagram.com", ["instagram.com"], []).some(f => f.kind === "lookalike")).toBe(true));
+  it("warns on punycode", () => expect(hostWarnings("https://xn--instagrm-7za.com", [], []).some(f => f.kind === "punycode")).toBe(true));
+  it("does not warn on exact brands", () => expect(hostWarnings("https://www.instagram.com/a", [], [])).toEqual([]));
+  it("flags explicit consultation-to-gallery mismatch", () => expect(mismatch("Book a Consultation", "/inspiration-gallery")?.kind).toBe("mismatch"));
+  it("accepts known location aliases", () => { expect(mismatch("Find a Location", "/locations")).toBeNull(); expect(mismatch("Find a Location", "/showrooms")).toBeNull(); });
+  it("flags domain wording mismatch", () => expect(mismatch("instagram.com", "https://facebook.com")?.kind).toBe("mismatch"));
+  it("flags Facebook off-brand destination", () => expect(mismatch("Facebook", "https://example.com")?.kind).toBe("mismatch"));
+  it("flags call-to-email", () => expect(mismatch("Call us", "mailto:a@example.com")?.kind).toBe("mismatch"));
+  it("avoids broad semantic guesses", () => expect(mismatch("Ideas & Advice", "/about")).toBeNull());
+  it("detects swaps on both links", () => { const a = link("a", "/gallery", "/contact"), b = link("b", "/contact", "/gallery"); const flags = groupRisks({ page: null, label: "Home", links: [a,b] }, {}, [], []); expect(flags.a.find(f => f.kind === "swap")?.otherKey).toBe("b"); expect(flags.b.find(f => f.kind === "swap")?.otherKey).toBe("a"); });
+  it("detects duplicates within one group", () => { const flags = groupRisks({ page: null, label: "Home", links: [link("a", "/about"), link("b", "/about")] }, { b: "Our Story" }, [], []); expect(flags.a.find(f => f.kind === "duplicate")?.otherKey).toBe("b"); });
+  it("ignores repeated shared identity", () => { const a = { ...link("a", "/about"), scope: "object:x", elementKey: "0" }; expect(groupRisks({ page: null, label: "Shared", links: [a,{ ...a, key: "b" }] }, {}, [], []).a).toEqual([]); });
+  it("orders missing, flagged, external, internal and unchanged", () => { const pages = [{ name: "About", path: "/about", build_status: "ready" }]; expect(riskRank(link("m", "/missing"), pages, [])).toBe(0); expect(riskRank(link("f", "/about"), pages, [{ kind: "mismatch", reason: "wrong" }])).toBe(1); expect(riskRank(link("e", "https://example.com"), pages, [])).toBe(2); expect(riskRank(link("i", "/about"), pages, [])).toBe(3); expect(riskRank(link("u", "/about", "/about"), pages, [])).toBe(4); });
+  it("highlights just the differing initial character", () => expect(differingCharacters("lnstagram.com", "instagram.com").filter(Boolean)).toHaveLength(1));
+  it("retains group preferences across reload without restoring an editor", () => { walk.reset(); walk.update(s => ({ ...s, groupExpansion: { footer: true, home: false } })); walk.restoreSession(); expect(walk.get().groupExpansion).toEqual({ footer: true, home: false }); expect(walk.get().reviewEdit).toBeNull(); walk.reset(); });
+  it("never treats email or phone as a trusted web domain", () => { expect(domainOf("mailto:a@example.com")).toBeNull(); expect(domainOf("tel:1234567890")).toBeNull(); });
+});

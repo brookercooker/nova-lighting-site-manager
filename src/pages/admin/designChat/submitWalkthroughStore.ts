@@ -10,6 +10,8 @@ export type LinkFix = { key: string; fingerprint: string; href?: string; path: s
 export type WalkStep = "pages" | "links" | "checklist";
 export type Checking = { key: string; kind: "page" | "link"; name: string } | null;
 export type WalkState = {
+  groupCompleted: Record<string, boolean>;
+  groupExpansion: Record<string, boolean>;
   openingLink: { key: string; path: string; name: string; href: string; entries?: import("./linkCheck").LinkCheckEntry[]; failed?: boolean } | null;
   reviewEdit: { link: ReviewLink; group: LinkGroup; rows: ChangedRow[]; fingerprint: string } | null;
   savedReviewLinks: { path: string; link: ReviewLink }[];
@@ -32,7 +34,7 @@ export type WalkState = {
   /** The page just saved through Change This Link: its page approval follows the hand save; links always retain their own fingerprints. */
   repin: { path: string; until: number } | null;
 };
-const initial = (): WalkState => ({ openingLink: null, keptMissing: {}, verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], selectedLink: null, linkNote: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
+const initial = (): WalkState => ({ groupCompleted: {}, groupExpansion: {}, openingLink: null, keptMissing: {}, verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], selectedLink: null, linkNote: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
 export const WALK_SESSION_KEY = "nova-review-progress-v1";
 const progressFields = ["approvals", "linkApprovals", "verificationOpened", "linkReplaced", "keptMissing"] as const;
 function readProgress(): WalkState {
@@ -42,6 +44,8 @@ function readProgress(): WalkState {
     if (saved?.v !== 1) return next;
     for (const field of progressFields) if (saved[field] && typeof saved[field] === "object" && !Array.isArray(saved[field]))
       next[field] = Object.fromEntries(Object.entries(saved[field]).filter(([k, v]) => k.length <= 4096 && typeof v === "string" && v.length <= 100_000).slice(0, 500)) as Record<string, string>;
+    if (saved.groupCompleted && typeof saved.groupCompleted === "object") next.groupCompleted = Object.fromEntries(Object.entries(saved.groupCompleted).filter(([k,v]) => k.length < 4096 && typeof v === "boolean").slice(0,500)) as Record<string, boolean>;
+    if (saved.groupExpansion && typeof saved.groupExpansion === "object") next.groupExpansion = Object.fromEntries(Object.entries(saved.groupExpansion).filter(([k,v]) => k.length < 4096 && typeof v === "boolean").slice(0,500)) as Record<string, boolean>;
     next.ticked = Object.keys(next.approvals); next.viewed = [...next.ticked]; next.linkTicked = Object.keys(next.linkApprovals);
   } catch { /* unavailable or older storage never blocks review */ }
   return next;
@@ -50,7 +54,7 @@ let state = readProgress();
 const listeners = new Set<() => void>();
 const hosts = new Map<string, boolean>();
 const emit = () => {
-  try { sessionStorage.setItem(WALK_SESSION_KEY, JSON.stringify({ v: 1, ...Object.fromEntries(progressFields.map(f => [f, state[f]])) })); } catch { /* optional tab-session storage */ }
+  try { sessionStorage.setItem(WALK_SESSION_KEY, JSON.stringify({ v: 1, groupCompleted: state.groupCompleted, groupExpansion: state.groupExpansion, ...Object.fromEntries(progressFields.map(f => [f, state[f]])) })); } catch { /* optional tab-session storage */ }
   listeners.forEach((l) => l());
 };
 

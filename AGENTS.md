@@ -46,3 +46,5 @@
 - Image deletion merges public usage with saved page/object references, confirms single/bulk actions and reuses the five-second deferred delete; remove correct bucket files before rows and stop on storage failure.
 - Read nested AGENTS.md; admin rules cover picker scrolling and authoritative retry snapshots to preserve context.
 - Manager libraries share a content-width container and the existing label list in a dialog; narrow card layouts reuse all item actions so no separate data or action paths diverge.
+
+- Verify Links risk rules are presentation-only in linkRisk.ts (tldts registrable domains); freeze ordering on step opening/destination changes and persist group preferences separately from approvals so confirmations never reorder rows. Trusted domains belong to this site’s isolated database with admin-role RLS and validated hosts, never visitor storage.

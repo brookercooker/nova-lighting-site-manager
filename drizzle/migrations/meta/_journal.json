@@ -85,6 +85,13 @@
       "when": 1794519888401,
       "tag": "0011_sanitize_media_display_names",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794546293049,
+      "tag": "0012_trusted_review_domains",
+      "breakpoints": true
     }
   ]
 }

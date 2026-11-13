@@ -4,7 +4,7 @@ import type { DraftRequest } from "./helper";
 export type PageRef = { name: string; path: string; sharedChange?: unknown };
 export type ChangedRow = { key: string; page: PageRef | null; how: string; count?: number; guess?: boolean; by?: string; fingerprint?: string; shared?: { id: string; name: string; pages: PageRef[] } };
 export const OTHER_KEY = "other";
-export type ManagerPage = { name: string; path: string; build_status: string; handEdits?: number; inlineEdits?: unknown; content?: unknown };
+export type ManagerPage = { name: string; path: string; build_status: string; handEdits?: number; inlineEdits?: unknown; content?: unknown; thumbnail_url?: string | null; status?: string };
 /** Count of stored hand edits, ignoring orig: baseline metadata; undefined when unknown. */
 export function countHandEdits(inline: unknown): number | undefined {
   if (!inline || typeof inline !== "object" || Array.isArray(inline)) return inline == null ? 0 : undefined;
@@ -20,7 +20,7 @@ export function dropRevertedHandEdits(rows: ChangedRow[], pages: ManagerPage[]):
 }
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
 export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirmed"; detail?: string } | null;
-export type ReviewLink = { key: string; href: string; kind: LinkKind; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; elementKey?: string; scope?: string; requestIds: string[]; status: RelayLinkStatus };
+export type ReviewLink = { key: string; href: string; originalHref?: string; kind: LinkKind; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; elementKey?: string; scope?: string; requestIds: string[]; status: RelayLinkStatus };
 export type LinkGroup = { page: PageRef | null; label: string; links: ReviewLink[]; shared?: { id: string; name: string; pages: PageRef[] } };
 export type ReviewLinks = { groups: LinkGroup[]; unread: number; partial: boolean; truncated: boolean };
 /** Stable value fingerprint; object key order is not a change. */
@@ -126,6 +126,7 @@ export function parseReviewLinks(d: any): ReviewLinks | null {
         ? { state: l.status.state, detail: typeof l.status.detail === "string" ? l.status.detail : undefined } : null;
       links.push({ key: `${page?.path ?? ""}|${l.href}`, href: l.href, kind: l.kind, label: typeof l.label === "string" && l.label.trim() ? l.label : null,
         ...(typeof (l.elementKey ?? l.key) === "string" && /^(?:link:)?\d+(?:\.\d+)*$/.test(l.elementKey ?? l.key) ? { elementKey: (l.elementKey ?? l.key).replace(/^link:/, ""), scope: typeof l.scope === "string" ? l.scope : "page" } : {}),
+        ...(typeof l.originalHref === "string" ? { originalHref: l.originalHref } : {}),
         ...(l.target === null || l.target === "_blank" ? { target: l.target } : {}),
         ...(typeof l.ariaLabel === "string" && l.ariaLabel.trim() ? { ariaLabel: l.ariaLabel.trim().slice(0, 300) } : {}),
         requestIds: Array.isArray(l.requestIds) ? l.requestIds.filter((x: unknown) => typeof x === "string") : [], status: st });

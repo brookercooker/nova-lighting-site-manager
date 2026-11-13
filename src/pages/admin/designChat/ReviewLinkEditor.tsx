@@ -62,7 +62,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
     try {
       const lines = await saveReviewLink(resolved, destination, blank);
       const kind = /^mailto:/i.test(destination) ? "mail" : /^tel:/i.test(destination) ? "phone" : destination.startsWith("/") ? "internal" : "external";
-      walk.savedLink(page.path, { target: blank ? "_blank" : null, key: edit.group.shared ? `${resolved.element.scope}|${resolved.element.key}|${destination}` : `${edit.group.page?.path ?? ""}|${destination}`, href: destination, kind, elementKey: resolved.element.key, scope: resolved.element.scope, label: resolved.element.label || edit.link.label, ariaLabel: resolved.element.ariaLabel || edit.link.ariaLabel, visibleText: resolved.element.visibleText || edit.link.visibleText, image: resolved.element.image || edit.link.image, requestIds: [], status: null });
+      walk.savedLink(page.path, { target: blank ? "_blank" : null, key: edit.group.shared ? `${resolved.element.scope}|${resolved.element.key}|${destination}` : `${edit.group.page?.path ?? ""}|${destination}`, href: destination, originalHref: resolved.element.originalHref, kind, elementKey: resolved.element.key, scope: resolved.element.scope, label: resolved.element.label || edit.link.label, ariaLabel: resolved.element.ariaLabel || edit.link.ariaLabel, visibleText: resolved.element.visibleText || edit.link.visibleText, image: resolved.element.image || edit.link.image, requestIds: [], status: null });
       const { notifyContentEdited } = await import("./contentSync");
       notifyContentEdited(lines);
     } catch (e) { setError(e instanceof Error ? e.message : "Your new link couldn't be saved. Please try again."); }

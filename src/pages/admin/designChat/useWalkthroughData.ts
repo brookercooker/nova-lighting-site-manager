@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
 import { useWalk } from "./submitWalkthroughStore";
 import { addSharedChromeRows, mergeSharedReviewLinks, stableReviewEdits, type SharedReviewObject } from "./sharedReviewLinks";
-import { liveSiteBase, loadNetLinks, netReviewLinks, requestFrameInventory, requestInventory } from "./linkInventory";
+import { liveSiteBase, loadNetLinks, netReviewLinks, requestFrameInventory, requestInventory, type InventoryLink } from "./linkInventory";
 import { shownPreviewFrame } from "./previewNavigate";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { supabase } from "@/prototype/client";
@@ -12,7 +12,7 @@ import { RELAY, relayHeaders, type RelayState } from "./helper";
 import { changeFingerprint, normPath, changedPages, countHandEdits, dropRevertedHandEdits, mergeReviewLinks, parseReviewLinks, parseReviewPages, relayChangedPages, type ChangedRow, type ManagerPage, type PageRef, type ReviewLinks, type ReviewPages } from "./submitWalkthrough";
 
 export type LinksResult = { status: "loading" } | { status: "failed" } | ({ status: "ok" } & ReviewLinks);
-export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; pagesStatus?: "loading" | "failed" | "ok" };
+export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; inventoryLinks?: InventoryLink[]; pagesStatus?: "loading" | "failed" | "ok" };
 
 /** Pages using each shared object, from the same object_page_usages table the Objects tab's Used On reads. */
 async function fetchObjectPages(names: string[]): Promise<{ usages: Record<string, PageRef[]>; shared: SharedReviewObject[] }> {
@@ -35,9 +35,9 @@ async function fetchObjectPages(names: string[]): Promise<{ usages: Record<strin
   return { usages: out, shared };
 }
 async function fetchManagerPages(): Promise<ManagerPage[]> {
-  const { data, error } = await (supabase as any).from("pages").select("name,path,build_status,archived_at,inline_edits,content").is("archived_at", null);
+  const { data, error } = await (supabase as any).from("pages").select("name,path,build_status,status,thumbnail_url,archived_at,inline_edits,content").is("archived_at", null);
   if (error) throw error;
-  const list: ManagerPage[] = (data ?? []).map((p: any) => ({ name: p.name || p.path, path: p.path, build_status: p.build_status, handEdits: countHandEdits(p.inline_edits), inlineEdits: p.inline_edits, content: p.content }));
+  const list: ManagerPage[] = (data ?? []).map((p: any) => ({ name: p.name || p.path, path: p.path, build_status: p.build_status, status: p.status, thumbnail_url: p.thumbnail_url, handEdits: countHandEdits(p.inline_edits), inlineEdits: p.inline_edits, content: p.content }));
   // Coded pages from the public manifest are live even when they were never registered as Manager rows.
   try {
     const known = new Set(list.map((p) => p.path));
@@ -106,7 +106,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
   const inventory = useQuery({ queryKey: ["walkthrough", "inventory", sig, changedPaths], queryFn: () => loadNetLinks(changedPaths, live), enabled: enabled && !!live && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
   const merged = useMemo(() => links.data ? mergeSharedReviewLinks(netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data, objects.data]);
-  const sharedPaths = [...new Set(merged?.groups.filter(group => group.shared).map(group => group.page?.path).filter((path): path is string => !!path) ?? [])].sort();
+  const sharedPaths = [...new Set(merged?.groups.map(group => group.page?.path).filter((path): path is string => !!path) ?? [])].sort();
   const sharedLabels = useQuery({ queryKey: ["walkthrough", "shared-labels", sig, sharedPaths], enabled: enabled && sharedPaths.length > 0, retry: false, queryFn: async () => {
     const frame = shownPreviewFrame();
     let base: string;
@@ -115,12 +115,21 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
       const url = publicPreviewPage(base, path);
       return (frame ? await requestFrameInventory(frame, url) : null) ?? await requestInventory(url);
     }));
-    return inventories.flatMap(item => item?.links ?? []);
+    return inventories.flatMap(item => item ? item.links.map(link => ({ ...link, inventoryPath: item.path })) : []);
   } });
   const labelled = merged ? { ...merged, groups: merged.groups.map(group => ({ ...group, links: group.links.map(link => {
-    const item = sharedLabels.data?.find(item => item.scope === link.scope && item.key === link.elementKey);
-    return item ? { ...link, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
+    const item = sharedLabels.data?.find(item => item.scope === link.scope && item.key === link.elementKey && (group.shared || normPath(item.inventoryPath) === normPath(group.page?.path ?? "/")));
+    return item ? { ...link, originalHref: item.originalHref ?? link.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
   }) })) } : null;
+  const siteInventory = useQuery({ queryKey: ["walkthrough", "site-hosts", pages.data?.map(p => p.path)], enabled: enabled && walkState.step === "links" && !!pages.data?.length, staleTime: 300_000, retry: false, queryFn: async () => {
+    let base: string; try { base = publicPreviewBase(shownPreviewFrame()?.src); } catch { return []; }
+    const queue = [...new Set((pages.data ?? []).map(p => p.path))];
+    const all: InventoryLink[] = [];
+    await Promise.all(Array.from({ length: 3 }, async () => {
+      while (queue.length) { const path = queue.shift(); if (!path) continue; const inventory = await requestInventory(publicPreviewPage(base, path)); if (inventory) all.push(...inventory.links); }
+    }));
+    return all;
+  } });
   const inventoryPending = !!live && changedPaths.length > 0 && enabled && inventory.isFetching;
   const linkResult: LinksResult = links.isError || objects.isError ? { status: "failed" } : labelled && !links.isFetching && !pages.isFetching && !objects.isFetching && !inventoryPending ? { status: "ok", ...labelled } : { status: "loading" };
   const pagesStatus = reviewPages.isError || objects.isError || pages.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
@@ -135,7 +144,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, sha: r.sha, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: stableReviewEdits(page?.inlineEdits), content: page?.content ?? null, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
   });
   const withSaved: LinksResult = linkResult.status === "ok" ? { ...mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), status: "ok" } : linkResult;
-  return { rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
+  return { inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data ?? [])], rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
 }
 
 /** Saved rows bridge relay lag only; an authoritative net inventory wins, including an empty net result. */
