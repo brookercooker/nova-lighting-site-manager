@@ -125,7 +125,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
   const [sending, setSending] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
-  useEffect(() => { if (first.current) { first.current = false; return; } headingRef.current?.focus(); }, [p.step]);
+  useEffect(() => { if (first.current) { first.current = false; return; } headingRef.current?.focus({ preventScroll: true }); }, [p.step]);
   const count = state?.publish?.open ?? 0;
   const pagePrints = Object.fromEntries(data.rows.map(r => [r.key, r.fingerprint ?? changeFingerprint(r)]));
   const linkPrints = linkFingerprints(data);
@@ -180,7 +180,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
             : `Publishes ${changes} on the public site right away.`}
         </p>}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3">
+      <div data-review-list-scroll className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3">
         {p.step === "pages" && (pagesReady ? <PagesStep rows={p.pageRows} data={data} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} /> : <p role="status" className="text-sm text-muted-foreground">{data.pagesStatus === "failed" ? "Changed pages couldn't be listed right now. Close and reopen to try again." : "Listing the changed pages…"}</p>)}
         {p.step === "links" && <LinksStep data={data} onShow={(l, g) => {
           const path = g.page?.path ?? g.shared?.pages[0]?.path ?? p.pageRows.find(r => r.page)?.page?.path ?? "/";
@@ -312,7 +312,13 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   useEffect(() => {
     if (!s.selectedLink) return;
     const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-walk-link]") ?? []).find(el => el.dataset.walkLink === s.selectedLink?.key);
-    row?.scrollIntoView?.({ block: "nearest" });
+    const scroller = listRef.current?.closest<HTMLElement>("[data-review-list-scroll]");
+    if (row && scroller) {
+      const bounds = scroller.getBoundingClientRect();
+      const target = row.getBoundingClientRect();
+      if (target.top < bounds.top) scroller.scrollTop += target.top - bounds.top;
+      else if (target.bottom > bounds.bottom) scroller.scrollTop += Math.min(target.bottom - bounds.bottom, target.top - bounds.top);
+    }
     row?.querySelector<HTMLElement>("[data-verify-link]")?.focus({ preventScroll: true });
   }, [s.selectedLink, data.links.status, changeFingerprint(expanded)]);
   if (data.links.status === "failed") return <p role="status" className="text-sm">Links couldn't be listed right now.{data.retryInventory && <Button variant="link" className="h-11 px-2" onClick={data.retryInventory}>Retry</Button>}</p>;

@@ -405,7 +405,7 @@ function AdminShell() {
 
           <div className={cn("relative min-h-0 flex-1", phone && manual && phonePane === "side" && "hidden")}>
           {phone && !manual && !phoneChat.open && !designChat.waitProgress?.request?.ribbon && <div className="pointer-events-none absolute inset-x-0 top-0 z-40"><WaitProgress thin progress={designChat.waitProgress?.request ?? designChat.waitProgress?.submit} /></div>}
-          <main className={cn("relative h-full overflow-y-auto", tab !== "preview" && phone && "overflow-x-hidden")} style={phone && manual && tab === "preview" && phonePane === "main" ? { paddingBottom: sheet === "peek" ? 52 : sheet === "half" ? "45dvh" : "92dvh" } : undefined}>
+          <main className={cn("relative h-full", tab === "preview" && reviewActive ? "overflow-clip" : "overflow-y-auto", tab !== "preview" && phone && "overflow-x-hidden")} style={phone && manual && tab === "preview" && phonePane === "main" ? { paddingBottom: sheet === "peek" ? 52 : sheet === "half" ? "45dvh" : "92dvh" } : undefined}>
             {previewOpened && (
               <div className={cn(tab === "preview" && !editing ? "h-full" : "hidden", phone && !manual && "nova-phone-chat-preview")}>
                 <Suspense fallback={null}>

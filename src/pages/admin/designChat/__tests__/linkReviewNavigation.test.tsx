@@ -85,3 +85,17 @@ it("corrects the currently selected link without approving or switching pages", 
   expect(m.show).not.toHaveBeenCalled();
   expect(header().getByText("Link 2 of 2 · Pricing")).toBeInTheDocument();
 });
+it("scrolls a selected link only inside the review list, never outer headers", () => {
+  render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
+  const scroller = document.querySelector<HTMLElement>("[data-review-list-scroll]");
+  const row = document.querySelector<HTMLElement>('[data-walk-link="second"]');
+  if (!scroller || !row) throw new Error("Review list missing");
+  vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue({ top: 100, bottom: 300 } as DOMRect);
+  vi.spyOn(row, "getBoundingClientRect").mockImplementation(() => ({ top: 450 - scroller.scrollTop, bottom: 550 - scroller.scrollTop } as DOMRect));
+  const outerScroll = vi.fn();
+  Object.defineProperty(row, "scrollIntoView", { configurable: true, value: outerScroll });
+  act(() => walk.selectLink("second"));
+  expect(scroller.scrollTop).toBe(250);
+  expect(outerScroll).not.toHaveBeenCalled();
+  expect(walk.get().linkTicked).toEqual([]);
+});
