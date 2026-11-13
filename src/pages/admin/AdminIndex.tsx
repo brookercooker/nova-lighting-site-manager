@@ -14,7 +14,7 @@ import PreviewTools, { SubmitButton, SubmitConfirmDialog } from "./designChat/Pr
 import { DesignChatProvider, useDesignChat } from "./designChat/DesignChatContext";
 import { EditorSlotProvider, useEditorSlot } from "./designChat/EditorSlot";
 import ConfirmDialog from "./ConfirmDialog";
-import LibraryPicker from "./designChat/LibraryPicker";
+import LibraryPicker, { type LibraryKind } from "./designChat/LibraryPicker";
 import { toast } from "sonner";
 import { ModeSwitchProvider } from "./designChat/ModeSwitchContext";
 import ModeToggle, { ModeSwitchMenuItem, useModeSwitchActions } from "./designChat/ModeToggle";
@@ -343,16 +343,16 @@ function AdminShell() {
         {/* Right: the top bar and whichever tab is open. */}
         <div data-picker-area className={cn("flex min-h-0 min-w-0 flex-1 flex-col", phone && manual && phonePane === "side" && "flex-none")}>
           <header data-top-bar className={cn("z-30 w-full shrink-0 border-b bg-background", reviewActive && "relative z-[70]", HEADER_HEIGHT_CLASS)}>
-            <div ref={rowRef} className={cn("flex h-full w-full items-center px-2 sm:gap-3 sm:px-4", phone && !manual ? "gap-0" : "gap-1")}>
+            <div ref={rowRef} className={cn("relative flex h-full w-full items-center px-2 sm:gap-3 sm:px-4", phone && !manual ? "gap-0" : "gap-1")}>
               <nav ref={navRef} className={cn("min-w-0 flex flex-nowrap items-center gap-1 overflow-hidden", phone ? "flex-none" : "flex-1")} aria-label="Site Manager Sections">
-                {(!reviewActive ? TABS : []).filter(({ key }) => !phone || !manual || key === "preview").map(({ key, label, Icon }) => {
+                {(!reviewActive ? TABS : []).filter(({ key }) => !phone || key === "preview").map(({ key, label, Icon }) => {
                   const active = tab === key;
                   const className = `inline-flex shrink-0 items-center gap-2 whitespace-nowrap ${phone ? "h-11 w-11 px-0" : compact ? (active && squeeze < 3 ? "px-2.5" : "w-8 px-0") : "px-3"} py-2 rounded-md text-sm font-medium transition-colors border ${
                     active
                       ? "bg-primary text-primary-foreground border-primary shadow-sm"
                       : "bg-transparent text-muted-foreground border-transparent hover:bg-muted hover:text-foreground"
                   }`;
-                  const showLabel = layout.labels && (!compact || (active && squeeze < 3));
+                  const showLabel = !phone && layout.labels && (!compact || (active && squeeze < 3));
                   // On the Preview, Objects, Images and Videos pick an item for the chat; on a management tab, or while editing by hand, they navigate.
                   if (!editing && tab === "preview" && (key === "objects" || key === "images" || key === "videos")) return (
                     <LibraryPicker key={key} kind={key} label={label} Icon={Icon} active={active} showLabel={showLabel} className={className}
@@ -377,16 +377,18 @@ function AdminShell() {
                     </Button>
                   );
                 })}
+                {phone && !reviewActive && <PhoneLibraryMenu onExpand={() => setChatCollapsed(false)} />}
               </nav>
 
               {phone && !reviewActive && (
-                <Button type="button" size="sm" data-capture-primary className="ml-1 h-11 min-w-0 flex-1 gap-1.5 px-2" aria-label="Capture" title="Capture" onClick={() => navigate("/manage/capture")}>
+                <Button type="button" size="sm" data-capture-primary className="absolute left-1/2 h-11 -translate-x-1/2 gap-1.5 px-2" aria-label="Capture" title="Capture" onClick={() => navigate("/manage/capture")}>
                   <Camera className="h-4 w-4 shrink-0" aria-hidden /><span className="truncate">Capture</span>
                 </Button>
               )}
               {(!phone || reviewActive) && <PreviewTools showViewControls={tab === "preview"} tight={!reviewActive && squeeze >= 2} review={reviewActive} />}
 
-              <div aria-hidden className={cn("h-9 w-px bg-border shrink-0", compact && "hidden")} />
+              {phone && <div className="min-w-0 flex-1" />}
+              <div aria-hidden className={cn("h-9 w-px bg-border shrink-0", (phone || compact) && "hidden")} />
               {!phone && !manual && !editing && (reviewActive ? <Button variant="outline" className="h-11 shrink-0" onClick={keepEditing}><Pencil aria-hidden className="h-4 w-4" />Return to Edit</Button> : <SubmitButton compact={compact} showProgress={false} />)}
               {manual && (
                 <Button type="button" size="sm" data-save-changes variant={dirty ? "default" : "outline"} className={cn("shrink-0 gap-1.5", phone && "h-11")} aria-label="Save Changes" title="Save Changes" disabled={finishing || !dirty} onClick={() => void saveChanges()}>
@@ -589,6 +591,37 @@ function AdminShell() {
 }
 
 /** Phone top-bar overflow: account, tools, review and preview size. */
+function PhoneLibraryMenu({ onExpand }: { onExpand: () => void }) {
+  const chat = useDesignChat();
+  const { requestAdd } = useEditorSlot();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const anchor = useRef<HTMLButtonElement>(null);
+  const [picker, setPicker] = useState<LibraryKind | null>(null);
+  const onPreview = location.pathname === "/manage/preview";
+  const choose = (kind: LibraryKind) => {
+    if (chat.mode === "manual" && onPreview && !chat.objectOpen) {
+      if (anchor.current) rememberTopDropAnchor(anchor.current);
+      if (requestAdd(kind)) return;
+    }
+    if (!chat.editing && onPreview) { setPicker(kind); return; }
+    navigate(`/manage/${kind}`);
+  };
+  return <>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild><Button ref={anchor} type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Select Content" title="Select Content"><Box className="h-4 w-4" aria-hidden /></Button></DropdownMenuTrigger>
+      <DropdownMenuContent align="start" onCloseAutoFocus={event => { if (picker) event.preventDefault(); }}>
+        {TABS.filter(({ key }) => key !== "preview").map(({ key, label, Icon }) => <DropdownMenuItem key={key} className="min-h-11" onSelect={() => { if (key === "objects" || key === "images" || key === "videos") choose(key); }}><Icon className="mr-2 h-4 w-4" aria-hidden />{label}</DropdownMenuItem>)}
+      </DropdownMenuContent>
+    </DropdownMenu>
+    {picker && <LibraryPicker kind={picker} label={picker} Icon={Box} active={false} showLabel={false} className="" controlledOpen onOpenChange={open => { if (!open) setPicker(null); }} anchorRef={anchor}
+      addedRefs={chat.refs.references}
+      onDeselectAll={kind => { for (const ref of chat.refs.references) if (ref.kind === kind) chat.refs.removeReference(referenceKey(ref)); }}
+      onPick={ref => { if (chat.refs.references.some(item => item.kind === ref.kind && item.id === ref.id)) chat.refs.removeReference(referenceKey(ref)); else chat.refs.addReference(ref); onExpand(); }}
+      onOpenFull={() => navigate(`/manage/${picker}`)} />}
+  </>;
+}
+
 function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat, onOpenMenu }: { showView: boolean; isAdmin: boolean; onPassword: () => void; onReview: () => void; onChat: () => void; onOpenMenu: () => void }) {
   const modeSwitch = useModeSwitchActions(onChat);
   const { device, setDevice, state, editing, mode, objectOpen, setReviewOpen } = useDesignChat();
@@ -608,7 +641,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat, onOpen
     <ModePageChooser {...modeSwitch.chooserProps} />
     <MoreMenu open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (open) onOpenMenu(); }}>
       <MoreMenuTrigger asChild>
-        <Button ref={triggerRef} type="button" variant="outline" className="nova-phone-menu h-11 shrink-0 gap-1.5 px-2" aria-label="Menu" title="Menu"><Menu className="h-4 w-4 shrink-0" aria-hidden /><span className="nova-phone-menu-label">Menu</span></Button>
+        <Button ref={triggerRef} type="button" variant="outline" className="nova-phone-menu h-11 w-11 shrink-0 px-0" aria-label="Menu" title="Menu"><Menu className="h-4 w-4 shrink-0" aria-hidden /></Button>
       </MoreMenuTrigger>
       <MoreMenuContent align="end">
         <MoreMenuLabel>Menu</MoreMenuLabel>

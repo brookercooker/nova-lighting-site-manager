@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType, type RefObject } from "react";
 import { Box, ExternalLink, Film, Image as ImageIcon, Loader2, Search, X } from "lucide-react";
 import { Sheet, SheetClose, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { TopDropContent } from "./TopDropPanel";
@@ -71,13 +71,16 @@ async function loadRows(kind: LibraryKind): Promise<Row[]> {
   });
 }
 
-export default function LibraryPicker({ kind, label, Icon, active, showLabel, className, onPick, onOpenFull, addedRefs = [], onDeselectAll }: {
+export default function LibraryPicker({ kind, label, Icon, active, showLabel, className, onPick, onOpenFull, addedRefs = [], onDeselectAll, controlledOpen, onOpenChange, anchorRef }: {
   kind: LibraryKind; label: string; Icon: ComponentType<{ className?: string }>; active: boolean; showLabel: boolean; className: string;
   /** Removes every attached reference of this picker's kind (image / video / object). */
   onDeselectAll?: (refKind: ChatReference["kind"]) => void;
   onPick: (ref: ChatReference) => void; onOpenFull: () => void; addedRefs?: ChatReference[];
+  controlledOpen?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: RefObject<HTMLButtonElement>;
 }) {
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => { setLocalOpen(value); onOpenChange?.(value); };
   const trigger = useRef<HTMLButtonElement>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [term, setTerm] = useState("");
@@ -166,16 +169,16 @@ export default function LibraryPicker({ kind, label, Icon, active, showLabel, cl
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
+      {!anchorRef && <SheetTrigger asChild>
         <Button ref={trigger} variant="ghost" type="button" title={label} aria-label={label} aria-current={active ? "page" : undefined}
           aria-haspopup="dialog" aria-expanded={open} aria-pressed={open} className={`${className} data-[picker-open=true]:bg-accent data-[picker-open=true]:text-accent-foreground`}>
           <Icon className="w-4 h-4" />
           {showLabel && <span>{label}</span>}
         </Button>
-      </SheetTrigger>
-      <TopDropContent hideClose anchorRef={trigger}
+      </SheetTrigger>}
+      <TopDropContent hideClose anchorRef={anchorRef ?? trigger}
         onKeyDown={(e) => handleEnter(e.nativeEvent)}
-        onCloseAutoFocus={(e) => { if (picked.current) { e.preventDefault(); picked.current = false; } }}>
+        onCloseAutoFocus={(e) => { if (picked.current) { e.preventDefault(); picked.current = false; } else if (anchorRef) { e.preventDefault(); anchorRef.current?.focus(); } }}>
         <div className="shrink-0 space-y-2 border-b border-border bg-background p-4">
           <div className="flex items-center justify-between gap-2">
             <SheetTitle>{TITLE[kind]}</SheetTitle>

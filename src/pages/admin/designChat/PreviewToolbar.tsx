@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Maximize2, Minimize2, SlidersHorizontal, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Maximize2, Minimize2, Ellipsis, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -70,7 +70,7 @@ export default function PreviewToolbar({ onManualNavigate, manualDisabled = fals
     </Select>
     </div>
     <div className="flex shrink-0 items-center justify-end gap-0.5">
-    {phone || reviewActive ? <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11 shrink-0" : "h-8 w-8 shrink-0"} aria-label="Preview Options" title="Preview Options"><SlidersHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
+    {phone || reviewActive ? <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11 shrink-0" : "h-8 w-8 shrink-0"} aria-label="Preview Options" title="Preview Options"><Ellipsis className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
       {!reviewActive && <DropdownMenuItem onSelect={reload}><RotateCw className="mr-2 h-4 w-4" />Reload Preview</DropdownMenuItem>}
       <DropdownMenuItem onSelect={chat.toggleFull}><FullIcon className="mr-2 h-4 w-4" />{fullLabel}</DropdownMenuItem>
       {href && <DropdownMenuItem asChild><a href={href} target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Open Page in New Tab</a></DropdownMenuItem>}
