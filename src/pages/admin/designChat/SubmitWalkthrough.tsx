@@ -36,7 +36,7 @@ function useGoToPreview(): () => void {
   return () => { if (navigate && location?.pathname !== "/manage/preview") navigate("/manage/preview"); };
 }
 
-const STEP_TITLE: Record<WalkStep, string> = { pages: "Check the Changed Pages", links: "Check the Changed Links", checklist: "Checklist and Submit" };
+const STEP_TITLE: Record<WalkStep, string> = { pages: "Design Check", links: "Verify Links", checklist: "Submit" };
 
 /** Derived progress shared by the dialog and the preview bar. */
 export function walkProgress(data: WalkthroughData, s = walk.get()) {
@@ -147,10 +147,10 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
     <>
       <div className="shrink-0 space-y-2 border-b px-3 py-3">
         <Button type="button" variant="outline" className="h-11 w-full justify-start" onClick={() => { walk.keepEditing(); onClose(); }}><ArrowLeft className="h-4 w-4" aria-hidden />Keep Editing</Button>
-        <p className="text-xs text-muted-foreground" aria-live="polite">Step {idx + 1} of {p.steps.length}</p>
+        <p className="text-xs text-muted-foreground" aria-live="polite">Step {idx + 1} of {p.steps.length} · {STEP_TITLE[p.step]}</p>
         <h2 ref={headingRef} tabIndex={-1} className="font-sans text-lg font-semibold outline-none">{STEP_TITLE[p.step]}</h2>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          {p.step === "pages" ? "Open each changed page and approve it once it looks right."
+          {p.step === "pages" ? "Make sure each page looks the way you want."
             : p.step === "links" ? "Tap a link to see it on the page. Open it, then tap Confirmed. Use Correct to fix a wrong one."
             : reviewOn ? "Your changes will be reviewed automatically, and anything it can't approve may go to a developer. Approved changes are put on the public site."
             : `This puts all ${changes} waiting in your draft on the public site right away. Visitors will see these changes as soon as publishing finishes.`}
@@ -189,9 +189,9 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
         {p.step === "links" && data.links.status === "ok" && <p className="text-sm" aria-live="polite">{p.allLinks.length - p.linksLeft} of {p.allLinks.length} links approved</p>}
         {p.step === "checklist" && left && <p className="text-sm text-muted-foreground" aria-live="polite">{left.charAt(0).toUpperCase() + left.slice(1)}.</p>}
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {idx > 0 && <Button type="button" variant="outline" className="h-11" disabled={sending} onClick={() => setStep(p.steps[idx - 1])}><ArrowLeft className="h-4 w-4" aria-hidden />Back</Button>}
+          {idx > 0 && <Button type="button" variant="outline" className="h-11" disabled={sending} title={`Back to ${STEP_TITLE[p.steps[idx - 1]]}`} onClick={() => setStep(p.steps[idx - 1])}><ArrowLeft className="h-4 w-4" aria-hidden />Back</Button>}
           {p.step !== "checklist"
-            ? <Button type="button" className="h-11" disabled={nextDisabled} onClick={() => setStep(p.steps[idx + 1])}>Next<ArrowRight className="h-4 w-4" aria-hidden /></Button>
+            ? <Button type="button" className="h-11" disabled={nextDisabled} title={`Next: ${STEP_TITLE[p.steps[idx + 1]]}`} onClick={() => setStep(p.steps[idx + 1])}>Next<ArrowRight className="h-4 w-4" aria-hidden /></Button>
             : <Button type="button" variant="review" className="h-11" disabled={!canSubmit} onClick={() => void submit()}><Send className="h-4 w-4" aria-hidden />{sending ? "Sending…" : label}</Button>}
         </div>
       </div>
@@ -225,7 +225,7 @@ function Suggestions({ className }: { className?: string }) {
 function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: WalkthroughData; onView: (r: ChangedRow) => void }) {
   const s = useWalk();
   if (!rows.length) return <p className="text-sm text-muted-foreground">No pages were changed in this draft.</p>;
-  return <><Suggestions className="mb-2" /><ul className="space-y-3" aria-label="Changed Pages">{rows.map(r => {
+  return <><Suggestions className="mb-2" /><ul className="space-y-3" aria-label="Design Check Pages">{rows.map(r => {
     const approved = s.ticked.includes(r.key), viewed = s.viewed.includes(r.key);
     const tab = r.page ? draftPageUrl(r.page.path) : null;
     return <li key={r.key} data-walk-row={r.key} className={cn("min-w-0 rounded-md border p-3 space-y-2", s.checking?.key === r.key && "border-primary bg-primary/5")}>

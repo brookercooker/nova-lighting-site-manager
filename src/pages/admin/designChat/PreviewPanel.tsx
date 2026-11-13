@@ -53,7 +53,7 @@ export default function PreviewPanel() {
   const pending = !editing && !!preview.progressStage;
   const visible = location.pathname.split("/")[2] === "preview" && !editing;
 
-  // Link checking (outlines and click interception) runs only on the Check the Changed Links step.
+  // Link checking (outlines and click interception) runs only on the Verify Links step.
   const walkState = useWalk();
   const linkChecking = linkCheckActive(walkState, visible, editing);
 

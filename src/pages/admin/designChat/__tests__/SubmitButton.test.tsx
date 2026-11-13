@@ -193,7 +193,7 @@ describe("Submit for Review walkthrough", () => {
     expect(dialog()).toHaveTextContent("Step 1 of 2");
     viewAndTick();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    expect(dialog()).toHaveTextContent("Checklist and Submit");
+    expect(within(dialog()).getByRole("heading", { name: "Submit", exact: true })).toBeInTheDocument();
     expect(within(dialog()).queryByText(/links I changed/)).toBeNull();
   });
   it("a failed link listing explains itself and does not block", () => {
