@@ -274,7 +274,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   }, [trust.domains.join("|"), data.links.status]);
   const names = Object.fromEntries(rawGroups.flatMap(g => g.links.map(l => [l.key, linkText(l, data.pages)])));
   const known = (data.inventoryLinks ?? []).map(l => domainOf(l.href)).filter((h): h is string => !!h);
-  const riskFlags = Object.assign({}, ...rawGroups.map(g => groupRisks(g, names, known, trust.domains))) as Record<string, import("./linkRisk").RiskFlag[]>;
+  const riskFlags = Object.assign({}, ...rawGroups.map(g => groupRisks(g, names, known, trust.domains, data.inventoryLinks))) as Record<string, import("./linkRisk").RiskFlag[]>;
   const sortSignature = changeFingerprint(rawGroups.map(g => [groupId(g), g.links.map(l => [l.key, l.href, l.originalHref])])) ;
   if (data.links.status === "ok" && orderedKeys.current.signature !== sortSignature) {
     const rank = (l: ReviewLink) => riskRank(l, data.pages, riskFlags[l.key] ?? []);

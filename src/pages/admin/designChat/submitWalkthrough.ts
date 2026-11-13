@@ -1,4 +1,5 @@
 import type { DraftRequest } from "./helper";
+import { reviewLinkIdentity } from "./reviewLinkIdentity";
 
 /** Pure rules for the Submit for Review walkthrough (pages, links, checklist). */
 export type PageRef = { name: string; path: string; sharedChange?: unknown };
@@ -20,7 +21,7 @@ export function dropRevertedHandEdits(rows: ChangedRow[], pages: ManagerPage[]):
 }
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
 export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirmed"; detail?: string } | null;
-export type ReviewLink = { key: string; href: string; originalHref?: string; kind: LinkKind; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; elementKey?: string; scope?: string; requestIds: string[]; status: RelayLinkStatus };
+export type ReviewLink = { key: string; href: string; originalHref?: string; kind: LinkKind; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; elementKey?: string; scope?: string; inventoryIndex?: number; requestIds: string[]; status: RelayLinkStatus };
 export type LinkGroup = { page: PageRef | null; label: string; links: ReviewLink[]; shared?: { id: string; name: string; pages: PageRef[] } };
 export type ReviewLinks = { groups: LinkGroup[]; unread: number; partial: boolean; truncated: boolean };
 /** Stable value fingerprint; object key order is not a change. */
@@ -120,18 +121,20 @@ export function parseReviewLinks(d: any): ReviewLinks | null {
     if (!g || !Array.isArray(g.links)) continue;
     const page = validPage(g.page) ? { name: g.page.name, path: g.page.path } : null;
     const links: ReviewLink[] = [];
-    for (const l of g.links) {
+    for (const [index, l] of g.links.entries()) {
       if (!l || typeof l.href !== "string" || !l.href || !KINDS.includes(l.kind)) continue;
       const st = l.status && typeof l.status === "object" && STATES.includes(l.status.state)
         ? { state: l.status.state, detail: typeof l.status.detail === "string" ? l.status.detail : undefined } : null;
-      links.push({ key: `${page?.path ?? ""}|${l.href}`, href: l.href, kind: l.kind, label: typeof l.label === "string" && l.label.trim() ? l.label : null,
+      links.push({ key: `${page?.path ?? ""}|relay:${index}`, href: l.href, kind: l.kind, label: typeof l.label === "string" && l.label.trim() ? l.label : null,
         ...(typeof (l.elementKey ?? l.key) === "string" && /^(?:link:)?\d+(?:\.\d+)*$/.test(l.elementKey ?? l.key) ? { elementKey: (l.elementKey ?? l.key).replace(/^link:/, ""), scope: typeof l.scope === "string" ? l.scope : "page" } : {}),
         ...(typeof l.originalHref === "string" ? { originalHref: l.originalHref } : {}),
         ...(l.target === null || l.target === "_blank" ? { target: l.target } : {}),
         ...(typeof l.ariaLabel === "string" && l.ariaLabel.trim() ? { ariaLabel: l.ariaLabel.trim().slice(0, 300) } : {}),
         requestIds: Array.isArray(l.requestIds) ? l.requestIds.filter((x: unknown) => typeof x === "string") : [], status: st });
     }
-    if (links.length) groups.push({ page, label: typeof g.label === "string" && g.label ? g.label : page?.name ?? "Other Links", links });
+    const counts = new Map<string, number>();
+    for (const l of links) if (l.elementKey) { const id = `${l.scope}|${l.elementKey}`; counts.set(id, (counts.get(id) ?? 0) + 1); }
+    if (links.length) groups.push({ page, label: typeof g.label === "string" && g.label ? g.label : page?.name ?? "Other Links", links: links.map((l, i) => l.elementKey && (counts.get(`${l.scope}|${l.elementKey}`) ?? 0) > 1 ? { ...l, inventoryIndex: i } : l) });
   }
   return { groups, unread: Number.isInteger(d.unread) && d.unread > 0 ? d.unread : 0, partial: d.partial === true, truncated: d.truncated === true };
 }
@@ -217,7 +220,7 @@ export function mergeReviewLinks(relay: ReviewLinks, pages: ManagerPage[], handP
   const stored = handLinks(pages, new Set(pages.map(p => normPath(p.path))));
   for (const g of groups) g.links = g.links.map(l => {
     if (!g.page) return l;
-    const matches = stored.filter(h => h.path === normPath(g.page?.path ?? "") && h.href === l.href && (!l.elementKey || (h.elementKey === l.elementKey && h.scope === (l.scope ?? "page"))));
+    const matches = stored.filter(h => h.path === normPath(g.page?.path ?? "") && !!l.elementKey && h.elementKey === l.elementKey && h.scope === (l.scope ?? "page"));
     return matches.length === 1 ? { ...l, target: matches[0].target, elementKey: matches[0].elementKey, scope: matches[0].scope } : l;
   });
   for (const h of handLinks(pages, handPaths)) {
@@ -226,8 +229,11 @@ export function mergeReviewLinks(relay: ReviewLinks, pages: ManagerPage[], handP
       const page = friendly({ name: h.path, path: h.path });
       g = { page, label: page.name, links: [] }; groups.push(g);
     } else if (g.links === relay.groups.find(x => x.page && normPath(x.page.path) === h.path)?.links) g.links = [...g.links];
-    const key = `${g.page!.path}|${h.href}`;
-    if (!g.links.some(l => l.key === key)) g.links.push({ key, href: h.href, target: h.target, elementKey: h.elementKey, scope: h.scope, kind: handLinkKind(h.href), label: null, requestIds: [], status: null });
+    const next: ReviewLink = { key: "", href: h.href, target: h.target, elementKey: h.elementKey, scope: h.scope, kind: handLinkKind(h.href), label: null, requestIds: [], status: null };
+    const key = reviewLinkIdentity(next, h.path);
+    const at = g.links.findIndex(l => l.elementKey === h.elementKey && l.scope === h.scope);
+    if (at >= 0) g.links[at] = { ...g.links[at], href: h.href, kind: handLinkKind(h.href), target: h.target };
+    else g.links.push({ ...next, key });
   }
   return { ...relay, groups };
 }

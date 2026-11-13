@@ -51,14 +51,15 @@ export function mismatch(label: string, href: string): RiskFlag | null {
   if (rule && href.startsWith("/") && !rule.paths.includes(href.split(/[?#]/)[0].replace(/\/$/, ""))) return { kind: "mismatch", reason: `The wording suggests ${rule.paths[0]}, but this goes to ${href}.` };
   return null;
 }
-export function groupRisks(group: LinkGroup, names: Record<string, string>, known: string[], trusted: string[]): Record<string, RiskFlag[]> {
+export function groupRisks(group: LinkGroup, names: Record<string, string>, known: string[], trusted: string[], inventory: (import("./linkInventory").InventoryLink & { inventoryPath?: string })[] = []): Record<string, RiskFlag[]> {
   return Object.fromEntries(group.links.map(l => {
     const flags = hostWarnings(l.href, known, trusted);
     const mis = mismatch(names[l.key] ?? "", l.href); if (mis) flags.push(mis);
-    const others = group.links.filter(o => o.key !== l.key && !(l.scope?.startsWith("object:") && l.scope === o.scope && l.elementKey === o.elementKey));
+    const context: ReviewLink[] = inventory.filter(o => group.shared ? o.scope === `object:${group.shared.id}` : o.inventoryPath !== undefined && o.inventoryPath === group.page?.path).filter(o => !group.links.some(r => r.scope === o.scope && r.elementKey === o.key && r.inventoryIndex === o.inventoryIndex)).map(o => ({ ...o, key: `inventory:${o.scope}|${o.key}|${o.inventoryIndex ?? ""}`, elementKey: o.key, kind: "internal", requestIds: [], status: null }));
+    const others = [...group.links, ...context].filter(o => o.key !== l.key && !(l.scope?.startsWith("object:") && l.scope === o.scope && l.elementKey === o.elementKey && l.inventoryIndex === o.inventoryIndex));
     const swap = others.find(o => l.originalHref && o.originalHref && l.originalHref !== l.href && l.href === o.originalHref && o.href === l.originalHref);
     const duplicate = others.find(o => o.href === l.href);
-    if (swap) flags.push({ kind: "swap", reason: `Looks swapped with ${names[swap.key] ?? "another link"}`, otherKey: swap.key });
+    if (swap) flags.push({ kind: "swap", reason: `Looks swapped with ${names[swap.key] ?? swap.image?.alt ?? swap.visibleText ?? swap.label ?? "another link"}`, ...(group.links.includes(swap) ? { otherKey: swap.key } : {}) });
     if (duplicate) flags.push({ kind: "duplicate", reason: `Same destination as: ${names[duplicate.key] ?? "another link"}`, otherKey: duplicate.key });
     return [l.key, flags];
   }));

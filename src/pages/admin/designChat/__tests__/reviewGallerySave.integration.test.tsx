@@ -32,7 +32,7 @@ it("saves the unambiguous Gallery row through real resolver/saveRow and reads re
   expect(JSON.parse(db.row.inline_edits["link:0.5.0.0"])).toEqual({ href: "/contact" });
   expect(db.row.inline_edits["fp:0.5.0.0"]).toBe('{"v":1,"tag":"div","t":"card"}');
   expect(db.row.inline_edits["html:0.1"]).toBe("preserved");
-  expect(linkState(link.key, walk.get().linkTicked, walk.get().linkReplaced)).toBe("replaced");
+  expect(linkState(link.key, walk.get().linkTicked, walk.get().linkReplaced)).toBe("todo");
   const next = walk.get().savedReviewLinks[0].link;
   expect(next).toMatchObject({ href: "/contact", elementKey: "0.5.0.0", scope: "page" });
   expect(linkState(next.key, walk.get().linkTicked, walk.get().linkReplaced)).toBe("todo");

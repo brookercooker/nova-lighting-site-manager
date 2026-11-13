@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { normPath, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
-import { reviewLinkIdentity } from "./reviewLinkIdentity";
+import { reviewLinkIdentity, sameReviewLink } from "./reviewLinkIdentity";
 
 /** How long after Change This Link a refetched page keeps its approvals (re-pinned to the new fingerprint). */
 export const REPIN_MS = 120_000;
@@ -79,7 +79,7 @@ export const walk = {
     const edit = state.reviewEdit;
     if (!edit) return;
     const stableKey = reviewLinkIdentity(link, path);
-    const previous = state.savedReviewLinks.filter(x => reviewLinkIdentity(x.link, x.path) === stableKey || x.link.key === edit.link.key);
+    const previous = state.savedReviewLinks.filter(x => normPath(x.path) === normPath(path) && sameReviewLink(x.link, link, path));
     const replacedKeys = [...new Set([edit.link.key, ...previous.flatMap(x => [x.link.key, ...(x.replacedKeys ?? [])])])];
     walk.update(s => ({ ...s, reviewEdit: null, repin: { path: normPath(path), until: Date.now() + REPIN_MS },
       verificationOpened: Object.fromEntries(Object.entries(s.verificationOpened).filter(([k]) => k !== edit.link.key && k !== link.key)),
@@ -87,6 +87,7 @@ export const walk = {
       linkTicked: s.linkTicked.filter(k => k !== edit.link.key && k !== link.key),
       linkApprovals: Object.fromEntries(Object.entries(s.linkApprovals).filter(([k]) => k !== edit.link.key && k !== link.key)),
       linkReplaced: Object.fromEntries(Object.entries(s.linkReplaced).filter(([k]) => k !== edit.link.key && k !== stableKey)),
+      changed: s.changed.filter(k => k !== edit.link.key && k !== stableKey),
       savedReviewLinks: [...s.savedReviewLinks.filter(x => !previous.includes(x)), { path, link: { ...link, key: stableKey }, replacedKeys }] }));
   },
   /** Change This Link: remember the return point (step "links", which link) and close the walkthrough. */
@@ -134,6 +135,7 @@ export const walk = {
     }
     const invalid = Object.entries(state.approvals).filter(([k,v]) => pages[k] !== v).map(([k]) => k);
     const badLinks = links ? Object.entries(state.linkApprovals).filter(([k,v]) => links[k] !== v).map(([k]) => k) : [];
+    const changedLinks = links ? badLinks.filter(k => links[k] !== undefined) : [];
     const staleReplaced = own ? Object.entries(state.linkReplaced).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
     const staleOpened = own ? Object.entries(state.verificationOpened).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
     const staleKept = own ? Object.entries(state.keptMissing).filter(([k, v]) => own[k] !== v).map(([k]) => k) : [];
@@ -145,7 +147,7 @@ export const walk = {
       ticked: s.ticked.filter(k => !invalid.includes(k)), viewed: s.viewed.filter(k => !invalid.includes(k)),
       linkTicked: s.linkTicked.filter(k => !badLinks.includes(k)), linkOpened: s.linkOpened.filter(k => !badLinks.includes(k)),
       approvals: Object.fromEntries(Object.entries(s.approvals).filter(([k]) => !invalid.includes(k))), linkApprovals: Object.fromEntries(Object.entries(s.linkApprovals).filter(([k]) => !badLinks.includes(k))),
-      changed: [...new Set([...s.changed, ...invalid, ...badLinks])] }));
+      changed: [...new Set([...s.changed.filter(k => !badLinks.includes(k) || changedLinks.includes(k)), ...invalid, ...changedLinks])] }));
   },
   /** Reopen from the preview bar in the dialog that opened it, or a host that is still mounted. */
   reopen(step?: WalkStep) {

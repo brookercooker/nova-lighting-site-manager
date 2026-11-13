@@ -1,15 +1,23 @@
 import { normPath, type LinkGroup, type LinkKind, type ManagerPage, type ReviewLink, type ReviewLinks } from "./submitWalkthrough";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
+import { reviewLinkIdentity } from "./reviewLinkIdentity";
 
 /** Link inventory (Public companion, v1): the links a rendered page really has, used for a true draft-vs-live Links step. */
-export type InventoryLink = { key: string; scope: string; href: string; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; originalHref?: string; fingerprint?: string };
+export type InventoryLink = { key: string; scope: string; href: string; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; originalHref?: string; fingerprint?: string; inventoryIndex?: number; inventoryPath?: string };
+/** Only repeated inventory keys need an index; destination never disambiguates an element. */
+export function indexedInventory(links: InventoryLink[]): InventoryLink[] {
+  const counts = new Map<string, number>();
+  for (const l of links) { const id = `${l.scope}|${l.key}`; counts.set(id, (counts.get(id) ?? 0) + 1); }
+  return links.map((l, index) => (counts.get(`${l.scope}|${l.key}`) ?? 0) > 1 ? { ...l, inventoryIndex: l.inventoryIndex ?? index } : l);
+}
+export const inventoryIdentity = (l: InventoryLink) => `${l.scope}|${l.key}${l.inventoryIndex === undefined ? "" : `|index:${l.inventoryIndex}`}`;
 export type Inventory = { path: string; links: InventoryLink[] };
 /** Retain display facts only for the same reported identity and destination; fresh membership always wins. */
 export function retainInventoryMetadata(fresh: Inventory | null, previous?: Inventory): Inventory | null {
   if (!fresh) return previous ?? null;
   if (!previous || normPath(previous.path) !== normPath(fresh.path)) return fresh;
   return { ...fresh, links: fresh.links.map(link => {
-    const prior = previous.links.find(p => p.scope === link.scope && p.key === link.key && p.href === link.href);
+    const prior = previous.links.find(p => inventoryIdentity(p) === inventoryIdentity(link) && p.href === link.href);
     return prior ? { ...link, label: link.label || prior.label, visibleText: link.visibleText || prior.visibleText, ariaLabel: link.ariaLabel || prior.ariaLabel, image: link.image || prior.image, originalHref: link.originalHref || prior.originalHref } : link;
   }) };
 }
@@ -52,7 +60,7 @@ export function parseInventory(d: any): Inventory | null {
       ...(ok(l.originalHref, 2048) ? { originalHref: l.originalHref } : {}),
       ...(typeof l.fingerprint === "string" && l.fingerprint.length <= 2048 ? { fingerprint: l.fingerprint } : {}) });
   }
-  return { path: d.path, links };
+  return { path: d.path, links: indexedInventory(links) };
 }
 
 /** The deployed live site, when configured; without it the Links step keeps the relay-based list. */
@@ -87,9 +95,9 @@ export function requestInventory(url: string, timeoutMs = INVENTORY_TIMEOUT_MS, 
 const kindOf = (href: string): LinkKind => /^mailto:/i.test(href) ? "mail" : /^tel:/i.test(href) ? "phone" : href.startsWith("#") ? "anchor" : /^\/(?!\/)/.test(href) ? "internal" : "external";
 /** Draft links that are new, or whose destination differs from the same element on the live page. */
 export function diffInventories(draft: Inventory, live: Inventory): InventoryLink[] {
-  const liveBy = new Map(live.links.map(l => [l.scope + "|" + l.key, l.href]));
+  const liveBy = new Map(indexedInventory(live.links).map(l => [inventoryIdentity(l), l.href]));
   const seen = new Set<string>();
-  return draft.links.map(l => ({ ...l, originalHref: liveBy.get(l.scope + "|" + l.key) ?? l.originalHref })).filter(l => { const before = liveBy.get(l.scope + "|" + l.key); const id = l.scope + "|" + l.key; if (seen.has(id)) return false; seen.add(id); return before !== l.href; });
+  return indexedInventory(draft.links).map(l => ({ ...l, originalHref: liveBy.get(inventoryIdentity(l)) ?? l.originalHref })).filter(l => { const id = inventoryIdentity(l); const before = liveBy.get(id); if (seen.has(id)) return false; seen.add(id); return before !== l.href; });
 }
 /** Replace each page group that has both inventories with its net changes; pages without them keep the existing rows. */
 export function netReviewLinks(base: ReviewLinks, nets: Record<string, InventoryLink[]>, pages: ManagerPage[]): ReviewLinks {
@@ -109,10 +117,10 @@ export function netReviewLinks(base: ReviewLinks, nets: Record<string, Inventory
 function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): ReviewLink[] {
   const out: ReviewLink[] = [];
   for (const l of list) {
-    const key = `${path}|${l.href}`;
+    const key = reviewLinkIdentity({ ...l, elementKey: l.key, kind: kindOf(l.href), requestIds: [], status: null }, path);
     if (out.some(x => x.key === key)) continue;
-    const was = prior.find(x => x.key === key);
-    out.push({ ...(was ?? { key, href: l.href, kind: kindOf(l.href), requestIds: [], status: null }), originalHref: l.originalHref, elementKey: l.key, scope: l.scope, target: l.target ?? null, label: l.label, ...(l.ariaLabel ? { ariaLabel: l.ariaLabel } : {}), ...(l.visibleText ? { visibleText: l.visibleText } : {}), ...(l.image ? { image: l.image } : {}) });
+    const was = prior.find(x => x.elementKey && reviewLinkIdentity(x, path) === key);
+    out.push({ ...was, key, href: l.href, kind: kindOf(l.href), requestIds: was?.requestIds ?? [], status: was?.href === l.href ? was.status : null, originalHref: l.originalHref ?? was?.originalHref, elementKey: l.key, scope: l.scope, inventoryIndex: l.inventoryIndex, target: l.target ?? null, label: l.label || was?.label || null, ariaLabel: l.ariaLabel || was?.ariaLabel, visibleText: l.visibleText || was?.visibleText, image: l.image || was?.image });
   }
   return out;
 }

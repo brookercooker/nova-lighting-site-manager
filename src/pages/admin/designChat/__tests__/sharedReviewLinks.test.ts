@@ -23,7 +23,7 @@ describe("shared review links", () => {
     const result = mergeSharedReviewLinks(base, [{ id: "about-us", name: "About Us", inlineEdits: { "link:0.1": '{"href":"/contact"}' }, pages }], pages);
     expect(result.groups).toHaveLength(1);
     expect(result.groups[0].shared?.pages.map(p => p.name)).toEqual(["About", "Homepage"]);
-    expect(result.groups[0].links).toEqual([expect.objectContaining({ href: "/contact", scope: "object:about-us", elementKey: "0.1", key: "object:about-us|0.1|/contact" })]);
+    expect(result.groups[0].links).toEqual([expect.objectContaining({ href: "/contact", scope: "object:about-us", elementKey: "0.1", key: "object:about-us|0.1" })]);
   });
   it.each(["Header", "Footer"])("includes %s object overrides and deduplicates inventory copies", name => {
     const link = { key: "/|/contact", href: "/contact", kind: "internal" as const, label: "Find a Location", requestIds: [], status: null, scope: "object:chrome", elementKey: "0.1" };

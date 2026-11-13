@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
-import { reviewLinkIdentity, stableReviewRows } from "./reviewLinkIdentity";
+import { reviewLinkIdentity, sameReviewLink, stableReviewRows } from "./reviewLinkIdentity";
 import { useWalk } from "./submitWalkthroughStore";
 import { addSharedChromeRows, mergeSharedReviewLinks, stableReviewEdits, type SharedReviewObject } from "./sharedReviewLinks";
 import { liveSiteBase, loadNetLinks, netReviewLinks, requestFrameInventory, requestInventory, retainInventoryMetadata, type InventoryLink } from "./linkInventory";
@@ -123,15 +123,15 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     return { links: inventories.flatMap(({ inventory: item }) => item ? item.links.map(link => ({ ...link, inventoryPath: item.path })) : []), unavailable: inventories.some(item => !item.fresh) };
   } });
   const labelled = merged ? { ...merged, groups: merged.groups.map(group => ({ ...group, links: group.links.map(link => {
-    const item = sharedLabels.data?.links.find(item => item.scope === link.scope && item.key === link.elementKey && (group.shared || normPath(item.inventoryPath) === normPath(group.page?.path ?? "/")));
-    return item ? { ...link, elementKey: item.key, scope: item.scope, originalHref: item.originalHref ?? link.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
+    const item = sharedLabels.data?.links.find(item => item.scope === link.scope && item.key === link.elementKey && item.inventoryIndex === link.inventoryIndex && (group.shared || normPath(item.inventoryPath) === normPath(group.page?.path ?? "/")));
+    return item ? { ...link, elementKey: item.key, scope: item.scope, originalHref: link.originalHref ?? item.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
   }) })) } : null;
   const siteInventory = useQuery({ queryKey: ["walkthrough", "site-hosts", pages.data?.map(p => p.path)], enabled: enabled && walkState.step === "links" && !!pages.data?.length, staleTime: 300_000, retry: false, queryFn: async () => {
     let base: string; try { base = publicPreviewBase(shownPreviewFrame()?.src); } catch { return []; }
     const queue = [...new Set((pages.data ?? []).map(p => p.path))];
     const all: InventoryLink[] = [];
     await Promise.all(Array.from({ length: 3 }, async () => {
-      while (queue.length) { const path = queue.shift(); if (!path) continue; const inventory = await requestInventory(publicPreviewPage(base, path)); if (inventory) all.push(...inventory.links); }
+      while (queue.length) { const path = queue.shift(); if (!path) continue; const inventory = await requestInventory(publicPreviewPage(base, path)); if (inventory) all.push(...inventory.links.map(l => ({ ...l, inventoryPath: normPath(inventory.path) }))); }
     }));
     return all;
   } });
@@ -158,12 +158,13 @@ export function mergeSavedReviewLinks(base: ReviewLinks, saved: { path: string; 
   const groups = base.groups.map(g => ({ ...g, links: [...g.links] }));
   for (const x of saved) {
     if (normPath(x.path) in nets) continue;
-    let g = groups.find(g => x.link.scope?.startsWith("object:") ? `object:${g.shared?.id}` === x.link.scope : g.links.some(l => l.key === x.link.key || x.replacedKeys?.includes(l.key) || reviewLinkIdentity(l, g.page?.path ?? x.path) === reviewLinkIdentity(x.link, x.path)) || (x.link.key.startsWith("|") ? !g.page : g.page && normPath(g.page.path) === normPath(x.path)));
+    let g = groups.find(g => x.link.scope?.startsWith("object:") ? `object:${g.shared?.id}` === x.link.scope : g.page && normPath(g.page.path) === normPath(x.path));
     if (!g) { const page = pages.find(p => normPath(p.path) === normPath(x.path)); g = { page: { path: x.path, name: page?.name ?? x.path }, label: page?.name ?? x.path, links: [] }; groups.push(g); }
-    const identity = reviewLinkIdentity(x.link, x.path);
-    const at = g.links.findIndex(l => reviewLinkIdentity(l, g.page?.path ?? x.path) === identity || x.replacedKeys?.includes(l.key));
-    g.links = g.links.filter((l, i) => i === at || !(reviewLinkIdentity(l, g.page?.path ?? x.path) === identity || x.replacedKeys?.includes(l.key)));
-    if (at >= 0) g.links[at] = x.link; else g.links.push(x.link);
+    const matches = (l: import("./submitWalkthrough").ReviewLink) => sameReviewLink(l, x.link, x.path) || !l.elementKey && !x.link.elementKey && !!x.replacedKeys?.includes(l.key);
+    const at = g.links.findIndex(matches);
+    const prior = at >= 0 ? g.links[at] : undefined;
+    const next = { ...prior, ...x.link, originalHref: x.link.originalHref ?? prior?.originalHref, label: x.link.label || prior?.label || null, visibleText: x.link.visibleText || prior?.visibleText, image: x.link.image || prior?.image };
+    if (at >= 0) g.links = g.links.flatMap((l, i) => i === at ? [next] : matches(l) ? [] : [l]); else g.links.push(next);
   }
   return { ...base, groups };
 }

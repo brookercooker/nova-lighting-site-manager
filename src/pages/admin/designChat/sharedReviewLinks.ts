@@ -1,4 +1,5 @@
 import { normPath, type PageRef, type ReviewLinks, type ReviewLink, type ManagerPage, type ChangedRow } from "./submitWalkthrough";
+import { reviewLinkIdentity } from "./reviewLinkIdentity";
 
 export type SharedReviewObject = { id: string; name: string; componentKey?: string; inlineEdits: unknown; content?: unknown; pages: PageRef[] };
 /** One stored object link per scope/key, regardless of how many pages render it. */
@@ -11,7 +12,7 @@ export function mergeSharedReviewLinks(base: ReviewLinks, objects: SharedReviewO
     const links = new Map<string, ReviewLink>();
     const scope = `object:${object.id}`;
     for (const g of groups) {
-      for (const l of g.links.filter(l => l.scope === scope && l.elementKey)) links.set(l.elementKey ?? "", { ...l, key: `${scope}|${l.elementKey}|${l.href}` });
+      for (const l of g.links.filter(l => l.scope === scope && l.elementKey)) links.set(l.elementKey ?? "", { ...l, key: reviewLinkIdentity(l, g.page?.path ?? "/") });
       g.links = g.links.filter(l => l.scope !== scope);
     }
     for (const [key, value] of Object.entries(object.inlineEdits)) {
@@ -22,7 +23,7 @@ export function mergeSharedReviewLinks(base: ReviewLinks, objects: SharedReviewO
         const elementKey = key.slice(5), href = override.href;
         const prior = links.get(elementKey);
         const kind = /^mailto:/i.test(href) ? "mail" : /^tel:/i.test(href) ? "phone" : href.startsWith("#") ? "anchor" : /^\/(?!\/)/.test(href) ? "internal" : "external";
-        links.set(elementKey, { ...prior, key: `${scope}|${elementKey}|${href}`, href, kind, elementKey, scope, target: override.target === "_blank" ? "_blank" : null, label: prior?.label ?? null, requestIds: prior?.requestIds ?? [], status: prior?.status ?? null });
+        links.set(elementKey, { ...prior, key: `${scope}|${elementKey}`, href, kind, elementKey, scope, target: override.target === "_blank" ? "_blank" : null, label: prior?.label ?? null, requestIds: prior?.requestIds ?? [], status: prior?.status ?? null });
       } catch { /* malformed stored overrides never authorize a write */ }
     }
     if (links.size) groups.push({ page: uses[0], shared: { id: object.id, name: object.name, pages: uses }, label: `Shared: ${object.name}`, links: [...links.values()] });
