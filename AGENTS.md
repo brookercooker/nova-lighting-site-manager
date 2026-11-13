@@ -47,5 +47,3 @@
 - Read nested AGENTS.md; admin rules cover picker scrolling and authoritative retry snapshots to preserve context.
 - Label search: see admin rules.
 - Manager libraries share a content-width container and the existing label list in a dialog; narrow card layouts reuse all item actions so no separate data or action paths diverge.
-
-- Library List/Grid uses shared LibraryListRow actions and libraryView scoped preferences; parent selection/filter/paging state stays layout-independent, and LibraryWindow retains grid geometry while releasing distant media.

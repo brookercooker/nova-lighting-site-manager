@@ -1,4 +1,5 @@
 # Site Manager (src/pages/admin) rules
+- Library List/Grid uses shared LibraryListRow actions and libraryView scoped preferences; parent selection/filter/paging state stays layout-independent, and LibraryWindow retains grid geometry while releasing distant media.
 - Library card labels share LibraryCardLabels and libraryLabels for bounded names, overflow and additive filters; LibraryFilterToolbar owns the existing management dialog so every scope keeps its storage/actions.
 - Filters, item label editors and chat label menus share memoized LabelSearchList and objectLabelFilter normalization, with local search, bounded native scrolling and capture-phase Escape clearing before overlay dismissal; no new persistent state. Item usage counts read existing scoped label arrays through useLabelUsageCounts.
 - Audit titles use a capped first-line presentation with expandable full saved wording, never changing link identity/search; count copy distinguishes current versus removed/filter results and shared-chrome deduplication from raw inventory totals.
