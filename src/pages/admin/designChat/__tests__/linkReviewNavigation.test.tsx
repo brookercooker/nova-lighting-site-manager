@@ -9,6 +9,9 @@ vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: { publis
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 const link = (key: string): ReviewLink => ({ key, href: `https://example.com/${key}`, kind: "external", label: key, elementKey: "0.1", scope: "page", requestIds: [], status: null });
 beforeEach(() => {
+  const preview = document.createElement("section");
+  preview.id = "link-review-navigation";
+  document.body.appendChild(preview);
   walk.reset(); m.show.mockClear();
   m.data = { rows: [], pages: [], pagesStatus: "ok", links: { status: "ok", unread: 0, partial: false, truncated: false, groups: [
     { label: "Homepage", page: { name: "Homepage", path: "/" }, links: [link("first")] },
@@ -16,7 +19,7 @@ beforeEach(() => {
   ] } };
   walk.update(s => ({ ...s, open: true, step: "links" }));
 });
-afterEach(() => { cleanup(); walk.reset(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); document.getElementById("link-review-navigation")?.remove(); walk.reset(); vi.restoreAllMocks(); });
 const header = () => within(screen.getByRole("region", { name: "Link Review Navigation" }));
 
 it.each([320, 375, 1280])("selects each source page and exact link without approval on navigation at %spx", width => {

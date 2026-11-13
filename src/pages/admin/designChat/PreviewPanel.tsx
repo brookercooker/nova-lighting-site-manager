@@ -69,6 +69,7 @@ export default function PreviewPanel() {
   return (
     <section ref={sectionRef} className="flex h-full min-h-0 flex-col" aria-label="Preview">
       <ContentSyncNote previewFailed={previewFailed} />
+      <div id="link-review-navigation" className="relative z-[60] min-w-0 shrink-0" />
       <WalkthroughCheckBar />
       {linkChecking && <LinkCheckBridge root={sectionRef} frameKey={`${preview.shownId}|${frameAddresses}`} />}
       <div className={cn("shrink-0 overflow-hidden bg-background transition-[height] duration-200 motion-reduce:transition-none", ribbon && !ribbon.fading ? phone ? "h-2" : "h-12" : "h-0")}>

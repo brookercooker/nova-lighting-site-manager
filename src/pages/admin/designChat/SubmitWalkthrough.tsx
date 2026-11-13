@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Pencil, ArrowRight, Check, ChevronDown, ExternalLink, Send, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -262,6 +263,8 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   const { preview } = useDesignChat();
   const { phone } = useManagerLayout();
   const expanded = s.groupExpansion;
+  const [navigationHost, setNavigationHost] = useState<HTMLElement | null>(null);
+  useEffect(() => { setNavigationHost(document.getElementById("link-review-navigation")); }, []);
   const setExpanded = (fn: (e: Record<string, boolean>) => Record<string, boolean>) => walk.update(w => ({ ...w, groupExpansion: fn(w.groupExpansion) }));
   const manuallyOpened = useRef(new Set<string>(Object.keys(s.groupExpansion).filter(k => s.groupExpansion[k])));
   const orderedKeys = useRef<{ signature: string; groups: string[]; links: Record<string, string[]> }>({ signature: "", groups: [], links: {} });
@@ -326,23 +329,23 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
   const currentTabUrl = currentDestination ? draftPageUrl(currentDestination, currentEmbed) : current && /^(https?:|mailto:|tel:)/i.test(current.l.href) ? current.l.href : null;
   return (
     <div ref={listRef} className="space-y-4">
-      {current && <div role="region" aria-label="Link Review Navigation" className="sticky top-0 z-20 -mx-3 border-b bg-background px-3 pb-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground" aria-live="polite">Link {currentIndex + 1} of {reviewLinks.length} · {current.g.label}</p>
-          <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Previous Link" title="Previous Link" disabled={currentIndex === 0} onClick={() => showAt(currentIndex - 1)}><ArrowLeft aria-hidden /></Button>
-          <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Next Link" title="Next Link" disabled={currentIndex === reviewLinks.length - 1} onClick={() => showAt(currentIndex + 1)}><ArrowRight aria-hidden /></Button>
+      {current && navigationHost && createPortal(<div role="region" aria-label="Link Review Navigation" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background px-3 py-2 text-foreground">
+        <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
+          <p className="truncate text-xs text-muted-foreground" aria-live="polite">Link {currentIndex + 1} of {reviewLinks.length} · {current.g.label}</p>
+          <p className="truncate text-sm font-semibold" title={reviewTileTitle(current.l, data.pages)}>{reviewTileTitle(current.l, data.pages)}</p>
         </div>
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="min-w-0 flex-1 truncate text-sm font-semibold" title={reviewTileTitle(current.l, data.pages)}>{reviewTileTitle(current.l, data.pages)}</p>
-          {currentTabUrl && <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0"><a href={currentTabUrl} target="_blank" rel="noopener noreferrer" aria-label="Open Current Link to Verify" title="Open Current Link to Verify" onClick={e => openReviewIcon(e, currentTabUrl, () => walk.openedVerification(current.l.key, ownLinkPrint(current.l)))}><ExternalLink aria-hidden /></a></Button>}
-        </div>
-        <Button type="button" variant={currentHandled ? "outline" : "default"} className="h-11 w-full min-w-0 px-2" disabled={!currentHandled && !currentCanApprove} aria-label="Approve Current Link and Continue" onClick={() => {
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9" aria-label="Previous Link" title="Previous Link" disabled={currentIndex === 0} onClick={() => showAt(currentIndex - 1)}><ArrowLeft aria-hidden /></Button>
+          {currentTabUrl && <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"><a href={currentTabUrl} target="_blank" rel="noopener noreferrer" aria-label="Open Current Link to Verify" title="Open Current Link to Verify" onClick={e => openReviewIcon(e, currentTabUrl, () => walk.openedVerification(current.l.key, ownLinkPrint(current.l)))}><ExternalLink aria-hidden /></a></Button>}
+        <Button type="button" size="sm" variant={currentHandled ? "outline" : "default"} className="h-11 min-w-0 gap-1 px-2 text-xs shadow-none sm:h-9" disabled={!currentHandled && !currentCanApprove} aria-label="Approve Current Link and Continue" onClick={() => {
           if (!currentHandled && !currentCanApprove) return;
           if (!currentHandled) walk.confirmLink(current.l.key, ownLinkPrint(current.l), true);
           const next = [...reviewLinks.slice(currentIndex + 1), ...reviewLinks.slice(0, currentIndex)].find(x => linkNeedsCheck(x.l, walk.get(), data.pages));
           if (next) onShow(next.l, next.g);
         }}><Check aria-hidden />{currentHandled ? currentApproved ? "Approved" : "Replaced by Hand" : currentIndex === reviewLinks.length - 1 ? "Approve Link" : "Approve & Next"}</Button>
-      </div>}
+          <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9" aria-label="Next Link" title="Next Link" disabled={currentIndex === reviewLinks.length - 1} onClick={() => showAt(currentIndex + 1)}><ArrowRight aria-hidden /></Button>
+        </div>
+      </div>, navigationHost)}
       {data.inventoryUnavailable && <div className="text-xs text-muted-foreground" role="status">Link details couldn't be checked.<Button variant="link" className="h-11 px-2" onClick={data.retryInventory}>Retry</Button></div>}
       {s.linkNote && <p role="status" className="rounded-md border bg-secondary p-3 text-sm">{s.linkNote}</p>}
       {unread > 0 && <p className="text-xs text-muted-foreground">{unread} {unread === 1 ? "change" : "changes"} couldn't be checked for links. Check those pages by hand.</p>}
