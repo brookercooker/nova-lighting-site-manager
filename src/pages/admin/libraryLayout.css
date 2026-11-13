@@ -86,6 +86,14 @@
 .nova-label-management .group > div:last-child { gap:0; }
 
 .nova-library-items-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(141.333px,calc((100% - 12px)/2)),1fr)); gap:12px; padding-bottom:160px; min-width:0; }
+.nova-library-content { container-type:inline-size; container-name:nova-library-cards; }
+.nova-library-items-grid[data-library-grid-scope] { grid-template-columns:minmax(0,1fr); }
+@container nova-library-cards (min-width:340px) {
+  .nova-library-items-grid[data-library-grid-scope] { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@container nova-library-cards (min-width:900px) {
+  .nova-library-items-grid[data-library-grid-scope] { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
 @media(max-width:639px) { .nova-library-items-grid { margin-inline:4px; } }
 .nova-library-grid-window { min-width:0; height:100%; }
 .nova-library-grid-card { position:relative; display:flex; flex-direction:column; height:100%; min-width:0; border:1px solid hsl(var(--border)); border-radius:8px; overflow:hidden; background:hsl(var(--background)); cursor:pointer; }

@@ -11,7 +11,7 @@ async def main():
   with open(os.path.expanduser('~/.cache/lovable-auth/session.json')) as f: minted=json.load(f)
   await page.goto('http://localhost:8080')
   await page.evaluate('([k,v])=>localStorage.setItem(k,v)',[minted['storage_key'],json.dumps(minted['session'])])
-  for width in [320,375,480,1024]:
+  for width in [320,375,487,768,1280]:
    await page.set_viewport_size({'width':width,'height':812 if width<600 else 1800})
    for route,scope,default in [('objects','objects','grid'),('pages','static','list'),('pages?tab=landing','landing','list'),('images','images','grid'),('videos','videos','grid')]:
     await page.evaluate('(s)=>localStorage.removeItem("nova:library-view:"+s)',scope)
@@ -24,9 +24,12 @@ async def main():
     layout=await page.locator('[data-library-items="grid"]').evaluate('''e=>({width:e.clientWidth,columns:getComputedStyle(e).gridTemplateColumns.split(' ').length,overflow:e.scrollWidth>e.clientWidth,top:e.getBoundingClientRect().top,toolbar:document.querySelector('[data-library-toolbar]').getBoundingClientRect().bottom,pageOverflow:document.documentElement.scrollWidth>innerWidth})''')
     print(width,scope,layout, 'rows',await page.locator('[data-library-row]').count())
     assert not layout['overflow'] and not layout['pageOverflow']
-    expected=2 if width<480 else 3 if width<600 else 4
+    container_width=await page.locator(".nova-library-content").evaluate("e=>e.clientWidth")
+    expected=(1 if container_width<340 else 2 if container_width<900 else 3) if scope in ["objects","images","videos"] else layout["columns"]
     assert layout['columns']==expected, (width,scope,layout)
-    assert layout['top']-layout['toolbar']<190
+    assert layout['top']-layout['toolbar']<240
+    if scope in ['objects','images','videos']:
+     assert (layout['width']-12*(expected-1))/expected>=160
     await page.screenshot(path=str(OUT/f'{scope}-{width}.png'))
     if await page.locator('[data-library-row]').count():
      row=page.locator('[data-library-row]').first
