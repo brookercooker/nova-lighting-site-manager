@@ -548,9 +548,9 @@ function AdminShell() {
           {/* Which page you're on, just below the Chat / Manual Edit switch. */}
           {!phone && !reviewShown && (manual || !chatCollapsed) && <WorkingPageChip className="mx-2 my-2 shrink-0" />}
           <ContentSyncNote />
-          {reviewShown && (walkthrough.open ? <SubmitWalkthroughPanel onKeepEditing={keepEditing} onCheckPhone={() => { designChat.setReviewOpen(false); phoneChat.close(); }}>
+          {(walkthrough.open || walkthrough.checking || reviewShown) && <div className={cn("flex min-h-0 flex-1 flex-col", !reviewShown && "hidden")} aria-hidden={!reviewShown}>{(walkthrough.open || walkthrough.checking) ? <SubmitWalkthroughPanel onKeepEditing={keepEditing} onCheckPhone={() => { designChat.setReviewOpen(false); phoneChat.close(); }}>
             <ReviewChangesView embedded onShowPreview={() => { if (tab !== "preview") navigate("/manage/preview"); }} />
-          </SubmitWalkthroughPanel> : <ReviewChangesView onShowPreview={() => { if (tab !== "preview") navigate("/manage/preview"); }} />)}
+          </SubmitWalkthroughPanel> : <ReviewChangesView onShowPreview={() => { if (tab !== "preview") navigate("/manage/preview"); }} />}</div>}
           {manual && workingPage && (
             <div className="flex min-h-0 flex-1 flex-col">
               <div ref={editingHeaderRef} tabIndex={-1} className={cn("flex shrink-0 flex-col gap-2", (objectOpen || designChat.state?.busy) && "border-b px-3 py-3", phone && phonePane === "main" && "hidden")}>

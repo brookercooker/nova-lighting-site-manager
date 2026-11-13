@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { frameOrigin, isLinkCheckReady, linkCheckList, parseLinkClick, postLinkCheck, type LinkCheckEntry, type LinkClick } from "./linkCheck";
+import { frameOrigin, isLinkCheckReady, linkCheckList, parseLinkClick, postLinkCheck, postLinkFocus, type LinkCheckEntry, type LinkClick } from "./linkCheck";
 import { publicLinkAddress } from "../linkDisplay";
 import { shownPreviewFrame } from "./previewNavigate";
 import { matchChangedLink } from "./linkCheck";
@@ -14,6 +14,16 @@ export function LinkCheckBridge({ root, frameKey }: { root: RefObject<HTMLElemen
   const data = useWalkthroughData(state, true);
   const links = data?.links.status === "ok" ? linkCheckList(data.links.groups, s.linkTicked, s.linkReplaced) : [];
   const { setReviewOpen } = useDesignChat();
+  useEffect(() => {
+    const focus = (event: MessageEvent) => {
+      const frame = shownPreviewFrame(root.current ?? document);
+      if (!isLinkCheckReady(event, frame) || walk.get().openingLink) return;
+      const link = data.links.status === "ok" ? data.links.groups.flatMap(g => g.links).find(l => l.key === walk.get().checking?.key) : null;
+      if (link) postLinkFocus(frame, link.href);
+    };
+    window.addEventListener("message", focus);
+    return () => window.removeEventListener("message", focus);
+  }, [data.links, root, frameKey]);
   useLinkCheckBridge(root, true, frameKey, links, (click) => {
     const groups = data.links.status === "ok" ? data.links.groups : [];
     const link = click.match ? matchChangedLink(groups, click.path, click.match) ?? groups.flatMap(g => g.links).find(l => l.href === click.match) : null;

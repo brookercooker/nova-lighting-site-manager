@@ -18,16 +18,16 @@ const keys = () => Array.from(document.querySelectorAll<HTMLElement>("[data-walk
 it("sorts missing before external before internal, then leaves confirmed rows in place", () => {
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
   expect(keys()).toEqual(["b", "a", "c"]);
-  fireEvent.click(screen.getAllByRole("link", { name: "Open Link to Verify" })[1]);
-  fireEvent.click(screen.getByRole("button", { name: "Confirmed: Our Story" }));
+  fireEvent.click(screen.getByRole("link", { name: "Open link to verify Our Story" }));
+  fireEvent.click(screen.getByRole("button", { name: "Approve: Our Story" }));
   expect(walk.get().linkTicked).toContain("a"); expect(keys()).toEqual(["b", "a", "c"]);
 });
-it("offers trust only after confirming a safe external destination", () => {
+it("stored trusted domains never bypass the opening or approval gate", () => {
+  m.domains = ["example.com"]; m.data.links.groups[0].links = [a];
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
-  expect(screen.queryByRole("button", { name: "Trust example.com" })).toBeNull();
-  act(() => { walk.openedVerification(a.key, ownLinkPrint(a)); walk.confirmLink(a.key, ownLinkPrint(a), true); });
-  fireEvent.click(screen.getByRole("button", { name: "Trust example.com" }));
-  expect(m.trust).toHaveBeenCalledWith("example.com");
+  expect(screen.getByRole("button", { name: "Approve: Our Story" })).toBeDisabled();
+  expect(walk.get().linkTicked).toEqual([]);
+  expect(m.trust).not.toHaveBeenCalled();
 });
 it("never offers trust on a confirmed lookalike", () => {
   m.data.links.groups[0].links = [{ ...a, href: "https://lnstagram.com" }];
@@ -46,10 +46,10 @@ it("Design Check keeps shared facts without source authors or duplicate approval
 it("does not auto-collapse a completed group the reviewer opened by hand", () => {
   m.data.links.groups[0].links = [a];
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
-  fireEvent.click(screen.getByRole("button", { name: "Collapse All" }));
   fireEvent.click(screen.getByRole("button", { name: "Homepage · 0 of 1" }));
-  fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirmed: Our Story" }));
+  fireEvent.click(screen.getByRole("button", { name: "Homepage · 0 of 1" }));
+  fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
+  fireEvent.click(screen.getByRole("button", { name: "Approve: Our Story" }));
   expect(screen.getByRole("button", { name: "Homepage · done" })).toHaveAttribute("aria-expanded", "true");
 });
 it("duplicate jump expands and selects the related row without opening a destination", () => {
@@ -58,16 +58,6 @@ it("duplicate jump expands and selects the related row without opening a destina
   fireEvent.click(screen.getByText("Same destination as: More Stories"));
   fireEvent.click(screen.getAllByRole("button", {name:"Show Related Link"})[0]);
   expect(walk.get().selectedLink?.key).toBe("d"); expect(walk.get().verificationOpened).toEqual({});
-});
-it("untrust immediately restores full actions and resets matching group/footer progress",()=>{
- m.domains=["example.com"];m.data.links.groups[0].links=[a];
- walk.update(s=>({...s,verificationOpened:{a:ownLinkPrint(a)},linkApprovals:{a:ownLinkPrint(a)},linkTicked:["a"],groupExpansion:{"/":true}}));
- const view=render(<SubmitWalkthroughPanel onKeepEditing={()=>{}}/>);
- expect(screen.getByText("1 of 1 links approved")).toBeInTheDocument();
- m.domains=[];view.rerender(<SubmitWalkthroughPanel onKeepEditing={()=>{}}/>);
- expect(screen.getByRole("button",{name:"Confirmed: Our Story"})).toBeDisabled();expect(screen.getByRole("button",{name:"Correct link: Our Story"})).toBeEnabled();
- expect(screen.getByRole("link",{name:"Open Link to Verify"})).toBeInTheDocument();expect(screen.getByText("Open link to confirm")).toBeInTheDocument();
- expect(screen.getByText("0 of 1 links approved")).toBeInTheDocument();expect(screen.getByRole("button",{name:"Homepage · 0 of 1"})).toBeInTheDocument();
 });
 it("legacy handled rows retain review-again and correction actions",()=>{
  m.data.links.groups[0].links=[a];walk.update(s=>({...s,linkReplaced:{a:ownLinkPrint(a)},groupExpansion:{"/":true}}));

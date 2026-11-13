@@ -1,5 +1,5 @@
 import { renderHook, waitFor, cleanup } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, type QueryObserverOptions } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchReviewPages, useWalkthroughData, mergeSavedReviewLinks } from "../useWalkthroughData";
 import type { ReactNode } from "react";
@@ -21,6 +21,18 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("does not refetch any walkthrough query on returning window focus", async () => {
+    const fetcher = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] })));
+    vi.stubGlobal("fetch", fetcher);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
+    const queries = client.getQueryCache().findAll({ queryKey: ["walkthrough"] });
+    expect(queries.length).toBeGreaterThan(0);
+    expect(queries.every(query => (query.options as QueryObserverOptions).refetchOnWindowFocus === false)).toBe(true);
+    expect(queries.every(query => (query.options as QueryObserverOptions).refetchOnReconnect === false)).toBe(true);
+  });
   it("drops restored About Us-only design checks but preserves builder changes", async () => {
     m.from.mockImplementation((table: string) => {
       const result = { data: table === "object_registry" ? [{ id: "about-us", name: "About Us", inline_edits: { "fp:0.1": "original" } }] : table === "object_page_usages" ? [{ object_registry_id: "about-us", pages: { name: "About", path: "/about" } }] : [], error: null };

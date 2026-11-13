@@ -1,6 +1,6 @@
 import { normPath, type ManagerPage, type ChangedRow, type LinkGroup, type LinkKind, type ReviewLink } from "./submitWalkthrough";
 
-/** Verify Links: the frame bridge and the per-page checks of the Submit for Review walkthrough. */
+/** Verify Changed Links: the frame bridge and the per-page checks of the Submit for Review walkthrough. */
 export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string | null };
 const KINDS: LinkKind[] = ["internal", "external", "mail", "phone", "anchor"];
 export const KIND_TEXT: Record<LinkKind, string> = { internal: "A page on your site", external: "A different website", mail: "An email address", phone: "A phone number", anchor: "A section of this page" };

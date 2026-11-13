@@ -43,7 +43,7 @@ describe("walkthrough auto-open and link lines", () => {
     render(<Host />);
     expect(m.show).toHaveBeenCalledTimes(2);
   });
-  it("Approve advances and the last approval returns to Design Check, never Verify Links", () => {
+  it("Approve advances and the last approval returns to Design Check, never Verify Changed Links", () => {
     m.data.rows = [page("/a", "About"), page("/b", "Blog")];
     render(<Host />);
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));

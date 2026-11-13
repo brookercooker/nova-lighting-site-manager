@@ -1,10 +1,10 @@
-# Verify Links risk review
+# Verify Changed Links risk review
 
 - Domain, spelling, keyword mismatch, duplicate and reciprocal swap rules live in `linkRisk.ts`. `tldts` uses the public suffix list. Warnings are advisory and never approve links or change Submit.
 - Confirmation requires opening that exact link first, including mail and telephone links. Missing destinations remain blocked. Trusted domains do not bypass confirmation.
-- Ordering snapshots reset on Verify Links opening and link-list/destination changes, not confirmation. Tab-session expansion/completion preferences are separate from fingerprinted decisions; manually opened done groups stay open.
+- Ordering snapshots reset on Verify Changed Links opening and link-list/destination changes, not confirmation. Tab-session expansion/completion preferences are separate from fingerprinted decisions; manually opened done groups stay open.
 - The database instance belongs to one site. `trusted_review_domains` is shared by its admins: SELECT/INSERT/DELETE use server-validated admin roles; a trigger rejects schemes, paths, ports, www prefixes, uppercase, encoded hosts and malformed domain labels. No anonymous privileges. `created_by` and `created_at` record who added each host.
-- Page peeks use a safe saved image block, else the signed stored page thumbnail. Coded pages lacking either show title only. No destination crawl, external peek or favicon request. Ready/Draft is Manager lifecycle, not proof of published deployment; peeks omit publication badges and repeated paths.
+- Compact review tiles show linked wording (or Image) and the destination; page peeks and Page found badges are omitted. Missing-page and advisory risk context remain.
 - Three bounded inventory workers collect known external hosts from the site's registered pages, including rendered shared header/footer links. Unreachable inventories are omitted, not invented; brand and trusted-domain checks still work.
 
 ## Public dependency: existing v1 fields, no new protocol
@@ -15,7 +15,7 @@ Public source snapshot a17a666b confirms `src/lib/linkInventory.ts` selects the 
 
 ## QA polish
 
-Single strongest risk summaries expand secondary reasons. Destination typing uses the same host warnings. Trusted Domains starts collapsed with a count. Inventory display caches persist across review reopening per origin/page; requests show Checking links, failures retain known metadata and expose Retry. Cached metadata never authorizes saves or supplies published-baseline counts. Design Check omits source/author lines and duplicate approval chips; unavailable originals hide Restore and its dependent Remove action.
+Single strongest risk summaries expand secondary reasons. Destination typing uses the same host warnings. Trusted Domains UI and all review consumers are removed; the table/data is untouched. Inventory display caches persist across review reopening per origin/page; requests show Checking links, failures retain known metadata and expose Retry. Cached metadata never authorizes saves or supplies published-baseline counts. Unavailable originals hide Restore and its dependent Remove action. Verification uses safe icon links and never auto-closes tabs. Phone preview checking hides rather than unmounts the list; focus/reconnect do not refetch review queries.
 
 ## Verification
 

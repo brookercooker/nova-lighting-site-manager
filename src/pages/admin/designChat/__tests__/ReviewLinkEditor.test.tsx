@@ -20,13 +20,13 @@ beforeEach(() => {
 afterEach(cleanup);
 it("prefills current destination and target, suggests friendly pages and saves without a mode switch", async () => {
   render(<ReviewLinkEditor pages={pages} />);
-  await waitFor(() => expect(screen.getByRole("switch", { name: "Open in New Tab" })).toBeChecked());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   const field = screen.getByLabelText("New Destination");
   expect(field).toHaveValue("/contact");
   fireEvent.change(field, { target: { value: "Inspiration" } });
   fireEvent.click(screen.getByRole("button", { name: "Inspiration Gallery" }));
   expect(field).toHaveValue("/gallery");
-  fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(m.notify).toHaveBeenCalled());
   expect(m.save).toHaveBeenCalledWith(expect.anything(), "/gallery", true);
   expect(walk.get()).toMatchObject({ open: true, step: "links", fix: null, reviewEdit: null, ticked: ["page:/"], linkTicked: ["/|/team"], linkReplaced: {}, savedReviewLinks: [{ path: "/", link: { href: "/gallery", key: "/|page|0.5.0.1" } }] });
@@ -38,15 +38,15 @@ it("prefills current destination and target, suggests friendly pages and saves w
 });
 it("validation and save errors retain the typed destination", async () => {
   render(<ReviewLinkEditor pages={pages} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   const field = screen.getByLabelText("New Destination");
   fireEvent.change(field, { target: { value: "http://bad.example" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
-  expect(screen.getByRole("button", { name: "Save New Link" })).toBeDisabled(); expect(m.save).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(); expect(m.save).not.toHaveBeenCalled();
   expect(field).toHaveValue("http://bad.example");
   m.save.mockRejectedValue(new Error("Your new link couldn't be saved. Try again."));
   fireEvent.change(field, { target: { value: "/gallery" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByText("Your new link couldn't be saved. Try again.");
   expect(field).toHaveValue("/gallery"); expect(walk.get().reviewEdit).not.toBeNull();
 });
@@ -54,7 +54,7 @@ it("pre-existing saved/preview mismatch offers Manual without a changed-since-op
   m.resolve.mockRejectedValue(new Error("The saved link and the page don't match yet. Use Open in Manual Edit to change it."));
   render(<ReviewLinkEditor pages={pages} />);
   await screen.findByRole("button", { name: "Open in Manual Edit" });
-  expect(screen.queryByRole("button", { name: "Save New Link" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByText(/saved link and the page don't match yet/)).toHaveAttribute("role", "status");
 });
@@ -64,17 +64,16 @@ it("resolution failure offers only the existing Manual fallback, including share
   walk.editLink({ link, group: { ...group, page: null }, rows, fingerprint: "own" });
   render(<ReviewLinkEditor pages={pages} />);
   await screen.findByRole("button", { name: "Open in Manual Edit" });
-  expect(screen.queryByRole("button", { name: "Save New Link" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
   expect(m.resolve).toHaveBeenCalledWith("/about", "/contact", "Consultation", undefined, { elementKey: undefined, scope: undefined });
   fireEvent.click(screen.getByRole("button", { name: "Open in Manual Edit" }));
   expect(m.fallback).toHaveBeenCalledWith(link, expect.objectContaining({ page: null }), rows, "own");
   expect(m.save).not.toHaveBeenCalled();
 });
-it("phone uses a bottom sheet and Cancel discards local input without changing approvals", async () => {
+it("phone uses an inline editor and Cancel discards local input without changing approvals", async () => {
   m.phone = true; render(<ReviewLinkEditor pages={pages} />);
-  expect(screen.getByRole("dialog")).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/gallery" } });
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(walk.get().reviewEdit).toBeNull(); expect(walk.get().linkTicked).toEqual(["/|/team"]); expect(m.save).not.toHaveBeenCalled();
@@ -82,9 +81,9 @@ it("phone uses a bottom sheet and Cancel discards local input without changing a
 it("editing a confirmed link replaces the old confirmation and leaves the new link unconfirmed", async () => {
   walk.update(s => ({ ...s, linkTicked: [...s.linkTicked, link.key], linkApprovals: { ...s.linkApprovals, [link.key]: "confirmed" } }));
   render(<ReviewLinkEditor pages={pages} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/gallery" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(m.notify).toHaveBeenCalled());
   expect(walk.get().linkReplaced[link.key]).toBeUndefined();
   expect(walk.get().linkTicked).not.toContain(link.key);
@@ -99,24 +98,24 @@ it("retains the visible footer wording after saving a destination", async () => 
   m.resolve.mockResolvedValue({ href: "/contact", blank: false, element: { key: "0.1", scope: "object:footer", label: "Ideas & Advice" } });
   walk.editLink({ link, group: { ...group, shared: { id: "footer", name: "Site Footer", pages: [{ name: "Homepage", path: "/" }] } }, rows: [], fingerprint: "own" });
   render(<ReviewLinkEditor pages={pages} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/gallery" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save New Link" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(walk.get().savedReviewLinks[0]?.link.label).toBe("Ideas & Advice"));
 });
 
 it.each(["javascript:alert(1)", "//host", "plain words", ""])("blocks invalid destination %s during typing", async value => {
   render(<ReviewLinkEditor pages={pages} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   fireEvent.change(screen.getByLabelText("New Destination"), { target: { value } });
-  expect(screen.getByRole("button", { name: "Save New Link" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   expect(m.save).not.toHaveBeenCalled();
 });
 it("allows a syntactically valid future page without saving automatically", async () => {
   render(<ReviewLinkEditor pages={pages} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   fireEvent.change(screen.getByLabelText("New Destination"), { target: { value: "/future" } });
-  expect(screen.getByRole("button", { name: "Save New Link" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   expect(m.save).not.toHaveBeenCalled();
 });
 
@@ -157,14 +156,24 @@ it("canceling removal does not write or change approvals", async () => {
 
 it.each([['https://lnstagram.com','Looks like instagram.com'],['https://gooogle.com','Looks like google.com'],['https://xn--instagrm-7za.com','encoded international'],['http://example.com','does not use https']])("warns while typing %s before any save", async (href, reason) => {
  render(<ReviewLinkEditor pages={pages} />);
- await waitFor(() => expect(screen.getByRole("button", {name:"Save New Link"})).toBeEnabled());
+ await waitFor(() => expect(screen.getByRole("button", {name:"Save"})).toBeEnabled());
  fireEvent.change(screen.getByLabelText("New Destination"), {target:{value:href}});
  expect(screen.getByText(new RegExp(reason))).toBeInTheDocument();
  expect(m.save).not.toHaveBeenCalled();
 });
 it("has no restore action without an authoritative original", async () => {
  render(<ReviewLinkEditor pages={pages} />);
- await waitFor(() => expect(screen.getByRole("button", {name:"Save New Link"})).toBeEnabled());
+ await waitFor(() => expect(screen.getByRole("button", {name:"Save"})).toBeEnabled());
  expect(screen.queryByRole("button", {name:"Restore Original Link"})).toBeNull();
  expect(m.reset).not.toHaveBeenCalled();
+});
+it("tests typed destinations in a safe new tab without saving or changing target", async () => {
+ render(<ReviewLinkEditor pages={pages} />);
+ await waitFor(() => expect(screen.getByRole("button", {name:"Save"})).toBeEnabled());
+ fireEvent.change(screen.getByLabelText("New Destination"), {target:{value:"https://example.com/test?__lovable_token=discard"}});
+ const test = screen.getByRole("link", {name:"Open New Destination in New Tab"});
+ expect(test).toHaveAttribute("href", "https://example.com/test");
+ expect(test).toHaveAttribute("rel", "noopener noreferrer");
+ fireEvent.click(test);
+ expect(m.save).not.toHaveBeenCalled();
 });

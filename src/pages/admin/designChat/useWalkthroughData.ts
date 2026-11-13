@@ -72,13 +72,13 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const walkState = useWalk();
   const requests = state?.draft?.requests;
   const sig = changeFingerprint(requests ?? []) + ":" + (state?.previewVersion ?? 0);
-  const reviewPages = useQuery({ queryKey: ["walkthrough", "review-pages", sig], queryFn: fetchReviewPages, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
+  const reviewPages = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "review-pages", sig], queryFn: fetchReviewPages, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
   const names = useMemo(() => [...new Set(reviewPages.data
     ? [...reviewPages.data.components, ...reviewPages.data.objects].map((p) => p.name)
     : reviewPages.data === null ? (requests ?? []).flatMap((r) => r.objects ?? []) : [])].sort(), [requests, reviewPages.data]);
-  const objects = useQuery({ queryKey: ["walkthrough", "object-pages", names, sig], queryFn: () => fetchObjectPages(names), enabled, staleTime: 0, refetchOnMount: "always" });
-  const pages = useQuery({ queryKey: ["walkthrough", "pages", sig], queryFn: fetchManagerPages, enabled, staleTime: 0, refetchOnMount: "always" });
-  const links = useQuery({ queryKey: ["walkthrough", "links", sig], queryFn: fetchReviewLinks, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
+  const objects = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "object-pages", names, sig], queryFn: () => fetchObjectPages(names), enabled, staleTime: 0, refetchOnMount: "always" });
+  const pages = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "pages", sig], queryFn: fetchManagerPages, enabled, staleTime: 0, refetchOnMount: "always" });
+  const links = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "links", sig], queryFn: fetchReviewLinks, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
   const rows = useMemo(() => {
     const authoritative = reviewPages.data;
     const active = (piece: { name: string; requestIds: string[] }) => {
@@ -105,10 +105,10 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   // True draft-vs-live comparison when the live site is configured and the frames answer link-inventory; otherwise today's list.
   const live = liveSiteBase();
   const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
-  const inventory = useQuery({ queryKey: ["walkthrough", "inventory", sig, changedPaths], queryFn: () => loadNetLinks(changedPaths, live), enabled: enabled && !!live && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
+  const inventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "inventory", sig, changedPaths], queryFn: () => loadNetLinks(changedPaths, live), enabled: enabled && !!live && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
   const merged = useMemo(() => links.data ? mergeSharedReviewLinks(netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data, objects.data]);
   const sharedPaths = [...new Set(merged?.groups.map(group => group.page?.path).filter((path): path is string => !!path) ?? [])].sort();
-  const sharedLabels = useQuery({ queryKey: ["walkthrough", "shared-labels", sig, sharedPaths], enabled: enabled && sharedPaths.length > 0, retry: false, queryFn: async () => {
+  const sharedLabels = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "shared-labels", sig, sharedPaths], enabled: enabled && sharedPaths.length > 0, retry: false, queryFn: async () => {
     const frame = shownPreviewFrame();
     let base: string;
     try { base = publicPreviewBase(frame?.src); } catch { return { links: [] as (InventoryLink & { inventoryPath: string })[], unavailable: true }; }
@@ -126,7 +126,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     const item = sharedLabels.data?.links.find(item => item.scope === link.scope && item.key === link.elementKey && item.inventoryIndex === link.inventoryIndex && (group.shared || normPath(item.inventoryPath) === normPath(group.page?.path ?? "/")));
     return item ? { ...link, elementKey: item.key, scope: item.scope, originalHref: link.originalHref ?? item.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
   }) })) } : null;
-  const siteInventory = useQuery({ queryKey: ["walkthrough", "site-hosts", pages.data?.map(p => p.path)], enabled: enabled && walkState.step === "links" && !!pages.data?.length, staleTime: 300_000, retry: false, queryFn: async () => {
+  const siteInventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "site-hosts", pages.data?.map(p => p.path)], enabled: enabled && walkState.step === "links" && !!pages.data?.length, staleTime: 300_000, retry: false, queryFn: async () => {
     let base: string; try { base = publicPreviewBase(shownPreviewFrame()?.src); } catch { return []; }
     const queue = [...new Set((pages.data ?? []).map(p => p.path))];
     const all: InventoryLink[] = [];

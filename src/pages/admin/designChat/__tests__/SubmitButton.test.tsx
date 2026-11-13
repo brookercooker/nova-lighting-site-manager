@@ -34,9 +34,9 @@ const viewAndTick = (name = "About") => {
 const confirmLinks = () => {
   for (const row of document.querySelectorAll<HTMLElement>("[data-walk-link]")) {
     const controls = within(row);
-    const open = controls.queryByRole("link", { name: "Open Link to Verify" });
+    const open = controls.queryByRole("link", { name: /^Open link to verify / });
     if (open) fireEvent.click(open);
-    const box = controls.queryByRole("button", { name: /^Confirmed:/ });
+    const box = controls.queryByRole("button", { name: /^Approve:/ });
     if (box) fireEvent.click(box);
   }
 };
@@ -51,8 +51,8 @@ describe("Submit for Review walkthrough", () => {
     m.data.links = { status: "ok", groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [link] }], unread: 0, partial: false, truncated: false };
     render(<PanelHost open />);
     act(() => walk.update(s => ({ ...s, step: "links" })));
-    fireEvent.click(screen.getByRole("link", { name: "Open Link to Verify" }));
-    expect(screen.getByRole("button", { name: "Confirmed: Ideas & Advice" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
+    expect(screen.getByRole("button", { name: "Approve: Ideas & Advice" })).toBeDisabled();
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
   });
   it.each(["pages", "links", "checklist"] as const)("Keep Editing is available on %s and preserves unchanged approvals", (step) => {
@@ -104,7 +104,7 @@ describe("Submit for Review walkthrough", () => {
     expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Back" }));
     expect(dialog()).toHaveTextContent("Changed since you approved it");
-    expect(within(dialog()).getByRole("button", { name: /^Confirmed:/ })).toHaveAttribute("aria-pressed", "false");
+    expect(within(dialog()).getByRole("button", { name: /^Approve:/ })).toHaveAttribute("aria-pressed", "false");
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
   });
   it.each(["loading", "failed"])("does not allow advancing or submitting while the authoritative page list is %s", (status) => {

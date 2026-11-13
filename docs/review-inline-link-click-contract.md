@@ -1,6 +1,6 @@
 # Inline Review Link Navigation
 
-The Submit for Review steps are Design Check, Verify Links and Submit. Manager verifies links entirely in Verify Links rows; it never opens a link-check dialog.
+The Submit for Review steps are Design Check, Verify Changed Links and Submit. Manager verifies links entirely in Verify Changed Links rows; it never opens a link-check dialog.
 
 ## Public Companion Required for All-Link Navigation Suppression
 

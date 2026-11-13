@@ -3,8 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ReviewLinkOpening } from "../ReviewLinkOpening";
 import { walk } from "../submitWalkthroughStore";
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ showPreviewPath: vi.fn(), previewLocation: { path: "/" }, previewNavigating: true }) }));
-afterEach(() => { cleanup(); walk.reset(); });
-it("does not focus the old page on readiness; waits for Privacy Policy location then readiness", () => {
+afterEach(() => { cleanup(); walk.reset(); vi.useRealTimers(); });
+it("does not focus the old page on readiness; focuses on Privacy Policy location without waiting for readiness", () => {
   const frame = document.createElement("iframe"); frame.src = "https://public.example/"; frame.setAttribute("data-site-preview", "true"); frame.setAttribute("data-preview-shown", "true"); document.body.appendChild(frame);
   const post = vi.spyOn(frame.contentWindow as Window, "postMessage");
   walk.update(w => ({ ...w, openingLink: { key: "privacy", path: "/privacy-policy", name: "Privacy Policy", href: "/about" } }));
@@ -16,9 +16,16 @@ it("does not focus the old page on readiness; waits for Privacy Policy location 
   send({ source: "nova-site", type: "location", path: "/privacy-policy" }, "https://forged.example"); send(ready);
   expect(post).not.toHaveBeenCalled();
   send({ source: "nova-site", type: "location", path: "/privacy-policy" });
-  expect(walk.get().openingLink?.path).toBe("/privacy-policy");
+  expect(walk.get().openingLink).toBeNull();
   send(ready);
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "link-check-focus", raw: "/about" }), "https://public.example");
   expect(walk.get().openingLink).toBeNull();
   expect(screen.queryByRole("status")).toBeNull(); frame.remove();
+});
+it("automatically retries a page once but never fails solely for slow readiness", () => {
+  vi.useFakeTimers();
+  walk.update(w => ({ ...w, openingLink: { key: "slow", path: "/slow", name: "Slow", href: "/about" } }));
+  render(<ReviewLinkOpening />);
+  act(() => vi.advanceTimersByTime(20000));
+  expect(walk.get().openingLink?.failed).not.toBe(true);
 });

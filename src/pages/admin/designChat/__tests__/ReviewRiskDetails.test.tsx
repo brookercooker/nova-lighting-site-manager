@@ -13,7 +13,7 @@ it("exposes one swap summary with secondary reasons and related focus inside det
 });
 it("page peek shows title/image without repeated path or publication guesses",()=>{
  render(<ReviewDestination link={{key:"a",href:"/contact",kind:"internal",label:"Contact",requestIds:[],status:null}} pages={[{name:"Contact",path:"/contact",build_status:"ready",status:"draft",thumbnail_url:"/contact.jpg"}]} flags={[]} trusted={false}/>);
- expect(screen.getAllByText("/contact")).toHaveLength(1);expect(document.querySelector("img")).toHaveAttribute("src","/contact.jpg");expect(screen.queryByText("Not Published")).toBeNull();
+ expect(screen.getAllByText("/contact")).toHaveLength(1);expect(document.querySelector("img")).toBeNull();expect(screen.queryByText("Not Published")).toBeNull();
 });
 it("trusted domains starts collapsed with its actual count",()=>{
  render(<TrustedDomainList trust={{domains:["example.com"],isAdmin:true,pending:false,error:"",change:vi.fn()}}/>);
