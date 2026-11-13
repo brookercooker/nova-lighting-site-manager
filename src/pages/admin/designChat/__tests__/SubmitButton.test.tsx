@@ -1,4 +1,5 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState, type ReactNode } from "react";
+import { act, cleanup, fireEvent, render as renderUI, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmitButton, SubmitConfirmDialog } from "../PreviewTools";
 import { SubmitWalkthroughPanel } from "../SubmitWalkthrough";
@@ -9,6 +10,13 @@ vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state,
 vi.mock("../helper", () => ({ postToHelper: m.post }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: [], isAdmin: false, pending: false, error: "", change: vi.fn() }), TrustedDomainList: () => null }));
+// Walkthrough regressions enter through the restored introduction.
+const render = (ui: ReactNode) => {
+  const result = renderUI(ui);
+  const next = screen.queryByRole("button", { name: "Continue to Review" });
+  if (next) fireEvent.click(next);
+  return result;
+};
 const page = (key: string, name: string) => ({ key: "page:" + key, page: { name, path: key }, how: "Changed by the builder" });
 beforeEach(() => {
   vi.clearAllMocks();
@@ -21,7 +29,8 @@ afterEach(cleanup);
 
 function PanelHost({ open = true, onOpenChange = () => {} }: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const s = useWalk();
-  return <><SubmitConfirmDialog open={open} onOpenChange={onOpenChange} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => { walk.keepEditing(); onOpenChange(false); }} />}</>;
+  const [intro, setIntro] = useState(open);
+  return <><SubmitConfirmDialog open={intro} onOpenChange={value => { setIntro(value); onOpenChange(value); }} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => { walk.keepEditing(); onOpenChange(false); }} />}</>;
 }
 const dialog = () => screen.getByRole("region", { name: "Submit for Review Walkthrough" });
 const viewAndTick = (name = "About") => {

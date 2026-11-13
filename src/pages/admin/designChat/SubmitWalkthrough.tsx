@@ -3,6 +3,7 @@ import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Pencil, ArrowRight, Check, ChevronDown, ExternalLink, Send, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -76,16 +77,34 @@ function linkPath(link: ReviewLink, group: LinkGroup): { path: string; part: str
  * Submit for Review (or Publish): pages, links (when any changed) and a first-person checklist, then submit.
  * Compatibility opener; the walkthrough itself is hosted in the Manager's review column.
  */
-export function SubmitConfirmDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void; fallback?: boolean }) {
-  const { setReviewOpen } = useDesignChat();
+export function SubmitConfirmDialog({ open, onOpenChange, returnFocus }: { open: boolean; onOpenChange: (open: boolean) => void; fallback?: boolean; returnFocus?: () => void }) {
+  const { state, setReviewOpen } = useDesignChat();
+  const reviewOn = state?.review?.enabled !== false;
+  const opener = useRef<HTMLElement | null>(null);
+  const continuing = useRef(false);
   const requested = useRef(false);
+  const start = () => { continuing.current = true; walk.open("panel"); setReviewOpen?.(true); onOpenChange(false); };
   useEffect(() => {
     if (!open) { requested.current = false; return; }
     if (requested.current) return;
     requested.current = true;
-    walk.open("panel"); setReviewOpen?.(true); onOpenChange(false);
-  }, [open, setReviewOpen, onOpenChange]);
-  return null;
+    continuing.current = false;
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!reviewOn) start();
+  }, [open, reviewOn, setReviewOpen, onOpenChange]);
+  return <Dialog open={open && reviewOn} onOpenChange={onOpenChange}>
+    <DialogContent className="p-5 [&>button:last-child]:h-11 [&>button:last-child]:w-11 [&>button:last-child]:right-1 [&>button:last-child]:top-1" onCloseAutoFocus={e => { e.preventDefault(); if (continuing.current) return; if (returnFocus) returnFocus(); else if (opener.current?.isConnected) opener.current.focus(); }}>
+      <DialogTitle className="pr-8 leading-snug">Before You Submit for Review</DialogTitle>
+      <DialogDescription asChild><div className="space-y-3 text-sm text-muted-foreground">
+        <p>We'll check the design of changed pages, then verify the destinations of changed links, then you'll confirm and submit. Approved changes go live after review.</p>
+        <p>Make all your edits first. Submitting before you finish can mean going through the review again.</p>
+      </div></DialogDescription>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button variant="outline" className="h-11" onClick={() => onOpenChange(false)}>Return to Edit</Button>
+        <Button variant="review" className="h-11" onClick={start}>Continue to Review</Button>
+      </div>
+    </DialogContent>
+  </Dialog>;
 }
 
 export function SubmitWalkthroughPanel({ onKeepEditing, onCheckPhone, children }: { onKeepEditing: () => void; onCheckPhone?: () => void; children?: ReactNode }) {

@@ -603,7 +603,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat, onOpen
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <>
-    <SubmitConfirmDialog open={submitConfirm} onOpenChange={setSubmitConfirm} fallback />
+    <SubmitConfirmDialog open={submitConfirm} onOpenChange={setSubmitConfirm} fallback returnFocus={() => { setMenuOpen(true); requestAnimationFrame(() => document.querySelector<HTMLElement>('[role="menu"] [aria-label="Submit for Review"]')?.focus()); }} />
     <ModePageChooser {...modeSwitch.chooserProps} />
     <MoreMenu open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (open) onOpenMenu(); }}>
       <MoreMenuTrigger asChild>

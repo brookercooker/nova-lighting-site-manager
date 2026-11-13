@@ -1,4 +1,5 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState, type ReactNode } from "react";
+import { act, cleanup, fireEvent, render as renderUI, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmitConfirmDialog, SubmitWalkthroughPanel, WalkthroughCheckBar } from "../SubmitWalkthrough";
 import { walk, useWalk } from "../submitWalkthroughStore";
@@ -12,6 +13,13 @@ vi.mock("../helper", () => ({ postToHelper: vi.fn() }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
 vi.mock("../trustedDomains", () => ({ useTrustedDomains: () => ({ domains: [], isAdmin: false, pending: false, error: "", change: vi.fn() }), TrustedDomainList: () => null }));
 vi.mock("../previewNavigate", async (orig) => ({ ...(await orig<any>()), shownPreviewFrame: () => frame }));
+// Walkthrough regressions enter through the restored introduction.
+const render = (ui: ReactNode) => {
+  const result = renderUI(ui);
+  const next = screen.queryByRole("button", { name: "Continue to Review" });
+  if (next) fireEvent.click(next);
+  return result;
+};
 const page = (key: string, name: string) => ({ key: "page:" + key, page: { name, path: key }, how: "Changed by the builder" });
 const link = { key: "/a|/gallery", href: "/gallery", kind: "internal", label: null, requestIds: [] };
 beforeEach(() => {
@@ -24,7 +32,8 @@ afterEach(() => { cleanup(); (window as any).innerWidth = 1280; });
 
 function Host() {
   const s = useWalk();
-  return <><SubmitConfirmDialog open onOpenChange={() => {}} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<WalkthroughCheckBar /></>;
+  const [intro, setIntro] = useState(true);
+  return <><SubmitConfirmDialog open={intro} onOpenChange={setIntro} />{s.open && <SubmitWalkthroughPanel onKeepEditing={() => walk.keepEditing()} />}<WalkthroughCheckBar /></>;
 }
 const ready = () => { const e = new Event("message") as any; Object.assign(e, { data: { source: "nova-site", type: "link-check-ready", v: 2, enabled: true }, origin: "https://site.example", source: frame.contentWindow }); window.dispatchEvent(e); };
 
