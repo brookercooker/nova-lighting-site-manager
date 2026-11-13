@@ -60,7 +60,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
     try {
       const lines = await saveReviewLink(resolved, destination, blank);
       const kind = /^mailto:/i.test(destination) ? "mail" : /^tel:/i.test(destination) ? "phone" : destination.startsWith("/") ? "internal" : "external";
-      walk.savedLink(page.path, { target: blank ? "_blank" : null, key: `${edit.group.page?.path ?? ""}|${destination}`, href: destination, kind, elementKey: resolved.element.key, scope: resolved.element.scope, label: edit.link.label, requestIds: [], status: null });
+      walk.savedLink(page.path, { target: blank ? "_blank" : null, key: edit.group.shared ? `${resolved.element.scope}|${resolved.element.key}|${destination}` : `${edit.group.page?.path ?? ""}|${destination}`, href: destination, kind, elementKey: resolved.element.key, scope: resolved.element.scope, label: edit.link.label, requestIds: [], status: null });
       const { notifyContentEdited } = await import("./contentSync");
       notifyContentEdited(lines);
     } catch (e) { setError(e instanceof Error ? e.message : "Your new link couldn't be saved. Please try again."); }
@@ -75,7 +75,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
       const lines = await resetReviewLink(resolved, action);
       const href = action === "restore" ? original ?? edit.link.href : edit.link.href;
       const kind = /^mailto:/i.test(href) ? "mail" : /^tel:/i.test(href) ? "phone" : href.startsWith("#") ? "anchor" : href.startsWith("/") ? "internal" : "external";
-      if (action === "restore") walk.savedLink(page.path, { ...edit.link, key: `${edit.group.page?.path ?? ""}|${href}`, href, kind, target: undefined });
+      if (action === "restore") walk.savedLink(page.path, { ...edit.link, key: edit.group.shared ? `${resolved.element.scope}|${resolved.element.key}|${href}` : `${edit.group.page?.path ?? ""}|${href}`, href, kind, target: undefined });
       const { notifyContentEdited } = await import("./contentSync");
       notifyContentEdited(lines);
       if (action === "remove") {
@@ -92,6 +92,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
   };
   const suggestions = pages.filter(p => validTextLink(p.path) && !isInternalPath(p.path) && (!address || p.name.toLowerCase().includes(address.toLowerCase()) || p.path.toLowerCase().includes(address.toLowerCase()))).slice(0, 12);
   const content = <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} className="min-w-0 space-y-2" aria-label="Edit Link Destination">
+    {edit.group.shared && <p className="text-xs text-muted-foreground">Changing this link in {edit.group.shared.name} updates it on {edit.group.shared.pages.map(p => p.name).join(", ")}.</p>}
     <div><p className="text-xs text-muted-foreground">Current Destination</p><p className="break-all font-mono text-sm">{removed ? "Link removed. The text is no longer clickable." : publicLinkAddress(resolved?.href ?? edit.link.href)}</p></div>
     <div className="space-y-1"><label htmlFor="review-link-address" className="text-sm">New Destination</label>
       <Input id="review-link-address" className="h-11 text-sm sm:h-8" value={address} aria-invalid={!valid || !!error} aria-describedby={!valid || destinationHint ? "review-link-hint" : error ? "review-link-error" : undefined} disabled={saving}

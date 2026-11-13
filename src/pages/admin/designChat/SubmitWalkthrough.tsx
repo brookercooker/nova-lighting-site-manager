@@ -14,9 +14,9 @@ import { undoPendingGate } from "./logic";
 import { useManagerLayout } from "./useManagerLayout";
 import { useWalkthroughData, type WalkthroughData } from "./useWalkthroughData";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
-import { changeFingerprint, OTHER_KEY, checklistItems, itemTicked, linkChip, remaining, type Chip, type ManagerPage, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
+import { changeFingerprint, normPath, OTHER_KEY, checklistItems, itemTicked, linkChip, remaining, type Chip, type ManagerPage, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 import { add, toggle, useWalk, walk, type WalkState, type WalkStep } from "./submitWalkthroughStore";
-import { LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, linkState, focusWhenReady, linkAddress, linkText, postLinkFocus } from "./linkCheck";
+import { LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, linkState, linkCheckList, linkAddress, linkText } from "./linkCheck";
 import { shownPreviewFrame } from "./previewNavigate";
 import { ReviewLinkEditor } from "./ReviewLinkEditor";
 import { publicLinkAddress } from "../linkDisplay";
@@ -159,11 +159,9 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3">
         {p.step === "pages" && (pagesReady ? <PagesStep rows={p.pageRows} data={data} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} /> : <p role="status" className="text-sm text-muted-foreground">{data.pagesStatus === "failed" ? "Changed pages couldn't be listed right now. Close and reopen to try again." : "Listing the changed pages…"}</p>)}
         {p.step === "links" && <LinksStep data={data} onShow={(l, g) => {
-          walk.update(w => ({ ...w, reviewEdit: null }));
           const path = g.page?.path ?? p.pageRows.find(r => r.page)?.page?.path ?? "/";
-          const already = walk.get().checking?.key === l.key;
-          if (!already || phone) openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
-          if (already) postLinkFocus(shownPreviewFrame(document), l.href); else focusWhenReady(() => shownPreviewFrame(document), l.href);
+          walk.update(w => ({ ...w, reviewEdit: null, openingLink: { key: l.key, path, name: g.page?.name ?? "Homepage", href: l.href, entries: data.links.status === "ok" ? linkCheckList(data.links.groups, w.linkTicked, w.linkReplaced) : [] } }));
+          openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
         }} onChange={(l, g) => walk.editLink({ link: l, group: g, rows: p.pageRows, fingerprint: ownLinkPrint(l) })} />}
         {p.step === "checklist" && (
           <ul className="space-y-3" aria-label="Submission Checklist">
@@ -260,6 +258,22 @@ const CHIP_TONE: Record<Chip["tone"], string> = { ok: "border-border bg-secondar
 function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: (l: ReviewLink, g: LinkGroup) => void; onChange: (l: ReviewLink, g: LinkGroup) => void }) {
   const s = useWalk();
   const { preview } = useDesignChat();
+  const { phone } = useManagerLayout();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const completedGroups = useRef<Set<string>>(new Set());
+  const groupProgress = data.links.status === "ok" ? data.links.groups.map(g => `${g.shared?.id ?? g.page?.path ?? g.label}:${g.links.every(l => !linkNeedsCheck(l, s, data.pages))}`).join("|") : "";
+  useEffect(() => {
+    if (data.links.status !== "ok") return;
+    const complete = new Set(data.links.groups.filter(g => g.links.every(l => !linkNeedsCheck(l, s, data.pages))).map(g => g.shared?.id ?? g.page?.path ?? g.label));
+    const newly = [...complete].filter(id => !completedGroups.current.has(id));
+    completedGroups.current = complete;
+    if (newly.length) setExpanded(e => ({ ...e, ...Object.fromEntries(newly.map(id => [id, false])) }));
+  }, [groupProgress]);
+  useEffect(() => {
+    if (data.links.status !== "ok" || !s.selectedLink) return;
+    const g = data.links.groups.find(g => g.links.some(l => l.key === s.selectedLink?.key));
+    if (g) setExpanded(e => ({ ...e, [g.shared?.id ?? g.page?.path ?? g.label]: true }));
+  }, [s.selectedLink?.sequence, s.selectedLink?.key]);
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!s.selectedLink) return;
@@ -279,10 +293,14 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
 {(() => { const all = groups.flatMap(g => g.links); const left = all.filter(l => linkNeedsCheck(l, s, data.pages)).length;
         return !all.length || !left ? <p role="status" className="text-sm">Nothing is left to check here. Press Next to continue.</p>
           : <p className="text-xs text-muted-foreground">{LINK_HINT}</p>; })()}
-      {groups.map((g) => (
+      {groups.map((g) => {
+        const id = g.shared?.id ?? g.page?.path ?? g.label;
+        const handled = g.links.filter(l => !linkNeedsCheck(l, s, data.pages)).length;
+        const open = expanded[id] ?? handled < g.links.length;
+        return (
         <section key={g.label + (g.page?.path ?? "")} aria-label={g.label}>
-          <h3 className="mb-2 text-sm font-semibold">{g.label}</h3>
-          <ul className="space-y-2">
+          <h3 className="mb-2"><Button type="button" variant="ghost" className="min-h-11 h-auto w-full justify-between whitespace-normal px-0 text-left text-sm font-semibold" aria-expanded={open} onClick={() => setExpanded(e => ({ ...e, [id]: !open }))}><span className="min-w-0 break-words">{g.label} · {handled} of {g.links.length}</span><ChevronDown aria-hidden className={cn("h-4 w-4 shrink-0", !open && "-rotate-90")} /></Button></h3>
+          {open && <ul className="space-y-2">
             {g.links.map((l) => {
               const chip = linkChip(l, data.pages);
               const manual = l.kind === "mail" || l.kind === "phone";
@@ -292,7 +310,8 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
               const st = missing && !(l.key in s.linkReplaced) ? "todo" : linkState(l.key, s.linkTicked, s.linkReplaced);
               const own = ownLinkPrint(l);
               const opened = s.verificationOpened[l.key] === own;
-              const enabled = !missing && (manual || opened);
+              const opening = s.openingLink?.key === l.key;
+              const enabled = !missing && !opening && (manual || opened);
               const dest = l.kind === "internal" || l.kind === "anchor" ? sitePath(l.href, l.href, g.page?.path ?? "/") : null;
               const embed = preview?.frames.find(f => f.id === preview.shownId)?.url ?? preview?.frames.at(-1)?.url;
               const tabUrl = dest ? draftPageUrl(dest, embed) : l.kind === "external" && /^https:\/\//i.test(l.href) ? l.href : null;
@@ -307,6 +326,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                   <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{publicLinkAddress(friendlyName)}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[st]}</Badge></div>
                   {st === "todo" && s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <p className="break-all font-mono text-xs text-muted-foreground">{address}</p>
+                  {g.shared && <p className="text-xs text-muted-foreground">Also changes on {g.shared.pages.filter(p => normPath(p.path) !== normPath(g.page?.path ?? "/")).map(p => p.name).join(", ") || g.page?.name}.</p>}
                   {chip && <p className="flex flex-wrap items-center gap-2 text-xs"><span className={cn("rounded-full border px-2 py-0.5", CHIP_TONE[chip.tone])}>{chip.text}</span>{chip.detail && <span className="break-words text-muted-foreground">{chip.detail}</span>}</p>}
                   {chip?.tone === "bad" && !missing && <p className="text-xs text-destructive">{missingInternalLink(l, data.pages) ? "This page doesn't exist. Edit the link destination to fix it." : "This address couldn't be reached. Check the destination."}</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}
@@ -314,17 +334,25 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                     {tabUrl && !manual && <Button asChild className="h-11 w-full min-w-0 px-2 text-sm"><a data-verify-link href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden />Open Link to Verify</a></Button>}
                     <div className="flex items-start justify-between gap-2">
                       <Button type="button" variant={st === "done" ? "secondary" : "outline"} className="h-11 min-w-0 px-2 text-sm" aria-label={`Confirmed: ${publicLinkAddress(friendlyName)}`} aria-pressed={st === "done"} disabled={!enabled} aria-describedby={hintId} onClick={e => { e.stopPropagation(); if (enabled) walk.confirmLink(l.key, own, st !== "done"); }}><Check aria-hidden className={cn("h-4 w-4", st === "done" && "rounded-full bg-foreground text-background p-0.5")} />Confirmed</Button>
-                      <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant="outline" className="h-11 min-w-0 px-2 text-sm" aria-label={`Correct link: ${publicLinkAddress(friendlyName)}`} onClick={e => { e.stopPropagation(); onChange(l, g); }}><Pencil aria-hidden />Correct</Button>
+                      <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant="outline" className="h-11 min-w-0 px-2 text-sm" disabled={opening} aria-label={`Correct link: ${publicLinkAddress(friendlyName)}`} onClick={e => { e.stopPropagation(); onChange(l, g); }}><Pencil aria-hidden />Correct</Button>
                     </div>
-                    <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : st === "done" ? "Approved" : manual ? "Check that this address is correct, then tap Confirmed." : !opened ? "Open the link first, then tap Confirmed." : "Check that this is the right destination."}</p>
+                    <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : opening ? `Opening ${s.openingLink?.name}…` : st === "done" ? "Approved" : manual ? "Check that this address is correct, then tap Confirmed." : !opened ? "Open the link first, then tap Confirmed." : "Check that this is the right destination."}</p>
                   </>}
                   {s.reviewEdit?.link.key === l.key && <div data-review-editor onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}><ReviewLinkEditor pages={data.pages} /></div>}
                 </li>
               );
             })}
-          </ul>
+          </ul>}
         </section>
-      ))}
+      ); })}
+      {phone && groups.some(g => g.links.some(l => linkNeedsCheck(l, s, data.pages))) && <Button type="button" variant="outline" className="min-h-11 h-auto w-full whitespace-normal px-2" onClick={() => {
+        const all = groups.flatMap(g => g.links.map(l => ({ l, g })));
+        const at = all.findIndex(x => x.l.key === s.checking?.key || x.l.key === s.selectedLink?.key);
+        const next = [...all.slice(at + 1), ...all.slice(0, at + 1)].find(x => linkNeedsCheck(x.l, s, data.pages));
+        if (!next) return;
+        setExpanded(e => ({ ...e, [next.g.shared?.id ?? next.g.page?.path ?? next.g.label]: true }));
+        walk.selectLink(next.l.key); onShow(next.l, next.g);
+      }}><ArrowRight aria-hidden />Jump to Next Unconfirmed Link</Button>}
     </div>
   );
 }

@@ -76,7 +76,7 @@ export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | n
 /** The changed links that appear on one page: its own plus changed shared-piece links (Header, Footer). */
 export function pageLinks(groups: LinkGroup[], path: string | undefined): ReviewLink[] {
   if (!path) return [];
-  return groups.filter(g => !g.page || normPath(g.page.path) === normPath(path)).flatMap(g => g.links);
+  return groups.filter(g => !g.page || normPath(g.page.path) === normPath(path) || g.shared?.pages.some(p => normPath(p.path) === normPath(path))).flatMap(g => g.links);
 }
 /** The changed link a click refers to (same key the Links step uses), or null when it isn't one. */
 export function matchChangedLink(groups: LinkGroup[], path: string | null | undefined, raw: string): ReviewLink | null {

@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
 import { useWalk } from "./submitWalkthroughStore";
+import { mergeSharedReviewLinks, stableReviewEdits, type SharedReviewObject } from "./sharedReviewLinks";
 import { liveSiteBase, loadNetLinks, netReviewLinks } from "./linkInventory";
 import { supabase } from "@/prototype/client";
 import { codePagePaths, loadSiteManifest } from "../siteManifest";
@@ -12,12 +13,11 @@ export type LinksResult = { status: "loading" } | { status: "failed" } | ({ stat
 export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; pagesStatus?: "loading" | "failed" | "ok" };
 
 /** Pages using each shared object, from the same object_page_usages table the Objects tab's Used On reads. */
-async function fetchObjectPages(names: string[]): Promise<Record<string, PageRef[]>> {
-  if (!names.length) return {};
+async function fetchObjectPages(names: string[]): Promise<{ usages: Record<string, PageRef[]>; shared: SharedReviewObject[] }> {
   const { data: registry, error: registryError } = await (supabase as any).from("object_registry").select("id,name,component_key,inline_edits,content").is("archived_at", null);
   if (registryError) throw registryError;
-  const matches = (registry ?? []).filter((r: any) => names.includes(r.name) || names.includes(r.component_key));
-  if (!matches.length) return {};
+  const matches = (registry ?? []).filter((r: any) => names.includes(r.name) || names.includes(r.component_key) || Object.keys(r.inline_edits ?? {}).some(k => k.startsWith("link:")));
+  if (!matches.length) return { usages: {}, shared: [] };
   const { data, error } = await (supabase as any).from("object_page_usages")
     .select("object_registry_id, pages:page_id(name,path,archived_at)")
     .in("object_registry_id", matches.map((r: any) => r.id));
@@ -29,7 +29,8 @@ async function fetchObjectPages(names: string[]): Promise<Record<string, PageRef
     for (const name of names.filter((n) => n === object.name || n === object.component_key))
       (out[name] ??= []).push({ name: p.name || p.path, path: p.path, sharedChange: { inlineEdits: object.inline_edits, content: object.content } });
   }
-  return out;
+  const shared = matches.map((r: any) => ({ id: r.id, name: r.name, inlineEdits: r.inline_edits, content: r.content, pages: (data ?? []).filter((u: any) => u.object_registry_id === r.id && u.pages && !u.pages.archived_at && typeof u.pages.path === "string").map((u: any) => ({ name: u.pages.name, path: u.pages.path })) }));
+  return { usages: out, shared };
 }
 async function fetchManagerPages(): Promise<ManagerPage[]> {
   const { data, error } = await (supabase as any).from("pages").select("name,path,build_status,archived_at,inline_edits,content").is("archived_at", null);
@@ -72,11 +73,11 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const names = useMemo(() => [...new Set(reviewPages.data
     ? [...reviewPages.data.components, ...reviewPages.data.objects].map((p) => p.name)
     : reviewPages.data === null ? (requests ?? []).flatMap((r) => r.objects ?? []) : [])].sort(), [requests, reviewPages.data]);
-  const objects = useQuery({ queryKey: ["walkthrough", "object-pages", names, sig], queryFn: () => fetchObjectPages(names), enabled: enabled && names.length > 0, staleTime: 0, refetchOnMount: "always" });
+  const objects = useQuery({ queryKey: ["walkthrough", "object-pages", names, sig], queryFn: () => fetchObjectPages(names), enabled, staleTime: 0, refetchOnMount: "always" });
   const pages = useQuery({ queryKey: ["walkthrough", "pages", sig], queryFn: fetchManagerPages, enabled, staleTime: 0, refetchOnMount: "always" });
   const links = useQuery({ queryKey: ["walkthrough", "links", sig], queryFn: fetchReviewLinks, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
-  const rows = useMemo(() => dropRevertedHandEdits(reviewPages.data ? relayChangedPages(reviewPages.data, pages.data ?? [], objects.data ?? {}, requests)
-    : reviewPages.data === null ? changedPages(requests, objects.data ?? {}) : [], pages.data ?? []), [reviewPages.data, requests, objects.data, pages.data]);
+  const rows = useMemo(() => dropRevertedHandEdits(reviewPages.data ? relayChangedPages(reviewPages.data, pages.data ?? [], objects.data?.usages ?? {}, requests)
+    : reviewPages.data === null ? changedPages(requests, objects.data?.usages ?? {}) : [], pages.data ?? []), [reviewPages.data, requests, objects.data, pages.data]);
   // Saved hand edits (Manual Edit Mode, Change This Link) re-read every list, so new destinations appear straight away.
   const client = useQueryClient();
   useEffect(() => {
@@ -91,19 +92,19 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const live = liveSiteBase();
   const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
   const inventory = useQuery({ queryKey: ["walkthrough", "inventory", sig, changedPaths], queryFn: () => loadNetLinks(changedPaths, live), enabled: enabled && !!live && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
-  const merged = useMemo(() => links.data ? netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data]);
+  const merged = useMemo(() => links.data ? mergeSharedReviewLinks(netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data, objects.data]);
   const inventoryPending = !!live && changedPaths.length > 0 && enabled && inventory.isFetching;
-  const linkResult: LinksResult = links.isError ? { status: "failed" } : merged && !links.isFetching && !pages.isFetching && !inventoryPending ? { status: "ok", ...merged } : { status: "loading" };
+  const linkResult: LinksResult = links.isError || objects.isError ? { status: "failed" } : merged && !links.isFetching && !pages.isFetching && !objects.isFetching && !inventoryPending ? { status: "ok", ...merged } : { status: "loading" };
   const pagesStatus = reviewPages.isError || objects.isError || pages.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
   const fingerprintedRows = rows.map((row) => {
     const path = row.page?.path;
     const authoritative = reviewPages.data;
     const ids = authoritative ? [...authoritative.rows.filter(p => path && normPath(p.path) === normPath(path)).flatMap(p => p.requestIds),
-      ...[...authoritative.components, ...authoritative.objects].filter(piece => (objects.data?.[piece.name] ?? []).some(p => path && normPath(p.path) === normPath(path))).flatMap(piece => piece.requestIds),
-      ...(!path ? authoritative.sitewide.requestIds : [])] : (requests ?? []).filter(r => !path || (r.pages ?? (r.page ? [r.page] : [])).some(p => normPath(p.path) === normPath(path)) || (r.objects ?? []).some(n => (objects.data?.[n] ?? []).some(p => normPath(p.path) === normPath(path)))).map(r => r.id);
+      ...[...authoritative.components, ...authoritative.objects].filter(piece => (objects.data?.usages[piece.name] ?? []).some(p => path && normPath(p.path) === normPath(path))).flatMap(piece => piece.requestIds),
+      ...(!path ? authoritative.sitewide.requestIds : [])] : (requests ?? []).filter(r => !path || (r.pages ?? (r.page ? [r.page] : [])).some(p => normPath(p.path) === normPath(path)) || (r.objects ?? []).some(n => (objects.data?.usages[n] ?? []).some(p => normPath(p.path) === normPath(path)))).map(r => r.id);
     const page = pages.data?.find(p => path && normPath(p.path) === normPath(path));
-    const shared = names.map(name => ({ name, changes: (objects.data?.[name] ?? []).filter(p => path && normPath(p.path) === normPath(path)).map(p => p.sharedChange) })).filter(p => p.changes.length);
-    return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, at: r.at, sha: r.sha, builtAt: r.builtAt, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: page?.inlineEdits, content: page?.content, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
+    const shared = (objects.data?.shared ?? []).filter(o => path && o.pages.some(p => normPath(p.path) === normPath(path))).map(o => ({ id: o.id, edits: stableReviewEdits(o.inlineEdits), content: o.content ?? null })).sort((a,b) => a.id.localeCompare(b.id));
+    return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, sha: r.sha, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: stableReviewEdits(page?.inlineEdits), content: page?.content ?? null, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
   });
   const withSaved: LinksResult = linkResult.status === "ok" ? { ...mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), status: "ok" } : linkResult;
   return { rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
@@ -114,7 +115,7 @@ export function mergeSavedReviewLinks(base: ReviewLinks, saved: { path: string; 
   const groups = base.groups.map(g => ({ ...g, links: [...g.links] }));
   for (const x of saved) {
     if (normPath(x.path) in nets) continue;
-    let g = groups.find(g => g.links.some(l => l.key === x.link.key) || (x.link.key.startsWith("|") ? !g.page : g.page && normPath(g.page.path) === normPath(x.path)));
+    let g = groups.find(g => x.link.scope?.startsWith("object:") ? `object:${g.shared?.id}` === x.link.scope : g.links.some(l => l.key === x.link.key) || (x.link.key.startsWith("|") ? !g.page : g.page && normPath(g.page.path) === normPath(x.path)));
     if (!g) { const page = pages.find(p => normPath(p.path) === normPath(x.path)); g = { page: { path: x.path, name: page?.name ?? x.path }, label: page?.name ?? x.path, links: [] }; groups.push(g); }
     if (!g.links.some(l => l.key === x.link.key)) g.links.push(x.link);
   }

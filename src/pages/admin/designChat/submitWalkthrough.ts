@@ -21,7 +21,7 @@ export function dropRevertedHandEdits(rows: ChangedRow[], pages: ManagerPage[]):
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
 export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirmed"; detail?: string } | null;
 export type ReviewLink = { key: string; href: string; kind: LinkKind; label: string | null; ariaLabel?: string; target?: "_blank" | null; elementKey?: string; scope?: string; requestIds: string[]; status: RelayLinkStatus };
-export type LinkGroup = { page: PageRef | null; label: string; links: ReviewLink[] };
+export type LinkGroup = { page: PageRef | null; label: string; links: ReviewLink[]; shared?: { id: string; name: string; pages: PageRef[] } };
 export type ReviewLinks = { groups: LinkGroup[]; unread: number; partial: boolean; truncated: boolean };
 /** Stable value fingerprint; object key order is not a change. */
 export function changeFingerprint(value: unknown): string {

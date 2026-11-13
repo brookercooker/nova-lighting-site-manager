@@ -10,6 +10,7 @@ export type LinkFix = { key: string; fingerprint: string; href?: string; path: s
 export type WalkStep = "pages" | "links" | "checklist";
 export type Checking = { key: string; kind: "page" | "link"; name: string } | null;
 export type WalkState = {
+  openingLink: { key: string; path: string; name: string; href: string; entries?: import("./linkCheck").LinkCheckEntry[]; failed?: boolean } | null;
   reviewEdit: { link: ReviewLink; group: LinkGroup; rows: ChangedRow[]; fingerprint: string } | null;
   savedReviewLinks: { path: string; link: ReviewLink }[];
   /** Actual verification-tab clicks only, keyed by link key and its own fingerprint. */
@@ -31,7 +32,7 @@ export type WalkState = {
   /** The page just saved through Change This Link: its page approval follows the hand save; links always retain their own fingerprints. */
   repin: { path: string; until: number } | null;
 };
-const initial = (): WalkState => ({ keptMissing: {}, verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], selectedLink: null, linkNote: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
+const initial = (): WalkState => ({ openingLink: null, keptMissing: {}, verificationOpened: {}, reviewEdit: null, savedReviewLinks: [], open: false, host: null, step: "pages", viewed: [], ticked: [], linkOpened: [], linkTicked: [], checks: [], checking: null, approvals: {}, linkApprovals: {}, changed: [], selectedLink: null, linkNote: null, autoOpen: false, linkReplaced: {}, fix: null, repin: null });
 export const WALK_SESSION_KEY = "nova-review-progress-v1";
 const progressFields = ["approvals", "linkApprovals", "verificationOpened", "linkReplaced", "keptMissing"] as const;
 function readProgress(): WalkState {
@@ -60,7 +61,7 @@ export const walk = {
   mount(id: string, fallback: boolean) { hosts.set(id, fallback); return () => { hosts.delete(id); }; },
   open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null, autoOpen: true })); },
   close() { walk.update((s) => ({ ...s, open: false })); },
-  keepEditing() { walk.update(s => ({ ...s, open: false, checking: null, step: "pages", selectedLink: null, linkNote: null, fix: null, reviewEdit: null })); },
+  keepEditing() { walk.update(s => ({ ...s, openingLink: null, open: false, checking: null, step: "pages", selectedLink: null, linkNote: null, fix: null, reviewEdit: null })); },
   editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, selectedLink: null, linkNote: null, step: "links" })); },
   selectLink(key: string | null) { walk.update(s => ({ ...s, reviewEdit: null, open: true, step: "links", selectedLink: key ? { key, sequence: (s.selectedLink?.sequence ?? 0) + 1 } : null, linkNote: key ? null : "This link wasn't changed, so it doesn't need checking." })); },
   openedVerification(key: string, fingerprint: string) { walk.update(s => ({ ...s, verificationOpened: { ...s.verificationOpened, [key]: fingerprint } })); },

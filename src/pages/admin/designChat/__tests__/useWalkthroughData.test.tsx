@@ -19,6 +19,21 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("includes saved About Us object links even when the relay only reports page links", async () => {
+    m.from.mockImplementation((table: string) => {
+      const result = { data: table === "object_registry" ? [{ id: "about-us", name: "About Us", inline_edits: { "link:0.1": '{"href":"/contact"}' } }] : table === "object_page_usages" ? [{ object_registry_id: "about-us", pages: { name: "About", path: "/about" } }, { object_registry_id: "about-us", pages: { name: "Homepage", path: "/" } }] : [], error: null };
+      const q: any = { select: () => q, is: () => Promise.resolve(result), in: () => Promise.resolve(result) }; return q;
+    });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? { ...body, objects: [{ name: "About Us", requestIds: ["1"] }] } : { ok: true, groups: [] }))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
+    const result = hook.result.current.links;
+    if (result.status !== "ok") throw new Error("shared links not ready");
+    expect(result.groups.flatMap(g => g.links)).toEqual([expect.objectContaining({ scope: "object:about-us", href: "/contact", elementKey: "0.1" })]);
+    expect(result.groups[0].shared?.pages).toHaveLength(2);
+  });
   it("adds the saved destination while relay rows lag, but respects a current empty net inventory", () => {
     const old = { key: "/|/contact", href: "/contact", kind: "internal" as const, label: null, requestIds: [], status: null };
     const next = { ...old, key: "/|/gallery", href: "/gallery" };

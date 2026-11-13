@@ -16,6 +16,7 @@ import DrawLayer from "./DrawLayer";
 import { usePreviewEdits, previewContentLoaded } from "./previewEdits";
 import { usePreviewScroll } from "./frameScroll";
 import ContentSyncNote from "./ContentSyncNote";
+import { ReviewLinkOpening } from "./ReviewLinkOpening";
 
 const WIDTH: Record<Device, string> = { mobile: "390px", tablet: "768px", desktop: "100%" };
 
@@ -71,7 +72,7 @@ export default function PreviewPanel() {
         <StageRibbon progress={ribbon} thin={phone} className={phone ? "pb-0.5" : "px-2 pt-1 pb-3"} />
       </div>
       <div ref={boxRef} className={cn("relative min-h-0 flex-1 bg-muted flex justify-center", coverFull && "fixed inset-0 z-50 bg-background")}>
-
+        {!editing && <ReviewLinkOpening />}
 
         <div ref={drawing.areaRef} className={cn("relative h-full max-w-full overflow-hidden bg-background")}
           style={{ width: WIDTH[device] }}>

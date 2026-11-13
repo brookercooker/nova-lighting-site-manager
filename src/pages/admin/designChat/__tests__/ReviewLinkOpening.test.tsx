@@ -1,0 +1,24 @@
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { ReviewLinkOpening } from "../ReviewLinkOpening";
+import { walk } from "../submitWalkthroughStore";
+vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ showPreviewPath: vi.fn(), previewLocation: { path: "/" }, previewNavigating: true }) }));
+afterEach(() => { cleanup(); walk.reset(); });
+it("does not focus the old page on readiness; waits for Privacy Policy location then readiness", () => {
+  const frame = document.createElement("iframe"); frame.src = "https://public.example/"; frame.setAttribute("data-site-preview", "true"); frame.setAttribute("data-preview-shown", "true"); document.body.appendChild(frame);
+  const post = vi.spyOn(frame.contentWindow as Window, "postMessage");
+  walk.update(w => ({ ...w, openingLink: { key: "privacy", path: "/privacy-policy", name: "Privacy Policy", href: "/about" } }));
+  render(<ReviewLinkOpening />);
+  const send = (data: unknown, origin = "https://public.example") => act(() => window.dispatchEvent(new MessageEvent("message", { data, origin, source: frame.contentWindow })));
+  const ready = { source: "nova-site", type: "link-check-ready", v: 2, enabled: true };
+  send(ready);
+  expect(post).not.toHaveBeenCalled();
+  send({ source: "nova-site", type: "location", path: "/privacy-policy" }, "https://forged.example"); send(ready);
+  expect(post).not.toHaveBeenCalled();
+  send({ source: "nova-site", type: "location", path: "/privacy-policy" });
+  expect(walk.get().openingLink?.path).toBe("/privacy-policy");
+  send(ready);
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "link-check-focus", raw: "/about" }), "https://public.example");
+  expect(walk.get().openingLink).toBeNull();
+  expect(screen.queryByRole("status")).toBeNull(); frame.remove();
+});
