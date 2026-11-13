@@ -139,12 +139,12 @@ export function reviewPageInventory(draft: Inventory, live: Inventory | null): I
     .map(link => live?.published === false ? { ...link, publishedHref: null, originalHref: undefined } : link);
 }
 /** Load every changed page independently; a failed live comparison never suppresses another page's inventory. */
-export async function loadNetLinks(paths: string[], live: string | null, request = requestInventory, visibleFrame?: HTMLIFrameElement | null): Promise<Record<string, InventoryLink[]>> {
+export async function loadNetLinks(paths: string[], live: string | null, request = requestInventory, visibleFrame?: HTMLIFrameElement | null, embed?: string): Promise<Record<string, InventoryLink[]>> {
   if (!paths.length) return {};
-  let draft: string; try { draft = publicPreviewBase(null); } catch { return {}; }
+  let draft: string; try { draft = publicPreviewBase(embed ?? visibleFrame?.src); } catch { return {}; }
   const out: Record<string, InventoryLink[]> = {};
   await Promise.all([...new Set(paths)].map(async p => {
-    const draftUrl = publicPreviewPage(visibleFrame ? publicPreviewBase(visibleFrame.src) : draft, p);
+    const draftUrl = publicPreviewPage(draft, p);
     const [d, l] = await Promise.all([(async () => {
       const shown = visibleFrame ? await requestFrameInventory(visibleFrame, draftUrl) : null;
       return shown && shown.complete !== false ? shown : await request(draftUrl);

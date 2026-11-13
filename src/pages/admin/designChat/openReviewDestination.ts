@@ -2,10 +2,10 @@ import { publicLinkAddress } from "../linkDisplay";
 import type { LinkClick } from "./linkCheck";
 
 /** A blank script-owned tab allows accurate blocker detection; sever opener before loading any destination. */
-export function openReviewDestination(click: LinkClick): boolean {
+export function openReviewDestination(click: LinkClick, preservePreviewCredentials = false): boolean {
   let url: URL;
   try {
-    url = new URL(publicLinkAddress(click.href));
+    url = new URL(preservePreviewCredentials ? click.href : publicLinkAddress(click.href));
     if (!["https:", "http:", "mailto:", "tel:"].includes(url.protocol) || url.username || url.password) return false;
   } catch { return false; }
   const tab = window.open("about:blank", "_blank");

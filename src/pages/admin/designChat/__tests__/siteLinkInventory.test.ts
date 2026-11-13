@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { parseInventory, loadNetLinks, netReviewLinks, reviewPageInventory } from "../linkInventory";
 import { comparedReviewLinks } from "../publishedLinkComparison";
 import { isSiteLink } from "../siteLink";
@@ -6,6 +6,13 @@ import { isSiteLink } from "../siteLink";
 const badge = "https://lovable.dev/projects/lovp_7t4sw40esw9h5a5cqwffntga9e";
 const payload = (path: string, links: unknown[]) => ({ source: "nova-site", type: "link-inventory", v: 1, path, links });
 const real = (key: string, href: string, label: string) => ({ key, href, label, scope: "page" });
+it("collects all changed pages without a mounted preview, retaining its signed draft address", async () => {
+  const request = vi.fn(async (url: string) => ({ path: new URL(url).pathname, links: [real("0", "/contact", "Contact")], complete: true }));
+  const result = await loadNetLinks(["/", "/draft/pricing", "/contact"], null, request, null, "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/?__lovable_token=test");
+  expect(Object.keys(result).sort()).toEqual(["/", "/contact", "/draft/pricing"]);
+  expect(request).toHaveBeenCalledTimes(3);
+  expect(request.mock.calls.every(([url]) => new URL(url).searchParams.get("__lovable_token") === "test")).toBe(true);
+});
 it("excludes an injected badge anchor and explicitly outside-root links from the frame reply", () => {
   document.body.innerHTML = `<main data-inline-root><a href="/brands">Discuss pricing</a></main><aside><a href="${badge}">Edit with Lovable</a><a href="https://shell.example">Shell</a></aside>`;
   const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("a")).map((a, i) => ({ ...real(String(i), a.getAttribute("href") ?? "", a.textContent ?? ""), contentOwned: !!a.closest("[data-inline-root]") }));

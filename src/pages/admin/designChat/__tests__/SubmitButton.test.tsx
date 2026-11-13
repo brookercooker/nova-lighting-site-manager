@@ -20,12 +20,14 @@ const render = (ui: ReactNode) => {
 const page = (key: string, name: string) => ({ key: "page:" + key, page: { name, path: key }, how: "Changed by the builder" });
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(window, "open").mockReturnValue({ opener: window, document: document.implementation.createHTMLDocument(), close: vi.fn() } as unknown as Window);
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   walk.reset();
   m.state = { busy: false, publish: { ok: true, open: 1 }, review: { enabled: true } };
   m.post.mockResolvedValue({ ok: true });
   m.data = { rows: [page("/a", "About")], pages: [], links: { status: "ok", groups: [], unread: 0, partial: false, truncated: false } };
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function PanelHost({ open = true, onOpenChange = () => {} }: { open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const s = useWalk();
@@ -55,6 +57,24 @@ const tickManual = () => {
 };
 
 describe("Submit for Review walkthrough", () => {
+  it("holds Next until inventories finish, then includes all seven links without viewing other pages", () => {
+    m.data.pagesStatus = "ok";
+    m.data.links = { status: "loading" };
+    const host = render(<PanelHost open />);
+    act(() => walk.update(w => ({ ...w, ticked: ["page:/a"] })));
+    expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
+    m.data.links = { status: "ok", groups: [{ page: { path: "/a", name: "About" }, label: "About", links: Array.from({ length: 7 }, (_, i) => ({ key: `/a|page|${i}`, href: `https://example.com/${i}`, kind: "external", label: `Link ${i}`, requestIds: [], status: null })) }], unread: 0, partial: false, truncated: false };
+    host.rerender(<PanelHost open />);
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
+    expect(walk.get().step).toBe("links");
+    expect(document.querySelectorAll("[data-walk-link]")).toHaveLength(7);
+  });
+  it("skips links only for a completed truly empty inventory", () => {
+    render(<PanelHost open />);
+    viewAndTick();
+    fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
+    expect(walk.get().step).toBe("checklist");
+  });
   it("counts unknown comparisons in the three-step flow and requires link approval", () => {
     m.data.links = { status: "ok", groups: [{ page: { name: "Homepage", path: "/" }, label: "Homepage", links: [{ key: "/|page|0", href: "https://example.com", kind: "external", label: "Unknown link", requestIds: [], status: null }] }] };
     render(<PanelHost open />);

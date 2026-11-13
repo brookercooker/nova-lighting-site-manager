@@ -25,6 +25,7 @@ import { domainOf, groupRisks, riskRank } from "./linkRisk";
 import { ReviewDestination, ReviewRiskFlags } from "./ReviewLinkRiskDetails";
 
 import { reviewActionName, reviewTileTitle, ReviewLinkTitle } from "./ReviewLinkTitle";
+import { openReviewIcon } from "./reviewOpenIcon";
 
 const missingInternalLink = (link: ReviewLink, pages: ManagerPage[]) =>
   linkChip(link, pages)?.tone === "bad";
@@ -48,7 +49,7 @@ export function walkProgress(data: WalkthroughData, s = walk.get()) {
   const pageRows = data.rows;
   const pagesLeft = pageRows.filter((r) => !s.ticked.includes(r.key)).length;
   const allLinks = data.links.status === "ok" ? data.links.groups.flatMap((g) => g.links) : [];
-  const hasLinksStep = data.links.status === "failed" || allLinks.length > 0 || s.step === "links";
+  const hasLinksStep = data.links.status !== "ok" || allLinks.length > 0 || s.step === "links";
   const linksLeft = allLinks.filter(l => linkNeedsCheck(l, s, data.pages)).length;
   const items = checklistItems(pageRows, allLinks.length > 0, pagesLeft === 0, linksLeft === 0);
   const checksLeft = items.filter((i) => !itemTicked(i, s.checks)).length;
@@ -218,14 +219,14 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
 
 function NewTab({ href, onOpen }: { href: string; onOpen: () => void }) {
   return <TooltipProvider><Tooltip><TooltipTrigger asChild>
-    <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open Link to Verify" onClick={onOpen}><ExternalLink className="h-4 w-4" aria-hidden /></a></Button>
+    <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open Link to Verify" onClick={e => openReviewIcon(e, href, onOpen)}><ExternalLink className="h-4 w-4" aria-hidden /></a></Button>
   </TooltipTrigger><TooltipContent>Open Link to Verify</TooltipContent></Tooltip></TooltipProvider>;
 }
 
 function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: WalkthroughData; onView: (r: ChangedRow) => void }) {
   const s = useWalk();
   if (!rows.length) return <p className="text-sm text-muted-foreground">No pages were changed in this draft.</p>;
-  return <><ul className="space-y-3" aria-label="Design Check Pages">{rows.map(r => {
+  return <>{s.linkNote && <p role="status" className="mb-2 text-xs text-muted-foreground">{s.linkNote}</p>}<ul className="space-y-3" aria-label="Design Check Pages">{rows.map(r => {
     const approved = s.ticked.includes(r.key), viewed = s.viewed.includes(r.key);
     const tab = r.page ? draftPageUrl(r.page.path) : null;
     return <li key={r.key} data-walk-row={r.key} className={cn("min-w-0 rounded-md border p-3 space-y-2", s.checking?.key === r.key && "border-primary bg-primary/5")}>
@@ -297,7 +298,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
     row?.scrollIntoView?.({ block: "nearest" });
     row?.querySelector<HTMLElement>("[data-verify-link]")?.focus({ preventScroll: true });
   }, [s.selectedLink, data.links.status, changeFingerprint(expanded)]);
-  if (data.links.status === "failed") return <p role="status" className="text-sm">Links couldn't be listed right now.</p>;
+  if (data.links.status === "failed") return <p role="status" className="text-sm">Links couldn't be listed right now.{data.retryInventory && <Button variant="link" className="h-11 px-2" onClick={data.retryInventory}>Retry</Button>}</p>;
   if (data.links.status !== "ok") return <p role="status" className="text-sm text-muted-foreground">Checking links…</p>;
   const { unread, partial, truncated } = data.links;
   const groups = orderedGroups;
@@ -342,7 +343,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                   onClick={e => { if (e.target instanceof Element && e.target.closest("button,a,input,[role='switch'],[data-review-editor]")) return; onShow(l, g); }}
                   onKeyDown={e => { if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return; e.preventDefault(); onShow(l, g); }}
                   className={cn("space-y-1 min-w-0 rounded-md border bg-background p-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", st === "done" && "text-muted-foreground", (s.selectedLink?.key === l.key || s.checking?.key === l.key) && "border-l-accent border-l-[3px]")}>
-                  <div className="relative min-w-0 pr-11"><ReviewLinkTitle link={l} pages={data.pages} />{tabUrl && <Button asChild variant="ghost" size="icon" className="absolute -right-1 -top-2 h-11 w-11 hover:bg-muted"><a data-verify-link aria-label={`Open link to verify ${friendlyName}`} title={`Open link to verify ${friendlyName}`} href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden /></a></Button>}</div>
+                  <div className="relative min-w-0 pr-11"><ReviewLinkTitle link={l} pages={data.pages} />{tabUrl && <Button asChild variant="ghost" size="icon" className="absolute -right-1 -top-2 h-11 w-11 hover:bg-muted"><a data-verify-link aria-label={`Open link to verify ${friendlyName}`} title={`Open link to verify ${friendlyName}`} href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => openReviewIcon(e, tabUrl, () => walk.openedVerification(l.key, own))}><ExternalLink aria-hidden /></a></Button>}</div>
                   {st === "todo" && s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <ReviewDestination link={l} pages={data.pages} flags={flags} />
                   {l.publishedHref === undefined && <p className="text-xs text-muted-foreground">Couldn't compare with the published site</p>}
@@ -417,6 +418,7 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
       {c.kind === "page" && <Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Back to review" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft aria-hidden className="h-4 w-4" /></Button>}
       <p className="min-w-0 flex-1 truncate text-xs" title={c.name}>{c.kind === "page" ? c.name : `Checking ${c.name}`}{c.kind === "page" && at >= 0 ? ` · ${at + 1} of ${pageRows.length}` : ""}</p>
       </div>
+      {!s.open && s.linkNote && <p role="status" className="mb-2 text-xs text-muted-foreground">{s.linkNote}</p>}
       <div className="grid grid-cols-2 gap-2"><Button type="button" variant={approved ? "outline" : "default"} className="h-11 min-w-0 gap-1.5 rounded-md px-2.5 text-sm font-medium shadow-none whitespace-nowrap" disabled={!enabled} aria-pressed={approved} onClick={yup}>{approved && <Check aria-hidden className="h-4 w-4" />}{approved ? "Approved" : "Approve"}</Button>
       {c.kind === "page" && <Button type="button" variant="outline" className="h-11 min-w-0 gap-1.5 rounded-md px-2.5 text-sm font-medium shadow-none whitespace-nowrap" disabled={!ready || at < 0} onClick={nextPage}>{at >= pageRows.length - 1 ? "Done" : "Next Page"}<ArrowRight aria-hidden className="h-4 w-4" /></Button>}{c.kind === "link" && <Button type="button" variant="outline" className="h-11 min-w-0 gap-1.5 px-2.5 text-sm font-medium shadow-none" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft aria-hidden className="h-4 w-4" />Back</Button>}</div>
     </div>

@@ -6,6 +6,7 @@ import { useDesignChat, type Device } from "./DesignChatContext";
 import WaitProgress from "./WaitProgress";
 import { undoPendingGate, undoPendingReason } from "./logic";
 import { publicPreviewPage } from "./publicPreviewUrl";
+import { openReviewIcon } from "./reviewOpenIcon";
 
 /**
  * Device size stays with the component pickers; navigation lives in PreviewToolbar.
@@ -32,7 +33,7 @@ export default function PreviewTools({ showViewControls, tight = false, review =
           </ToggleGroup>}
           {review && <>
             <Button type="button" variant="outline" size="icon" className="h-11 w-11 shrink-0 shadow-none" aria-label="Full screen preview" title="Full screen preview" aria-pressed={chat.inFull} onClick={chat.toggleFull}><FullIcon className="h-4 w-4" aria-hidden /></Button>
-            {href ? <Button asChild variant="outline" size="icon" className="h-11 w-11 shrink-0 shadow-none"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open preview in new tab" title="Open preview in new tab"><ExternalLink className="h-4 w-4" aria-hidden /></a></Button> : <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 shadow-none" disabled aria-label="Open preview in new tab" title="Open preview in new tab"><ExternalLink className="h-4 w-4" aria-hidden /></Button>}
+            {href ? <Button asChild variant="outline" size="icon" className="h-11 w-11 shrink-0 shadow-none"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open preview in new tab" title="Open preview in new tab" onClick={e => openReviewIcon(e, href)}><ExternalLink className="h-4 w-4" aria-hidden /></a></Button> : <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 shadow-none" disabled aria-label="Open preview in new tab" title="Open preview in new tab"><ExternalLink className="h-4 w-4" aria-hidden /></Button>}
           </>}
         </>
       )}

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
 import { reviewLinkIdentity, sameReviewLink, stableReviewRows } from "./reviewLinkIdentity";
 import { useWalk } from "./submitWalkthroughStore";
+import { useDesignChat } from "./DesignChatContext";
 import { addSharedChromeRows, mergeSharedReviewLinks, stableReviewEdits, type SharedReviewObject } from "./sharedReviewLinks";
 import { liveSiteBase, loadNetLinks, netReviewLinks, requestFrameInventory, requestInventory, retainInventoryMetadata, type InventoryLink } from "./linkInventory";
 import { shownPreviewFrame } from "./previewNavigate";
@@ -71,6 +72,8 @@ export async function fetchReviewPages(): Promise<ReviewPages | null> {
 /** Everything the walkthrough lists; re-reads when the draft's requests change. */
 export function useWalkthroughData(state: RelayState | null, enabled: boolean): WalkthroughData {
   const walkState = useWalk();
+  const { preview } = useDesignChat();
+  const embed = preview?.frames.find(frame => frame.id === preview.shownId)?.url ?? preview?.frames.at(-1)?.url;
   const requests = state?.draft?.requests;
   const sig = changeFingerprint(requests ?? []) + ":" + (state?.previewVersion ?? 0);
   const reviewPages = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "review-pages", sig], queryFn: fetchReviewPages, enabled, retry: false, staleTime: 0, refetchOnMount: "always" });
@@ -106,7 +109,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   // True draft-vs-live comparison when the live site is configured and the frames answer link-inventory; otherwise today's list.
   const live = liveSiteBase() ?? liveSiteBase(state?.liveUrl);
   const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
-  const inventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "inventory", sig, changedPaths, live], queryFn: () => loadNetLinks(changedPaths, live, requestInventory, shownPreviewFrame()), enabled: enabled && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
+  const inventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "inventory", sig, changedPaths, live, embed], queryFn: () => loadNetLinks(changedPaths, live, requestInventory, shownPreviewFrame(), embed), enabled: enabled && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
   const merged = useMemo(() => links.data ? mergeSharedReviewLinks(netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data, objects.data]);
   const sharedPaths = [...new Set(merged?.groups.map(group => group.page?.path).filter((path): path is string => !!path) ?? [])].sort();
   const sharedLabels = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "shared-labels", sig, sharedPaths], enabled: enabled && sharedPaths.length > 0, retry: false, queryFn: async () => {
@@ -133,9 +136,11 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     }));
     return all;
   } });
-  const inventoryPending = changedPaths.length > 0 && enabled && inventory.isFetching;
+  const sourcePending = reviewPages.isPending || reviewPages.isFetching || objects.isPending || objects.isFetching || pages.isPending || pages.isFetching;
+  const inventoryPending = changedPaths.length > 0 && enabled && (inventory.isPending || inventory.isFetching);
+  const inventoryIncomplete = changedPaths.some(path => !(normPath(path) in (inventory.data ?? {})));
   const metadataPending = enabled && sharedPaths.length > 0 && (sharedLabels.isPending || sharedLabels.isFetching);
-  const linkResult: LinksResult = links.isError || objects.isError ? { status: "failed" } : labelled && !links.isFetching && !pages.isFetching && !objects.isFetching && !inventoryPending && !metadataPending ? { status: "ok", ...labelled } : { status: "loading" };
+  const linkResult: LinksResult = sourcePending || inventoryPending || metadataPending ? { status: "loading" } : links.isError || objects.isError || reviewPages.isError || inventory.isError || inventoryIncomplete ? { status: "failed" } : labelled && !links.isFetching ? { status: "ok", ...labelled } : { status: "loading" };
   const pagesStatus = reviewPages.isError || objects.isError || pages.isError ? "failed" : reviewPages.isPending || objects.isLoading || pages.isLoading ? "loading" : "ok";
   const fingerprintedRows = rows.map((row) => {
     const path = row.page?.path;

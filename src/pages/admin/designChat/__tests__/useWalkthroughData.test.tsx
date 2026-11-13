@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn(), inventory: vi.fn(), nets: vi.fn() }));
 vi.mock("../linkInventory", async importOriginal => ({...await importOriginal<typeof import("../linkInventory")>(), requestInventory: m.inventory, loadNetLinks: m.nets}));
 vi.mock("../helper", () => ({ RELAY: "https://relay.example", relayHeaders: m.headers }));
+vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ preview: { frames: [{ id: "draft", url: "https://id-preview--aeb60cc1-b08d-4938-9d83-88c44335e167.lovable.app/?__lovable_token=test" }], shownId: "draft" } }) }));
 vi.mock("@/prototype/client", () => ({ supabase: { from: m.from } }));
 vi.mock("../../siteManifest", () => ({ loadSiteManifest: async () => ({}), codePagePaths: () => [] }));
 const body = { ok: true, rows: [{ name: "Experiment", path: "/draft/experiment", how: ["chat"], requestIds: ["1"] }], components: [], objects: [], sitewide: { files: [] } };
@@ -19,7 +20,7 @@ it("pins two same-destination links by unique wording and keeps ambiguous card r
   expect(dropOriginalDestinations(result).groups[0].links.map(l => l.key)).toEqual(["b", "c"]);
 });
 beforeEach(() => {
-  m.nets.mockResolvedValue({});
+  m.nets.mockImplementation(async (paths: string[]) => Object.fromEntries(paths.map(path => [path, []])));
   m.inventory.mockResolvedValue(null);
   m.headers.mockResolvedValue({ Authorization: "Bearer test-staff" });
   m.from.mockImplementation((table: string) => {
@@ -30,6 +31,34 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("holds fresh review links until changed-page discovery and every inventory finish without viewing pages", async () => {
+    let discover: (value: Response) => void = () => {};
+    let collect: (value: Record<string, unknown[]>) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.endsWith("review-pages") ? new Promise<Response>(resolve => { discover = resolve; }) : Promise.resolve(new Response(JSON.stringify({ ok: true, groups: [] })))));
+    m.nets.mockImplementation(() => new Promise(resolve => { collect = resolve; }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(client.getQueryCache().findAll({ queryKey: ["walkthrough", "links"] })[0]?.state.status).toBe("success"));
+    expect(hook.result.current.links.status).toBe("loading");
+    discover(new Response(JSON.stringify(body)));
+    await waitFor(() => expect(m.nets).toHaveBeenCalled());
+    expect(hook.result.current.links.status).toBe("loading");
+    expect(m.nets.mock.calls.at(-1)?.[0]).toEqual(["/draft/experiment"]);
+    expect(m.nets.mock.calls.at(-1)?.[4]).toContain("__lovable_token=test");
+    collect({ "/draft/experiment": Array.from({ length: 7 }, (_, i) => ({ key: `0.${i}`, scope: "page", href: `/destination-${i}`, publishedHref: null })) });
+    await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
+    const result = hook.result.current.links;
+    expect(result.status === "ok" && result.groups.flatMap(g => g.links).length).toBe(7);
+  });
+  it("never treats an unanswered changed-page inventory as an empty verified list", async () => {
+    m.nets.mockResolvedValue({});
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(hook.result.current.links.status).toBe("failed"));
+  });
   it("includes all new Pricing inventory links even when the relay has no Pricing group", async () => {
     m.nets.mockResolvedValue({ "/draft/experiment": [0, 1, 2].map(i => ({ key: `0.${i}`, scope: "page", href: i === 0 ? "/brands" : "/contact", label: i === 0 ? "Discuss pricing" : `Pricing ${i}`, publishedHref: null })) });
     vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));
@@ -151,6 +180,7 @@ describe("review pages fetch", () => {
   });
 });
 it("waits for inventory, caches page wording/originals across changed requests, and exposes failed refresh", async () => {
+ m.nets.mockResolvedValue({ "/": [{ key: "0", scope: "page", href: "/gallery", publishedHref: "/contact" }] });
  m.from.mockImplementation((table:string)=>{const result={data:table==="pages"?[{name:"Homepage",path:"/",build_status:"ready",inline_edits:{"link:0":'{"href":"/gallery"}'}}]:[],error:null}; const q:any={select:()=>q,is:()=>Promise.resolve(result),in:()=>Promise.resolve(result)};return q;});
  vi.stubGlobal("fetch",vi.fn(async (url:string)=>new Response(JSON.stringify(url.endsWith("review-pages")?{...body,rows:[{name:"Homepage",path:"/",how:["content"],requestIds:["1"]}]}:{ok:true,groups:[]}))));
  let finish:(v:unknown)=>void=()=>{};

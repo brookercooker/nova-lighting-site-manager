@@ -18,6 +18,7 @@ import { linkText } from "./linkCheck";
 import { hostWarnings } from "./linkRisk";
 import { ReviewRiskFlags } from "./ReviewLinkRiskDetails";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { openReviewIcon } from "./reviewOpenIcon";
 
 function draftPageUrl(path: string, embed: unknown): string | undefined {
   try { return publicPreviewPage(publicPreviewBase(embed), path); } catch { return undefined; }
@@ -99,7 +100,7 @@ function ReviewLinkForm({ edit, pages, knownDomains, trustedDomains }: { edit: N
     <div className="space-y-1"><label htmlFor="review-link-address" className="text-sm">New Destination</label>
       <div className="flex min-w-0 items-center gap-1"><Input id="review-link-address" className="h-11 min-w-0 flex-1 text-sm" value={address} aria-invalid={!valid || !!error} aria-describedby={!valid || destinationHint ? "review-link-hint" : error ? "review-link-error" : undefined} disabled={saving}
         onFocus={() => setSuggesting(true)} onChange={e => { setAddress(e.target.value); setSuggesting(true); if (resolved) setError(""); }} onKeyDown={e => { if (e.key === "Escape") setSuggesting(false); }} />
-        <TooltipProvider><Tooltip><TooltipTrigger asChild>{valid ? <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 hover:bg-muted"><a aria-label="Open in new tab" title="Open in new tab" href={destination.startsWith("/") ? draftPageUrl(destination, embed) ?? undefined : destination} target="_blank" rel="noopener noreferrer"><ExternalLink aria-hidden /></a></Button> : <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" disabled aria-label="Open in new tab"><ExternalLink aria-hidden /></Button>}</TooltipTrigger><TooltipContent>Open in new tab</TooltipContent></Tooltip></TooltipProvider>
+        <TooltipProvider><Tooltip><TooltipTrigger asChild>{valid ? <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 hover:bg-muted"><a aria-label="Open in new tab" title="Open in new tab" href={destination.startsWith("/") ? draftPageUrl(destination, embed) ?? undefined : destination} target="_blank" rel="noopener noreferrer" onClick={e => openReviewIcon(e, e.currentTarget.href)}><ExternalLink aria-hidden /></a></Button> : <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" disabled aria-label="Open in new tab"><ExternalLink aria-hidden /></Button>}</TooltipTrigger><TooltipContent>Open in new tab</TooltipContent></Tooltip></TooltipProvider>
       </div>
       {destinationHint && <p id="review-link-hint" role="status" className="text-xs text-muted-foreground">{destinationHint}</p>}
       <div aria-live="polite"><ReviewRiskFlags flags={hostWarnings(destination.trim(), knownDomains, trustedDomains)} onJump={() => {}} /></div>
