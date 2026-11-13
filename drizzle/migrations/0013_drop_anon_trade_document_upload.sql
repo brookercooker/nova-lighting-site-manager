@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Anyone can upload trade documents" ON storage.objects;

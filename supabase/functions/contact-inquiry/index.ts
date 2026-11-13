@@ -51,7 +51,37 @@ Deno.serve(async (req) => {
     });
 
   try {
-    const parsed = BodySchema.safeParse(await req.json());
+    const raw = await req.json();
+
+    // Anonymous visitors never write to storage directly: the server picks the
+    // path and returns a one-time signed upload token for the private bucket.
+    if (raw && typeof raw === 'object' && raw.action === 'cert-upload-url') {
+      const ext = String(raw.ext ?? '').toLowerCase();
+      if (!['pdf', 'png', 'jpg', 'jpeg', 'webp', 'heic'].includes(ext)) {
+        return json({ error: 'Unsupported file type' }, 400);
+      }
+      const safeCompany = String(raw.company ?? 'trade')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 40) || 'trade';
+      const path = `${new Date().toISOString().slice(0, 10)}/${safeCompany}-${crypto.randomUUID()}.${ext}`;
+      const url = Deno.env.get('SUPABASE_URL');
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (!url || !serviceKey) return json({ error: 'Upload unavailable' }, 500);
+      const res = await fetch(`${url}/storage/v1/object/upload/sign/trade-documents/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+        body: '{}',
+      });
+      if (!res.ok) return json({ error: 'Upload unavailable' }, 500);
+      const { url: signed } = await res.json();
+      const token = new URL(signed, url).searchParams.get('token');
+      if (!token) return json({ error: 'Upload unavailable' }, 500);
+      return json({ path, token });
+    }
+
+    const parsed = BodySchema.safeParse(raw);
     if (!parsed.success) {
       return json({ error: parsed.error.flatten().fieldErrors }, 400);
     }

@@ -190,17 +190,15 @@ const ContactPage = () => {
       let salesTaxCertPath: string | null = null;
       if (isTrade && taxExempt && certFile) {
         const ext = certFile.name.split(".").pop()?.toLowerCase() ?? "pdf";
-        const safeCompany = (company ?? "trade")
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "")
-          .slice(0, 40);
-        salesTaxCertPath = `${new Date().toISOString().slice(0, 10)}/${safeCompany || "trade"}-${Date.now()}.${ext}`;
+        const { data: signed, error: signError } = await supabase.functions.invoke("contact-inquiry", {
+          body: { action: "cert-upload-url", ext, company: company ?? "trade" },
+        });
+        if (signError || !signed?.path || !signed?.token) throw signError ?? new Error("Upload unavailable");
+        salesTaxCertPath = signed.path as string;
         const { error: uploadError } = await supabase.storage
           .from("trade-documents")
-          .upload(salesTaxCertPath, certFile, {
+          .uploadToSignedUrl(signed.path, signed.token, certFile, {
             contentType: certFile.type || "application/octet-stream",
-            upsert: false,
           });
         if (uploadError) throw uploadError;
       }
