@@ -25,7 +25,7 @@ export default function LabelsCell({ scope, value, onChange, itemName }: Props) 
   return (
     <>
       <Button type="button" variant="ghost" className="h-11 w-full min-w-0 justify-between gap-2 px-2 text-xs" aria-label={`Edit Labels${itemName ? ` for ${itemName}` : ""}`} onClick={() => setOpen(true)}>
-        <span>Labels</span><span className="flex min-w-0 items-center gap-1"><span className="truncate">{labelCount(count)}</span><ChevronRight className="h-4 w-4 shrink-0" /></span>
+        <span>Edit Labels</span><span className="flex min-w-0 items-center gap-1"><span className="truncate">{labelCount(count)}</span><ChevronRight className="h-4 w-4 shrink-0" /></span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

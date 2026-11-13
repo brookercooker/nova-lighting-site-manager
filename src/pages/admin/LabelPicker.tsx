@@ -120,13 +120,13 @@ export default function LabelPicker({
           return (
             <Popover key={path}>
               <span
-                className="text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1 border min-w-0 max-w-full"
-                style={{ background: c.bg, borderColor: c.border, color: c.text }}
+                className="nova-label-selected text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1 border min-w-0 max-w-full"
               >
                 <PopoverTrigger asChild>
                   <button type="button" className="inline-flex items-center gap-1 min-w-0 focus:outline-none" title={`Change color — ${c.name}`}>
                     <Tag className="w-3.5 h-3.5" style={{ color: c.iconStroke, fill: c.iconFill }} />
                     <span className="truncate">{label}</span>
+                    <Check className="w-3 h-3 shrink-0" aria-hidden />
                   </button>
                 </PopoverTrigger>
                 <button type="button" onClick={() => onChange(value.filter((x) => x !== path))}

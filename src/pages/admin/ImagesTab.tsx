@@ -134,6 +134,7 @@ export default function ImagesTab() {
   const [usedOnPage, setUsedOnPage] = useState<string>("all"); // page id or "all"/"none"
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<Img | null>(null);
+  const detailTitleRef = useRef<HTMLHeadingElement>(null);
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -773,8 +774,8 @@ export default function ImagesTab() {
 
 
       <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
-        <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] flex flex-col p-0 gap-0">
-          <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0"><DialogTitle className="text-sm truncate pr-8">{detail?.filename}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] flex flex-col p-0 gap-0" onOpenAutoFocus={event => { event.preventDefault(); detailTitleRef.current?.focus(); }}>
+          <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0"><DialogTitle ref={detailTitleRef} tabIndex={-1} data-image-detail-title className="text-sm truncate pr-8">{detail?.filename}</DialogTitle></DialogHeader>
           {detail && <ImageDetail img={detail} tags={((images as Img[]).find((i) => i.id === detail.id)?.tags) ?? detail.tags ?? []} allTags={Object.keys(usageCounts)}
             broken={brokenIds.has(detail.id)}
             onBroken={() => markBroken(detail.id)}
