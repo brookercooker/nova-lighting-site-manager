@@ -9,5 +9,8 @@ export function ReviewLinkTitle({ link, pages }: { link: ReviewLink; pages: Mana
   </div>;
 }
 export function reviewTileTitle(link: ReviewLink, pages: ManagerPage[] = []): string {
-  return link.image ? "Image" : publicLinkAddress((link.visibleText || link.label || link.ariaLabel || linkText(link, pages)).replace(/\s+/g, " ").trim());
+  if (link.image) return "Image";
+  const wording = (link.visibleText || link.label || link.ariaLabel || "").replace(/\s+/g, " ").trim();
+  return publicLinkAddress(!wording || wording === link.href || /^Link to /i.test(wording) ? `Card link to ${link.href}` : wording);
 }
+export const reviewActionName = (link: ReviewLink, pages: ManagerPage[] = []) => link.image ? `Image to ${publicLinkAddress(link.href)}` : reviewTileTitle(link, pages);

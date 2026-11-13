@@ -12,6 +12,15 @@ beforeEach(() => {
   m.save.mockResolvedValue({ error: null });
 });
 describe("review link writes", () => {
+  it("saves each of two same-destination elements by its own authoritative key", async () => {
+    m.inventory.links.push({ ...m.inventory.links[0], key: "0.2", label: "Image" });
+    for (const key of ["0.5.0.1", "0.2"]) {
+      const result = await resolveReviewLink("/", "/contact", null, undefined, { elementKey: key, scope: "page" });
+      await saveReviewLink(result, "/gallery", false);
+      expect(m.save.mock.lastCall?.[1].inline_edits[`link:${key}`]).toBe('{"href":"/gallery"}');
+    }
+    await expect(resolveReviewLink("/", "/contact", null)).rejects.toThrow("matched safely");
+  });
   it("pins a loaded footer by object key even when packaged href is stale", async () => {
     m.inventory.links[0] = { ...m.inventory.links[0], scope: "object:footer", href: "/original", label: "Ideas & Advice" };
     m.row.inline_edits["link:0.5.0.1"] = '{"href":"/team"}';
@@ -60,7 +69,7 @@ describe("review link writes", () => {
     await saveReviewLink(r, "/gallery", false);
     expect(m.save.mock.calls[0][1].inline_edits["link:0.5.0.1"]).toBe('{"href":"/gallery"}');
     expect(r.element.label).toBe("EXPLORE GALLERIES");
-    await expect(resolveReviewLink("/", "/contact", "BOOK A CONSULTATION", undefined, { elementKey: "0.99", scope: "page" })).rejects.toThrow("pin down");
+    await expect(resolveReviewLink("/", "/contact", "BOOK A CONSULTATION", undefined, { elementKey: "0.99", scope: "page" })).rejects.toThrow("matched safely");
   });
   it.each(["https://example.com/a", "mailto:a@b.co", "tel:+15550100", "/gallery"])("uses the Manual destination validation for %s", href => expect(validTextLink(href)).toBe(true));
   it.each(["http://example.com", "//example.com", "javascript:alert(1)", "#faq", "https://", "mailto:", "tel:", "/a b", "/a\\b"])("rejects %s before any save", async href => {
@@ -86,7 +95,7 @@ describe("review link writes", () => {
     if (what === "ambiguous") m.inventory.links.push({ ...m.inventory.links[0], key: "0.2" });
     if (what === "target") delete m.inventory.links[0].target;
     if (what === "fingerprint") delete m.inventory.links[0].fingerprint;
-    await expect(resolveReviewLink("/", "/contact", null)).rejects.toThrow("We couldn't pin down which link this is.");
+    await expect(resolveReviewLink("/", "/contact", null)).rejects.toThrow("This link couldn't be matched safely.");
     expect(m.save).not.toHaveBeenCalled();
   });
   it("propagates conflict errors without saving another map", async () => {

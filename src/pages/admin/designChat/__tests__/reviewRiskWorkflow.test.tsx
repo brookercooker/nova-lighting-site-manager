@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SubmitWalkthroughPanel, ownLinkPrint } from "../SubmitWalkthrough";
 import { walk } from "../submitWalkthroughStore";
 import type { ReviewLink } from "../submitWalkthrough";
+import { WalkthroughCheckBar } from "../SubmitWalkthrough";
 const m = vi.hoisted(() => ({ data: null as any, trust: vi.fn(), domains: [] as string[], show: vi.fn() }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: { publish: { open: 3 }, review: { enabled: true } }, preview: null, showPreviewPath: m.show }) }));
 vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
@@ -15,6 +16,35 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 const keys = () => Array.from(document.querySelectorAll<HTMLElement>("[data-walk-link]")).map(el => el.dataset.walkLink);
+it("keeps image actions distinct and never grants approval on selection", () => {
+  m.data.links.groups[0].links = ["/contact", "/about"].map((href, i) => ({ ...a, key: `image-${i}`, href, kind: "internal", image: { alt: "", src: "" } }));
+  render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
+  for (const href of ["/contact", "/about"]) expect(screen.getByRole("button", { name: `Correct link: Image to ${href}` })).toBeEnabled();
+  expect(walk.get().verificationOpened).toEqual({});
+});
+it("also distinguishes images sharing the same destination without merging their keys", () => {
+  m.data.links.groups[0].links = ["first", "second"].map(key => ({ ...a, key, href: "/about", kind: "internal", image: { alt: "", src: "" } }));
+  render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
+  expect(screen.getByRole("button", { name: "Correct link: Image to /about · 1 of 2" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Correct link: Image to /about · 2 of 2" })).toBeEnabled();
+  expect(keys()).toEqual(["first", "second"]);
+});
+it("checking-bar approval waits for opening and uses the same own-link fingerprint", () => {
+  walk.update(s => ({ ...s, checking: { key: "a", kind: "link", name: "Our Story" } }));
+  render(<WalkthroughCheckBar />);
+  expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  act(() => walk.openedVerification("a", ownLinkPrint(a)));
+  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+  expect(walk.get().linkTicked).toContain("a");
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  expect(walk.get().step).toBe("links");
+});
+it("uses a neutral counter until changed-link membership is known", () => {
+  m.data.links = { status: "loading" };
+  walk.update(s => ({ ...s, step: "pages" }));
+  render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
+  expect(screen.getByText("Checking changes…")).toBeInTheDocument();
+});
 it("sorts missing before external before internal, then leaves confirmed rows in place", () => {
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
   expect(keys()).toEqual(["b", "a", "c"]);
@@ -52,12 +82,11 @@ it("does not auto-collapse a completed group the reviewer opened by hand", () =>
   fireEvent.click(screen.getByRole("button", { name: "Approve: Our Story" }));
   expect(screen.getByRole("button", { name: "Homepage · done" })).toHaveAttribute("aria-expanded", "true");
 });
-it("duplicate jump expands and selects the related row without opening a destination", () => {
+it("duplicate destinations are not warnings or approval permission", () => {
   m.data.links.groups[0].links = [a, { ...a, key: "d", label: "More Stories" }];
   render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
-  fireEvent.click(screen.getByText("Same destination as: More Stories"));
-  fireEvent.click(screen.getAllByRole("button", {name:"Show Related Link"})[0]);
-  expect(walk.get().selectedLink?.key).toBe("d"); expect(walk.get().verificationOpened).toEqual({});
+  expect(screen.queryByText(/Same destination as/)).toBeNull();
+  expect(walk.get().verificationOpened).toEqual({});
 });
 it("legacy handled rows retain review-again and correction actions",()=>{
  m.data.links.groups[0].links=[a];walk.update(s=>({...s,linkReplaced:{a:ownLinkPrint(a)},groupExpansion:{"/":true}}));

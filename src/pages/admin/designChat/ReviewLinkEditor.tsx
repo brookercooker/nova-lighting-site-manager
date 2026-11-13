@@ -17,6 +17,7 @@ import { publicLinkAddress } from "../linkDisplay";
 import { linkText } from "./linkCheck";
 import { hostWarnings } from "./linkRisk";
 import { ReviewRiskFlags } from "./ReviewLinkRiskDetails";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 function draftPageUrl(path: string, embed: unknown): string | undefined {
   try { return publicPreviewPage(publicPreviewBase(embed), path); } catch { return undefined; }
@@ -49,7 +50,7 @@ function ReviewLinkForm({ edit, pages, knownDomains, trustedDomains }: { edit: N
   const savingRef = useRef(false);
   useEffect(() => {
     let active = true;
-    void resolveReviewLink(page.path, edit.link.href, edit.link.label, embed, { elementKey: edit.link.elementKey, scope: edit.link.scope }).then(r => {
+    void resolveReviewLink(page.path, edit.link.href, edit.link.label, embed, { elementKey: edit.link.elementKey, scope: edit.link.scope, ...(edit.link.inventoryIndex === undefined ? {} : { inventoryIndex: edit.link.inventoryIndex }) }).then(r => {
       if (active) { setResolved(r); setBlank(r.blank); setFinding(false); }
     }).catch(e => { if (active) { setResolutionHint(e instanceof Error ? e.message : FIND_LINK_ERROR); setFinding(false); } });
     return () => { active = false; };
@@ -63,7 +64,7 @@ function ReviewLinkForm({ edit, pages, knownDomains, trustedDomains }: { edit: N
     try {
       const lines = await saveReviewLink(resolved, destination, blank);
       const kind = /^mailto:/i.test(destination) ? "mail" : /^tel:/i.test(destination) ? "phone" : destination.startsWith("/") ? "internal" : "external";
-      walk.savedLink(page.path, { ...edit.link, target: blank ? "_blank" : null, href: destination, originalHref: resolved.element.originalHref ?? edit.link.originalHref, kind, elementKey: resolved.element.key, scope: resolved.element.scope, label: resolved.element.label || edit.link.label, ariaLabel: resolved.element.ariaLabel || edit.link.ariaLabel, visibleText: resolved.element.visibleText || edit.link.visibleText, image: resolved.element.image || edit.link.image, requestIds: [], status: null });
+      walk.savedLink(page.path, { ...edit.link, target: blank ? "_blank" : null, href: destination, originalHref: edit.link.originalHref ?? resolved.element.originalHref, kind, elementKey: resolved.element.key, scope: resolved.element.scope, inventoryIndex: resolved.element.inventoryIndex ?? edit.link.inventoryIndex, label: resolved.element.label || edit.link.label, ariaLabel: resolved.element.ariaLabel || edit.link.ariaLabel, visibleText: resolved.element.visibleText || edit.link.visibleText, image: resolved.element.image || edit.link.image, requestIds: [], status: null });
       const { notifyContentEdited } = await import("./contentSync");
       notifyContentEdited(lines);
     } catch (e) { setError(e instanceof Error ? e.message : "Your new link couldn't be saved. Please try again."); }
@@ -96,13 +97,14 @@ function ReviewLinkForm({ edit, pages, knownDomains, trustedDomains }: { edit: N
   const suggestions = pages.filter(p => validTextLink(p.path) && !isInternalPath(p.path) && (!address || p.name.toLowerCase().includes(address.toLowerCase()) || p.path.toLowerCase().includes(address.toLowerCase()))).slice(0, 12);
   const content = <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()} className="min-w-0 space-y-2" aria-label="Edit Link Destination">
     <div className="space-y-1"><label htmlFor="review-link-address" className="text-sm">New Destination</label>
-      <Input id="review-link-address" className="h-11 text-sm sm:h-8" value={address} aria-invalid={!valid || !!error} aria-describedby={!valid || destinationHint ? "review-link-hint" : error ? "review-link-error" : undefined} disabled={saving}
+      <div className="flex min-w-0 items-center gap-1"><Input id="review-link-address" className="h-11 min-w-0 flex-1 text-sm" value={address} aria-invalid={!valid || !!error} aria-describedby={!valid || destinationHint ? "review-link-hint" : error ? "review-link-error" : undefined} disabled={saving}
         onFocus={() => setSuggesting(true)} onChange={e => { setAddress(e.target.value); setSuggesting(true); if (resolved) setError(""); }} onKeyDown={e => { if (e.key === "Escape") setSuggesting(false); }} />
+        <TooltipProvider><Tooltip><TooltipTrigger asChild>{valid ? <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0 hover:bg-muted"><a aria-label="Open in new tab" title="Open in new tab" href={destination.startsWith("/") ? draftPageUrl(destination, embed) ?? undefined : destination} target="_blank" rel="noopener noreferrer"><ExternalLink aria-hidden /></a></Button> : <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" disabled aria-label="Open in new tab"><ExternalLink aria-hidden /></Button>}</TooltipTrigger><TooltipContent>Open in new tab</TooltipContent></Tooltip></TooltipProvider>
+      </div>
       {destinationHint && <p id="review-link-hint" role="status" className="text-xs text-muted-foreground">{destinationHint}</p>}
       <div aria-live="polite"><ReviewRiskFlags flags={hostWarnings(destination.trim(), knownDomains, trustedDomains)} onJump={() => {}} /></div>
       {suggesting && suggestions.length > 0 && <div aria-label="Page Suggestions" className="max-h-48 overflow-y-auto overscroll-contain border bg-popover p-1">{suggestions.map(p => <Button type="button" key={p.path} variant="ghost" className="h-auto min-h-11 sm:min-h-8 w-full justify-start whitespace-normal break-words text-left" disabled={saving} onMouseDown={e => e.preventDefault()} onClick={() => { setAddress(p.path); setSuggesting(false); if (resolved) setError(""); }}>{p.name}</Button>)}</div>}
     </div>
-    {valid && <Button asChild variant="ghost" size="icon" className="h-11 w-11"><a aria-label="Open New Destination in New Tab" title="Open New Destination in New Tab" href={destination.startsWith("/") ? draftPageUrl(destination, embed) ?? undefined : destination} target="_blank" rel="noopener noreferrer"><ExternalLink aria-hidden /></a></Button>}
     {finding && <span role="status" aria-label="Loading"><Loader2 aria-hidden className="h-4 w-4 animate-spin motion-reduce:animate-none text-muted-foreground" /></span>}
     {error && resolved && <p id="review-link-error" role="alert" className="break-words text-sm text-destructive">{error}</p>}
     {!finding && !resolved && <><p role="status" className="text-sm">{resolutionHint}</p><Button type="button" className="h-auto min-h-11 whitespace-normal px-2 text-sm sm:h-8 sm:min-h-8 [&_svg]:h-3 [&_svg]:w-3" onClick={() => { walk.update(s => ({ ...s, reviewEdit: null })); void fallback(edit.link, edit.group, edit.rows, edit.fingerprint); }}><Pencil className="h-4 w-4" aria-hidden />Open in Manual Edit</Button></>}

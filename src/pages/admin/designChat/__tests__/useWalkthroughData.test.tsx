@@ -1,7 +1,7 @@
 import { renderHook, waitFor, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider, type QueryObserverOptions } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchReviewPages, useWalkthroughData, mergeSavedReviewLinks } from "../useWalkthroughData";
+import { fetchReviewPages, useWalkthroughData, mergeSavedReviewLinks, enrichReviewLinks, dropOriginalDestinations } from "../useWalkthroughData";
 import type { ReactNode } from "react";
 
 const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn(), inventory: vi.fn() }));
@@ -10,6 +10,14 @@ vi.mock("../helper", () => ({ RELAY: "https://relay.example", relayHeaders: m.he
 vi.mock("@/prototype/client", () => ({ supabase: { from: m.from } }));
 vi.mock("../../siteManifest", () => ({ loadSiteManifest: async () => ({}), codePagePaths: () => [] }));
 const body = { ok: true, rows: [{ name: "Experiment", path: "/draft/experiment", how: ["chat"], requestIds: ["1"] }], components: [], objects: [], sitewide: { files: [] } };
+it("pins two same-destination links by unique wording and keeps ambiguous card rows unresolved", () => {
+  const link = { key: "a", href: "/contact", label: "Book a Consultation", kind: "internal" as const, requestIds: [], status: null };
+  const base = { unread: 0, partial: false, truncated: false, groups: [{ label: "Homepage", page: { path: "/", name: "Homepage" }, links: [link, { ...link, key: "b", label: "Contact Image" }, { ...link, key: "c", label: "Link to Contact" }] }] };
+  const inventory = ["Book a Consultation", "Contact Image"].map((label, i) => ({ label, key: `0.${i}`, scope: "page", href: "/contact", originalHref: i ? "/gallery" : "/contact", inventoryPath: "/" }));
+  const result = enrichReviewLinks(base, inventory);
+  expect(result.groups[0].links.map(l => l.elementKey)).toEqual(["0.0", "0.1", undefined]);
+  expect(dropOriginalDestinations(result).groups[0].links.map(l => l.key)).toEqual(["b", "c"]);
+});
 beforeEach(() => {
   m.inventory.mockResolvedValue(null);
   m.headers.mockResolvedValue({ Authorization: "Bearer test-staff" });

@@ -9,7 +9,7 @@ import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { publicLinkAddress } from "../linkDisplay";
 
 export type ResolvedReviewLink = { table: "pages" | "object_registry"; id: string; name: string; updatedAt: string; edits: InlineEdits; element: InventoryLink; href: string; blank: boolean };
-export const FIND_LINK_ERROR = "We couldn't pin down which link this is. Use Open in Manual Edit to change it.";
+export const FIND_LINK_ERROR = "This link couldn't be matched safely.";
 export const LINK_DATA_ERROR = "The saved link and the page don't match yet. Use Open in Manual Edit to change it.";
 /** Only field names/booleans/counts: no addresses, fingerprints, tokens or database contents. */
 function mismatch(field: string, details: Record<string, boolean | number> = {}) {
@@ -17,11 +17,11 @@ function mismatch(field: string, details: Record<string, boolean | number> = {})
 }
 
 /** Only authoritative frame keys and complete link metadata can authorize a direct write. */
-export async function resolveReviewLink(path: string, href: string, label: string | null, embed?: string, identity?: { elementKey?: string; scope?: string }): Promise<ResolvedReviewLink> {
+export async function resolveReviewLink(path: string, href: string, label: string | null, embed?: string, identity?: { elementKey?: string; scope?: string; inventoryIndex?: number }): Promise<ResolvedReviewLink> {
   const url = publicPreviewPage(publicPreviewBase(embed), path);
   const frame = shownPreviewFrame();
   const inv = (frame ? await requestFrameInventory(frame, url) : null) ?? await requestInventory(url);
-  const candidates = inv?.links.filter(l => (identity?.elementKey ? l.key === identity.elementKey.replace(/^link:/, "") && l.scope === (identity.scope ?? "page") : l.href === href) && parseKey(`link:${l.key}`) && (l.scope === "page" || l.scope.startsWith("object:"))) ?? [];
+  const candidates = inv?.links.filter(l => (identity?.elementKey ? l.key === identity.elementKey.replace(/^link:/, "") && l.scope === (identity.scope ?? "page") && (identity.inventoryIndex === undefined || l.inventoryIndex === identity.inventoryIndex) : l.href === href) && parseKey(`link:${l.key}`) && (l.scope === "page" || l.scope.startsWith("object:"))) ?? [];
   const named = label ? candidates.filter(l => l.label === label) : [];
   const pool = named.length ? named : candidates;
   const body = pool.filter(l => l.scope === "page");

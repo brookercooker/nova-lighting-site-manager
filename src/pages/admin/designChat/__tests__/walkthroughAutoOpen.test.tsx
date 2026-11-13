@@ -112,7 +112,7 @@ describe("walkthrough auto-open and link lines", () => {
     m.data.links.groups = [{ page: { name: "Blog", path: "/b" }, label: "Blog", links: [{ ...link, key: "/b|/gallery" }] }];
     render(<Host />);
     post.mockClear(); m.show.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Show Link to Inspiration Gallery on the page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Card link to /gallery on the page" }));
     expect(m.show).toHaveBeenLastCalledWith("/b");
     expect(walk.get().checking?.key).toBe("/b|/gallery");
     expect(post).not.toHaveBeenCalled();
@@ -133,7 +133,7 @@ describe("walkthrough auto-open and link lines", () => {
     expect(linkText({ href: "/gallery", kind: "internal", label: "See More" }, pages)).toBe("See More");
     act(() => walk.reopen("links"));
     render(<Host />);
-    expect(screen.getAllByText("Link to Inspiration Gallery").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Card link to /gallery").length).toBeGreaterThan(0);
   });
   it("shortens card labels and treats an address-only label as unnamed", () => {
     expect(linkText({ href: "/gallery", kind: "internal", label: "/gallery" }, m.data.pages)).toBe("Link to Inspiration Gallery");

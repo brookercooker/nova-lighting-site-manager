@@ -171,7 +171,7 @@ it("tests typed destinations in a safe new tab without saving or changing target
  render(<ReviewLinkEditor pages={pages} />);
  await waitFor(() => expect(screen.getByRole("button", {name:"Save"})).toBeEnabled());
  fireEvent.change(screen.getByLabelText("New Destination"), {target:{value:"https://example.com/test?__lovable_token=discard"}});
- const test = screen.getByRole("link", {name:"Open New Destination in New Tab"});
+ const test = screen.getByRole("link", {name:"Open in new tab"});
  expect(test).toHaveAttribute("href", "https://example.com/test");
  expect(test).toHaveAttribute("rel", "noopener noreferrer");
  fireEvent.click(test);

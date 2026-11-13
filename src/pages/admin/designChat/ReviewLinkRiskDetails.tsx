@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Circle } from "lucide-react";
 import type { ManagerPage, ReviewLink } from "./submitWalkthrough";
 import { domainOf, differingCharacters, strongestRisk, type RiskFlag } from "./linkRisk";
 import { publicLinkAddress } from "../linkDisplay";
@@ -15,10 +16,11 @@ export function ReviewDestination({ link, flags }: { link: ReviewLink; pages?: M
   </div>;
 }
 export function ReviewRiskFlags({ flags, onJump }: { flags: RiskFlag[]; onJump: (key: string) => void }) {
+  flags = flags.filter(f => f.kind !== "duplicate");
   const primary = strongestRisk(flags);
   if (!primary) return null;
-  return <details className="nova-link-risk text-xs" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
-    <summary className="flex min-h-11 cursor-pointer items-center gap-1 font-semibold">{primary.reason}</summary>
+  return <details className="text-xs text-foreground" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+    <summary className="flex cursor-pointer items-start gap-1 font-normal leading-normal"><Circle aria-hidden className="nova-link-risk mt-1 h-2 w-2 shrink-0 fill-current" />{primary.reason}</summary>
     <div className="space-y-1">{flags.filter(f => f !== primary).map((f, i) => <p key={i} className="break-words">{f.reason}</p>)}
       {flags.filter(f => f.otherKey).map((f, i) => <Button key={i} variant="ghost" className="h-auto min-h-11 w-full justify-start whitespace-normal break-words px-0 text-left text-xs nova-link-risk" onClick={() => { if (f.otherKey) onJump(f.otherKey); }}>Show Related Link</Button>)}
     </div>

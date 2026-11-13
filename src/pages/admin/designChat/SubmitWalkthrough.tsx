@@ -23,7 +23,7 @@ import { SharedPageUsage } from "./SharedPageUsage";
 import { domainOf, groupRisks, riskRank } from "./linkRisk";
 import { ReviewDestination, ReviewRiskFlags } from "./ReviewLinkRiskDetails";
 
-import { reviewTileTitle, ReviewLinkTitle } from "./ReviewLinkTitle";
+import { reviewActionName, reviewTileTitle, ReviewLinkTitle } from "./ReviewLinkTitle";
 
 const missingInternalLink = (link: ReviewLink, pages: ManagerPage[]) =>
   linkChip(link, pages)?.tone === "bad";
@@ -150,7 +150,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
   return (
     <>
       <div className="shrink-0 space-y-2 border-b px-3 py-3">
-        <p className="text-xs text-muted-foreground" aria-live="polite">Step {idx + 1} of {p.steps.length} · {STEP_TITLE[p.step]}</p>
+        <p className="text-xs text-muted-foreground" aria-live="polite">{data.links.status === "loading" ? "Checking changes…" : `Step ${idx + 1} of ${p.steps.length} · ${STEP_TITLE[p.step]}`}</p>
         <h2 ref={headingRef} tabIndex={-1} className="font-sans text-lg font-semibold outline-none">{STEP_TITLE[p.step]}</h2>
         {p.step === "pages" && <div className="pt-1 text-foreground"><p className="text-[15px] font-semibold leading-6">Before you approve:</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-normal"><li>Check the page on a phone, tablet and computer.</li><li>Confirm that pages using shared objects appear as intended.</li><li>Remove any placeholder text or images.</li></ul></div>}
         {p.step !== "pages" && <p className="text-xs leading-relaxed text-muted-foreground">
@@ -315,25 +315,26 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
               const host = domainOf(l.href);
               const hintId = `verify-${encodeURIComponent(l.key)}`;
               const name = reviewTileTitle(l, data.pages);
-              const friendlyName = name === linkAddress(l) ? `Text link on ${g.page?.name ?? "Homepage"}` : name;
+              const actionName = reviewActionName(l, data.pages);
+              const sameNames = g.links.filter(other => reviewActionName(other, data.pages) === actionName);
+              const friendlyName = sameNames.length > 1 ? `${actionName} · ${sameNames.findIndex(other => other.key === l.key) + 1} of ${sameNames.length}` : actionName;
               return (
                 <li key={l.key} data-walk-link={l.key} role="button" tabIndex={0} aria-label={`Show ${publicLinkAddress(friendlyName)} on the page`}
                   onClick={e => { if (e.target instanceof Element && e.target.closest("button,a,input,[role='switch'],[data-review-editor]")) return; onShow(l, g); }}
                   onKeyDown={e => { if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return; e.preventDefault(); onShow(l, g); }}
-                  className={cn("space-y-2 min-w-0 rounded-md border bg-background p-3 cursor-pointer transition-colors hover:bg-muted active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", st === "done" && "text-muted-foreground", (s.selectedLink?.key === l.key || s.checking?.key === l.key) && "border-l-primary border-l-4")}>
-                  <div className="flex min-w-0 items-start justify-between gap-2"><ReviewLinkTitle link={l} pages={data.pages} />{tabUrl && <Button asChild variant="ghost" size="icon" className="h-11 w-11 shrink-0"><a data-verify-link aria-label={`Open link to verify ${name}`} title={`Open link to verify ${name}`} href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden /></a></Button>}</div>
+                  className={cn("space-y-1 min-w-0 rounded-md border bg-background p-2 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", st === "done" && "text-muted-foreground", (s.selectedLink?.key === l.key || s.checking?.key === l.key) && "border-l-accent border-l-[3px]")}>
+                  <div className="relative min-w-0 pr-11"><ReviewLinkTitle link={l} pages={data.pages} />{tabUrl && <Button asChild variant="ghost" size="icon" className="absolute -right-1 -top-2 h-11 w-11 hover:bg-muted"><a data-verify-link aria-label={`Open link to verify ${friendlyName}`} title={`Open link to verify ${friendlyName}`} href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden /></a></Button>}</div>
                   {st === "todo" && s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <ReviewDestination link={l} pages={data.pages} flags={flags} />
                   <ReviewRiskFlags flags={flags} onJump={key => walk.selectLink(key)} />
                   {missing && <p className="text-xs text-destructive">Page not found</p>}
-                  {g.shared && <SharedPageUsage pages={g.shared.pages} />}
                   <>
                     {st === "replaced" && <Button variant="link" className="h-11 px-0" onClick={e => { e.stopPropagation(); walk.update(w => ({ ...w, linkReplaced: Object.fromEntries(Object.entries(w.linkReplaced).filter(([k]) => k !== l.key)) })); }}>Review Again</Button>}
                     <div className="grid grid-cols-2 gap-2">
-                      <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" aria-label={`Approve: ${publicLinkAddress(name)}`} aria-pressed={st === "done"} disabled={!enabled} aria-describedby={hintId} onClick={e => { e.stopPropagation(); if (enabled) walk.confirmLink(l.key, own, st !== "done"); }}><Check aria-hidden className={cn("h-4 w-4", st === "done" && "rounded-full bg-foreground text-background p-0.5")} />{st === "done" ? "Approved" : "Approve"}</Button>
+                      <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" aria-label={`Approve: ${publicLinkAddress(friendlyName)}`} aria-pressed={st === "done"} disabled={!enabled} aria-describedby={hintId} onClick={e => { e.stopPropagation(); if (enabled) walk.confirmLink(l.key, own, st !== "done"); }}><Check aria-hidden className={cn("h-4 w-4", st === "done" && "rounded-full bg-foreground text-background p-0.5")} />{st === "done" ? "Approved" : "Approve"}</Button>
                       <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant="default" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" aria-label={`Correct link: ${publicLinkAddress(friendlyName)}`} onClick={e => { e.stopPropagation(); onChange(l, g); }}><Pencil aria-hidden />Correct</Button>
                     </div>
-                    <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : st === "done" ? "Approved" : !opened ? "Open link to confirm" : ""}</p>
+                    <p id={hintId} className="sr-only">{missing ? "This page doesn't exist. Edit the link destination to fix it." : st === "done" ? "Approved" : !opened ? "Open link to confirm" : ""}</p>
                   </>
                   {s.reviewEdit?.link.key === l.key && <div data-review-editor onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}><ReviewLinkEditor pages={data.pages} knownDomains={known} /></div>}
                 </li>
@@ -372,8 +373,9 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
   const fingerprints = Object.fromEntries(data.rows.map(r => [r.key, r.fingerprint ?? changeFingerprint(r)]));
   const links = linkFingerprints(data);
   useEffect(() => { if (ready) walk.reconcile(fingerprints, data.links.status === "ok" ? links : undefined, data.links.status === "ok" ? ownLinkFingerprints(data) : undefined); }, [ready, changeFingerprint(fingerprints), changeFingerprint(links)]);
-  const enabled = ready && c.kind === "page" && s.viewed.includes(c.key);
-  const approved = s.ticked.includes(c.key);
+  const checkingLink = data.links.status === "ok" ? data.links.groups.flatMap(g => g.links).find(l => l.key === c.key) : undefined;
+  const enabled = ready && (c.kind === "page" ? s.viewed.includes(c.key) : !!checkingLink && !missingInternalLink(checkingLink, data.pages) && s.verificationOpened[c.key] === ownLinkPrint(checkingLink));
+  const approved = c.kind === "page" ? s.ticked.includes(c.key) : s.linkTicked.includes(c.key);
   const nextPage = () => {
     const next = pageRows[at + 1];
     if (!next) { walk.reopen(back); setReviewOpen?.(true); return; }
@@ -382,15 +384,19 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
   };
   const yup = () => {
     if (!enabled) return;
+    if (c.kind === "link") {
+      if (checkingLink) walk.confirmLink(c.key, ownLinkPrint(checkingLink), true);
+      return;
+    }
     if (!approved) walk.approve(c.key, data.rows.find(r => r.key === c.key)?.fingerprint ?? changeFingerprint(data.rows.find(r => r.key === c.key)));
     nextPage();
   };
   return <>
     <div role="region" aria-label="Checking Changes" className="sticky top-0 z-40 flex h-14 min-w-0 shrink-0 items-center gap-1 border-b bg-secondary px-1 text-secondary-foreground">
-      <Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Back to review" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft aria-hidden className="h-4 w-4" /></Button>
+      {c.kind === "page" && <Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Back to review" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft aria-hidden className="h-4 w-4" /></Button>}
       <p className="min-w-0 flex-1 truncate text-xs" title={c.name}>{c.kind === "page" ? c.name : `Checking ${c.name}`}{c.kind === "page" && at >= 0 ? ` · ${at + 1} of ${pageRows.length}` : ""}</p>
-      {c.kind === "page" && <div className="flex shrink-0 items-center gap-2"><Button type="button" className={cn("h-11 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium shadow-none whitespace-nowrap", approved && "bg-muted text-muted-foreground hover:bg-muted hover:text-foreground")} disabled={!enabled} aria-pressed={approved} onClick={yup}><Check aria-hidden className="h-3.5 w-3.5" />{approved ? "Approved" : "Approve"}</Button>
-      <Button type="button" variant="outline" className="h-11 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium shadow-none whitespace-nowrap" disabled={!ready || at < 0 || at >= pageRows.length - 1} onClick={nextPage}>Next Page<ArrowRight aria-hidden className="h-3.5 w-3.5" /></Button></div>}
+      {<div className="flex shrink-0 items-center gap-2"><Button type="button" className={cn("h-11 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium shadow-none whitespace-nowrap", approved && "bg-muted text-muted-foreground hover:bg-muted hover:text-foreground")} disabled={!enabled} aria-pressed={approved} onClick={yup}><Check aria-hidden className="h-3.5 w-3.5" />{approved ? "Approved" : "Approve"}</Button>
+      {c.kind === "page" && <Button type="button" variant="outline" className="h-11 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium shadow-none whitespace-nowrap" disabled={!ready || at < 0 || at >= pageRows.length - 1} onClick={nextPage}>Next Page<ArrowRight aria-hidden className="h-3.5 w-3.5" /></Button>}{c.kind === "link" && <Button type="button" variant="outline" className="h-11 shrink-0 gap-1.5 px-2.5 text-xs font-medium shadow-none" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft aria-hidden className="h-3.5 w-3.5" />Back</Button>}</div>}
     </div>
 
   </>;

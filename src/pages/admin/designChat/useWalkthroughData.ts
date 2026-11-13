@@ -122,10 +122,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     }));
     return { links: inventories.flatMap(({ inventory: item }) => item ? item.links.map(link => ({ ...link, inventoryPath: item.path })) : []), unavailable: inventories.some(item => !item.fresh) };
   } });
-  const labelled = merged ? { ...merged, groups: merged.groups.map(group => ({ ...group, links: group.links.map(link => {
-    const item = sharedLabels.data?.links.find(item => item.scope === link.scope && item.key === link.elementKey && item.inventoryIndex === link.inventoryIndex && (group.shared || normPath(item.inventoryPath) === normPath(group.page?.path ?? "/")));
-    return item ? { ...link, elementKey: item.key, scope: item.scope, originalHref: link.originalHref ?? item.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
-  }) })) } : null;
+  const labelled = merged ? enrichReviewLinks(merged, sharedLabels.data?.links ?? []) : null;
   const siteInventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "site-hosts", pages.data?.map(p => p.path)], enabled: enabled && walkState.step === "links" && !!pages.data?.length, staleTime: 300_000, retry: false, queryFn: async () => {
     let base: string; try { base = publicPreviewBase(shownPreviewFrame()?.src); } catch { return []; }
     const queue = [...new Set((pages.data ?? []).map(p => p.path))];
@@ -149,8 +146,25 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     const shared = (objects.data?.shared ?? []).filter(o => row.shared ? o.id === row.shared.id : path && o.pages.some(p => normPath(p.path) === normPath(path))).map(o => ({ id: o.id, edits: stableReviewEdits(o.inlineEdits), content: o.content ?? null })).sort((a,b) => a.id.localeCompare(b.id));
     return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, sha: r.sha, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: stableReviewEdits(page?.inlineEdits), content: page?.content ?? null, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
   });
-  const withSaved: LinksResult = linkResult.status === "ok" ? { ...stableReviewRows(mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {})), status: "ok" } : linkResult;
+  const withSaved: LinksResult = linkResult.status === "ok" ? { ...stableReviewRows(dropOriginalDestinations(enrichReviewLinks(mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), sharedLabels.data?.links ?? []))), status: "ok" } : linkResult;
   return { inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data?.links ?? [])], inventoryUnavailable: sharedLabels.data?.unavailable || sharedLabels.isError, retryInventory: () => { void sharedLabels.refetch(); }, rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
+}
+
+/** Adopt only unique authoritative identities; duplicate destinations never authorize a guess. */
+export function enrichReviewLinks(base: ReviewLinks, inventory: InventoryLink[]): ReviewLinks {
+  return { ...base, groups: base.groups.map(group => ({ ...group, links: group.links.map(link => {
+    const candidates = inventory.filter(item => (group.shared ? item.scope === `object:${group.shared.id}` : normPath(item.inventoryPath ?? "") === normPath(group.page?.path ?? "/")) && (link.elementKey ? item.key === link.elementKey.replace(/^link:/, "") && item.scope === (link.scope ?? "page") && item.inventoryIndex === link.inventoryIndex : item.href === link.href));
+    const wording = link.visibleText || link.label || link.ariaLabel;
+    const named = candidates.filter(item => wording && [item.visibleText, item.label, item.ariaLabel].includes(wording));
+    const matches = link.elementKey ? candidates : named.length ? named : candidates;
+    if (matches.length !== 1) return link;
+    const item = matches[0];
+    return { ...link, elementKey: item.key, scope: item.scope, inventoryIndex: item.inventoryIndex, originalHref: link.originalHref ?? item.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image };
+  }) })) };
+}
+/** Only a supplied original destination proves a restore; absent baseline stays visible. */
+export function dropOriginalDestinations(base: ReviewLinks): ReviewLinks {
+  return { ...base, groups: base.groups.map(g => ({ ...g, links: g.links.filter(l => !l.originalHref || l.href !== l.originalHref) })).filter(g => g.links.length) };
 }
 
 /** Saved rows bridge relay lag only; an authoritative net inventory wins, including an empty net result. */
