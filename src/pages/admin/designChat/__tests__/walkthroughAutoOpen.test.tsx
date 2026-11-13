@@ -62,6 +62,15 @@ describe("walkthrough auto-open and link lines", () => {
     expect(walk.get().ticked).toEqual([]);
     expect(walk.get().checking?.key).toBe("page:/b");
   });
+  it("revisiting an approved page keeps its approval and advances through the same control", () => {
+    m.data.rows = [page("/a", "About"), page("/b", "Blog")];
+    render(<Host />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    act(() => walk.update(w => ({ ...w, checking: { key: "page:/a", kind: "page", name: "About" } })));
+    fireEvent.click(screen.getByRole("button", { name: "Approved" }));
+    expect(walk.get().ticked).toEqual(["page:/a"]);
+    expect(walk.get().checking?.key).toBe("page:/b");
+  });
   it("waits for the pages list", () => {
     m.data.pagesStatus = "loading";
     const h = render(<Host />);

@@ -152,6 +152,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
       <div className="shrink-0 space-y-2 border-b px-3 py-3">
         <p className="text-xs text-muted-foreground" aria-live="polite">Step {idx + 1} of {p.steps.length} · {STEP_TITLE[p.step]}</p>
         <h2 ref={headingRef} tabIndex={-1} className="font-sans text-lg font-semibold outline-none">{STEP_TITLE[p.step]}</h2>
+        {p.step === "pages" && <div className="pt-1 text-foreground"><p className="text-[15px] font-semibold leading-6">Before you approve:</p><ul className="mt-2 list-disc space-y-2 pl-5 text-sm leading-6"><li>Check the page on a phone, tablet and computer.</li><li>Confirm that pages using shared objects appear as intended.</li><li>Remove any placeholder text or images.</li></ul></div>}
         {p.step !== "pages" && <p className="text-xs leading-relaxed text-muted-foreground">
           {p.step === "links" ? "Open and confirm each link."
             : reviewOn ? "Approved changes go live after review."
@@ -220,7 +221,7 @@ function PagesStep({ rows, data, onView }: { rows: ChangedRow[]; data: Walkthrou
       {r.key === OTHER_KEY && <Button type="button" variant="link" className="h-9 p-0" onClick={() => onView(r)}>Open Site</Button>}
       <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm"><Checkbox aria-label={`Approve ${rowName(r)}`} checked={approved} disabled={!approved && !viewed} onCheckedChange={() => walk.approve(r.key, r.fingerprint ?? changeFingerprint(r))} />Approve</label>
     </li>;
-  })}</ul><div className="mt-3 text-xs text-muted-foreground"><p>Before you approve:</p><ul className="list-disc space-y-1 pl-4"><li>Check the page on a phone, tablet and computer.</li><li>Confirm that pages using shared objects appear as intended.</li><li>Remove any placeholder text or images.</li></ul></div></>;
+  })}</ul></>;
 }
 
 export function linkFingerprints(data: WalkthroughData): Record<string, string> {
@@ -405,8 +406,8 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
     <div role="region" aria-label="Checking Changes" className="sticky top-0 z-40 flex h-14 min-w-0 shrink-0 items-center gap-1 border-b bg-secondary px-1 text-secondary-foreground">
       <Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Back to review" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft aria-hidden className="h-4 w-4" /></Button>
       <p className="min-w-0 flex-1 truncate text-xs" title={c.name}>{c.kind === "page" ? c.name : `Checking ${c.name}`}{c.kind === "page" && at >= 0 ? ` · ${at + 1} of ${pageRows.length}` : ""}</p>
-      {c.kind === "page" && <Button type="button" className="h-11 shrink-0 gap-1 px-2 text-xs" disabled={!enabled} aria-pressed={approved} onClick={yup}><Check aria-hidden className="h-4 w-4" />Approve</Button>}
-      {c.kind === "page" && <Button type="button" variant="outline" className="h-11 shrink-0 px-2 text-xs" disabled={!ready || at < 0 || at >= pageRows.length - 1} onClick={nextPage}>Next Page</Button>}
+      {c.kind === "page" && <div className="flex shrink-0 items-center gap-2"><Button type="button" className={cn("h-11 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium shadow-none whitespace-nowrap", approved && "bg-muted text-muted-foreground hover:bg-muted hover:text-foreground")} disabled={!enabled} aria-pressed={approved} onClick={yup}><Check aria-hidden className="h-3.5 w-3.5" />{approved ? "Approved" : "Approve"}</Button>
+      <Button type="button" variant="outline" className="h-11 shrink-0 gap-1.5 rounded-md px-2.5 text-xs font-medium shadow-none whitespace-nowrap" disabled={!ready || at < 0 || at >= pageRows.length - 1} onClick={nextPage}>Next Page<ArrowRight aria-hidden className="h-3.5 w-3.5" /></Button></div>}
     </div>
 
   </>;
