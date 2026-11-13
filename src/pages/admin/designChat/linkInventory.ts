@@ -1,6 +1,7 @@
 import { normPath, type LinkGroup, type LinkKind, type ManagerPage, type ReviewLink, type ReviewLinks } from "./submitWalkthrough";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { reviewLinkIdentity } from "./reviewLinkIdentity";
+import { isSiteLink } from "./siteLink";
 
 /** Link inventory (Public companion, v1): the links a rendered page really has, used for a true draft-vs-live Links step. */
 export type InventoryLink = { key: string; scope: string; href: string; publishedHref?: string | null; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; originalHref?: string; fingerprint?: string; inventoryIndex?: number; inventoryPath?: string };
@@ -11,7 +12,7 @@ export function indexedInventory(links: InventoryLink[]): InventoryLink[] {
   return links.map((l, index) => (counts.get(`${l.scope}|${l.key}`) ?? 0) > 1 ? { ...l, inventoryIndex: l.inventoryIndex ?? index } : l);
 }
 export const inventoryIdentity = (l: InventoryLink) => `${l.scope}|${l.key}${l.inventoryIndex === undefined ? "" : `|index:${l.inventoryIndex}`}`;
-export type Inventory = { path: string; links: InventoryLink[]; published?: boolean };
+export type Inventory = { path: string; links: InventoryLink[]; published?: boolean; complete?: boolean };
 /** Retain display facts only for the same reported identity and destination; fresh membership always wins. */
 export function retainInventoryMetadata(fresh: Inventory | null, previous?: Inventory): Inventory | null {
   if (!fresh) return previous ?? null;
@@ -51,7 +52,7 @@ export function parseInventory(d: any): Inventory | null {
   if (!ok(d.path, 300) || !/^\/(?!\/)/.test(d.path) || !Array.isArray(d.links)) return null;
   const links: InventoryLink[] = [];
   for (const l of d.links.slice(0, MAX_INVENTORY)) {
-    if (!l || typeof l.key !== "string" || l.key.length > 300 || !ok(l.scope, 300) || !ok(l.href, 2048)) continue;
+    if (!l || typeof l.key !== "string" || l.key.length > 300 || !ok(l.scope, 300) || !ok(l.href, 2048) || !isSiteLink(l.href, l.contentOwned)) continue;
     links.push({ key: l.key, scope: l.scope, href: l.href, label: typeof l.label === "string" && l.label.trim() ? l.label.trim().slice(0, 300) : null,
       ...(typeof l.ariaLabel === "string" && l.ariaLabel.trim() ? { ariaLabel: l.ariaLabel.trim().slice(0, 300) } : {}),
       ...(ok(l.visibleText, 300) ? { visibleText: l.visibleText } : {}),
@@ -61,7 +62,8 @@ export function parseInventory(d: any): Inventory | null {
       ...(ok(l.publishedHref, 2048) || l.publishedHref === null ? { publishedHref: l.publishedHref } : {}),
       ...(typeof l.fingerprint === "string" && l.fingerprint.length <= 2048 ? { fingerprint: l.fingerprint } : {}) });
   }
-  return { path: d.path, links: indexedInventory(links), ...(typeof d.published === "boolean" ? { published: d.published } : {}) };
+  // A shell-only response cannot prove that a page has no links.
+  return { path: d.path, links: indexedInventory(links), complete: d.complete === false || (d.links.length > 0 && links.length === 0) ? false : d.complete === true ? true : undefined, ...(typeof d.published === "boolean" ? { published: d.published } : {}) };
 }
 
 /** The deployed live site, when configured; without it the Links step keeps the relay-based list. */
@@ -127,23 +129,27 @@ function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): Revi
 }
 /** A live inventory proves a published page unless explicitly marked absent. Unknown/absent pages verify all page-owned links. */
 export function reviewPageInventory(draft: Inventory, live: Inventory | null): InventoryLink[] {
-  if (live && live.published !== false) return diffInventories(draft, live);
+  if (live && live.complete !== false && live.published !== false) return diffInventories(draft, live);
   const seen = new Set<string>();
   return indexedInventory(draft.links).filter(link => {
     const id = inventoryIdentity(link);
-    if (link.scope !== "page" || seen.has(id)) return false;
+    if (link.scope !== "page" || !isSiteLink(link.href) || seen.has(id)) return false;
     seen.add(id); return true;
   }).filter(link => live?.published === false || link.publishedHref === undefined || link.href !== link.publishedHref)
     .map(link => live?.published === false ? { ...link, publishedHref: null, originalHref: undefined } : link);
 }
 /** Load every changed page independently; a failed live comparison never suppresses another page's inventory. */
-export async function loadNetLinks(paths: string[], live: string | null, request = requestInventory): Promise<Record<string, InventoryLink[]>> {
+export async function loadNetLinks(paths: string[], live: string | null, request = requestInventory, visibleFrame?: HTMLIFrameElement | null): Promise<Record<string, InventoryLink[]>> {
   if (!paths.length) return {};
   let draft: string; try { draft = publicPreviewBase(null); } catch { return {}; }
   const out: Record<string, InventoryLink[]> = {};
   await Promise.all([...new Set(paths)].map(async p => {
-    const [d, l] = await Promise.all([request(publicPreviewPage(draft, p)), live ? request(publicPreviewPage(live, p)) : Promise.resolve(null)]);
-    if (d) out[normPath(p)] = reviewPageInventory(d, l);
+    const draftUrl = publicPreviewPage(visibleFrame ? publicPreviewBase(visibleFrame.src) : draft, p);
+    const [d, l] = await Promise.all([(async () => {
+      const shown = visibleFrame ? await requestFrameInventory(visibleFrame, draftUrl) : null;
+      return shown && shown.complete !== false ? shown : await request(draftUrl);
+    })(), live ? request(publicPreviewPage(live, p)) : Promise.resolve(null)]);
+    if (d && d.complete !== false) out[normPath(p)] = reviewPageInventory(d, l);
   }));
   return out;
 }

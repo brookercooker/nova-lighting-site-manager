@@ -106,7 +106,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   // True draft-vs-live comparison when the live site is configured and the frames answer link-inventory; otherwise today's list.
   const live = liveSiteBase() ?? liveSiteBase(state?.liveUrl);
   const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
-  const inventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "inventory", sig, changedPaths, live], queryFn: () => loadNetLinks(changedPaths, live), enabled: enabled && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
+  const inventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "inventory", sig, changedPaths, live], queryFn: () => loadNetLinks(changedPaths, live, requestInventory, shownPreviewFrame()), enabled: enabled && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
   const merged = useMemo(() => links.data ? mergeSharedReviewLinks(netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data, objects.data]);
   const sharedPaths = [...new Set(merged?.groups.map(group => group.page?.path).filter((path): path is string => !!path) ?? [])].sort();
   const sharedLabels = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "shared-labels", sig, sharedPaths], enabled: enabled && sharedPaths.length > 0, retry: false, queryFn: async () => {

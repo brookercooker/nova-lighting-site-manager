@@ -140,11 +140,11 @@ describe("link inventory", () => {
   it("falls back when the frame doesn't answer, and compares draft with live when it does", async () => {
     const silent = vi.fn(async () => null);
     expect(await loadNetLinks(["/", "/b"], "https://live.example/", silent)).toEqual({});
-    expect(silent).toHaveBeenCalledTimes(2); // only the first page is probed
+    expect(silent).toHaveBeenCalledTimes(4); // each page is independent
     const answering = vi.fn(async (url: string) => url.startsWith("https://live.example") ? inv("/", [["0.1", "/contact"]]) : inv("/", [["0.1", "/gallery"]]));
     const out = await loadNetLinks(["/"], "https://live.example/", answering);
     expect(out["/"].map(l => l.href)).toEqual(["/gallery"]);
-    expect(await loadNetLinks(["/"], null, answering)).toEqual({});
+    expect((await loadNetLinks(["/"], null, answering))["/"].map(l => l.href)).toEqual(["/gallery"]);
   });
   it("requestInventory resolves from its own frame and times out to null", async () => {
     vi.useFakeTimers();
