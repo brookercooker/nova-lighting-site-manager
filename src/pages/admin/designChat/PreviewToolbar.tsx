@@ -65,7 +65,7 @@ export default function PreviewToolbar({ onManualNavigate, manualDisabled = fals
     <div className={phone || reviewActive ? "flex min-w-0 justify-center" : "grid min-w-0 grid-cols-[2rem_minmax(0,16rem)_2rem] justify-center"}>
       {!phone && !reviewActive && <Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11 shrink-0" : "h-8 w-8 shrink-0"} aria-label="Reload Preview" title="Reload Preview" onClick={reload}><RotateCw className="h-4 w-4" /></Button>}
     <Select value={current?.path ?? path} onValueChange={choose}>
-      <SelectTrigger aria-label="Preview Page" disabled={chat.editing && manualDisabled} className={`${reviewActive ? "h-11" : "h-8"} w-64 min-w-0 max-w-full gap-2 border-0 bg-transparent text-xs shadow-none`}><SelectValue>{name}</SelectValue></SelectTrigger>
+      <SelectTrigger aria-label="Preview Page" disabled={chat.editing && manualDisabled} className={`${reviewActive ? "h-11" : "h-8"} ${phone ? "w-auto justify-center" : "w-64"} min-w-0 max-w-full gap-2 border-0 bg-transparent text-xs shadow-none`}><SelectValue>{name}</SelectValue></SelectTrigger>
       <SelectContent>{!current && <SelectItem value={path}>{name}</SelectItem>}{pages.map(page => <SelectItem key={page.path} value={page.path}>{page.name} <span className="text-muted-foreground">{page.path}</span></SelectItem>)}{failed && <p role="alert" className="px-2 py-1 text-xs text-destructive">Couldn't load pages. Reopen the preview to try again.</p>}</SelectContent>
     </Select>
     </div>
