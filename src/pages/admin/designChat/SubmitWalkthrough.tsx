@@ -120,8 +120,8 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
   const setStep = (step: WalkStep) => walk.update((w) => ({ ...w, step }));
 
   const openPage = (path: string, checking: { key: string; kind: "page" | "link"; name: string }) => {
-    walk.update((w) => ({ ...w, open: !phone, checking, ...(checking.kind === "page" ? { viewed: add(w.viewed, checking.key) } : { linkOpened: add(w.linkOpened, checking.key) }) }));
-    if (phone) onCheckPhone?.();
+    walk.update((w) => ({ ...w, open: checking.kind === "link" || !phone, checking, ...(checking.kind === "page" ? { viewed: add(w.viewed, checking.key) } : { linkOpened: add(w.linkOpened, checking.key) }) }));
+    if (phone && checking.kind === "page") onCheckPhone?.();
     if (showPreviewPath) showPreviewPath(path); else selectPage?.({ name: checking.name, path });
     goToPreview();
   };
@@ -152,6 +152,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
       <div className="shrink-0 space-y-2 border-b px-3 py-3">
         <p className="text-xs text-muted-foreground" aria-live="polite">{data.links.status === "loading" ? "Checking changes…" : `Step ${idx + 1} of ${p.steps.length} · ${STEP_TITLE[p.step]}`}</p>
         <h2 ref={headingRef} tabIndex={-1} className="font-sans text-lg font-semibold outline-none">{STEP_TITLE[p.step]}</h2>
+        {data.comparisonUnavailable && p.step !== "checklist" && <p role="status" className="text-xs text-muted-foreground">Some links couldn't be compared with the published site.</p>}
         {p.step === "pages" && <div className="pt-1 text-foreground"><p className="text-[15px] font-semibold leading-6">Before you approve:</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-normal"><li>Check the page on a phone, tablet and computer.</li><li>Confirm that pages using shared objects appear as intended.</li><li>Remove any placeholder text or images.</li></ul></div>}
         {p.step !== "pages" && <p className="text-xs leading-relaxed text-muted-foreground">
           {p.step === "links" ? ""
@@ -163,7 +164,7 @@ function Walkthrough({ onClose, phone, onCheckPhone, allChanges }: { onClose: ()
         {p.step === "pages" && (pagesReady ? <PagesStep rows={p.pageRows} data={data} onView={(r) => openPage(rowPath(r), { key: r.key, kind: "page", name: rowName(r) })} /> : <p role="status" className="text-sm text-muted-foreground">{data.pagesStatus === "failed" ? "Changed pages couldn't be listed right now. Close and reopen to try again." : "Listing the changed pages…"}</p>)}
         {p.step === "links" && <LinksStep data={data} onShow={(l, g) => {
           const path = g.page?.path ?? p.pageRows.find(r => r.page)?.page?.path ?? "/";
-          walk.update(w => ({ ...w, reviewEdit: null, openingLink: { key: l.key, path, name: g.page?.name ?? "Homepage", href: l.href, entries: data.links.status === "ok" ? linkCheckList(data.links.groups, w.linkTicked, w.linkReplaced) : [] } }));
+          walk.update(w => ({ ...w, reviewEdit: null, groupExpansion: { ...w.groupExpansion, [g.shared?.id ?? g.page?.path ?? g.label]: true }, openingLink: { key: l.key, path, name: g.page?.name ?? "Homepage", href: l.href, elementKey: l.elementKey, scope: l.scope, inventoryIndex: l.inventoryIndex, entries: data.links.status === "ok" ? linkCheckList(data.links.groups, w.linkTicked, w.linkReplaced) : [] } }));
           openPage(path, { key: l.key, kind: "link", name: linkText(l, data.pages) });
         }} onChange={(l, g) => walk.editLink({ link: l, group: g, rows: p.pageRows, fingerprint: ownLinkPrint(l) })} />}
         {p.step === "checklist" && (
@@ -294,7 +295,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
         const open = expanded[id] ?? handled < g.links.length;
         return (
         <section key={g.label + (g.page?.path ?? "")} aria-label={g.label}>
-          <h3 className="mb-2"><Button type="button" variant="ghost" className="min-h-11 h-auto w-full justify-between whitespace-normal px-0 text-left text-sm font-semibold" aria-expanded={open} onClick={() => { if (!open) manuallyOpened.current.add(id); else manuallyOpened.current.delete(id); setExpanded(e => ({ ...e, [id]: !open })); }}><span className="min-w-0 break-words">{g.label} · {handled === g.links.length ? "done" : `${handled} of ${g.links.length}`}</span>{handled === g.links.length && <Check aria-hidden className="h-4 w-4 shrink-0" />}<ChevronDown aria-hidden className={cn("h-4 w-4 shrink-0", !open && "-rotate-90")} /></Button></h3>
+          <h3 className="mb-2"><Button type="button" variant="ghost" className="min-h-11 h-auto w-full justify-between whitespace-normal px-0 text-left text-sm font-semibold" aria-expanded={open} onClick={() => { if (!open) manuallyOpened.current.add(id); else manuallyOpened.current.delete(id); setExpanded(e => ({ ...e, [id]: !open })); }}><span className="min-w-0 break-words">{g.label} · {handled} of {g.links.length}</span>{handled === g.links.length && <Check aria-hidden className="h-4 w-4 shrink-0" />}<ChevronDown aria-hidden className={cn("h-4 w-4 shrink-0", !open && "-rotate-90")} /></Button></h3>
           {g.shared && <div><Badge variant="secondary">Site-wide · {g.shared.pages.length} Pages</Badge><SharedPageUsage pages={g.shared.pages} /></div>}
           {open && <ul className="space-y-2">
             {g.links.map((l) => {

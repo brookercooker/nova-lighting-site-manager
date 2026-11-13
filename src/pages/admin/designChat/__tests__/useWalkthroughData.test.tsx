@@ -68,8 +68,8 @@ describe("review pages fetch", () => {
     await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
     const result = hook.result.current.links;
     if (result.status !== "ok") throw new Error("shared links not ready");
-    expect(result.groups.flatMap(g => g.links)).toEqual([expect.objectContaining({ scope: "object:about-us", href: "/contact", elementKey: "0.1" })]);
-    expect(result.groups[0].shared?.pages).toHaveLength(2);
+    expect(result.groups.flatMap(g => g.links)).toEqual([]);
+    expect(hook.result.current.comparisonUnavailable).toBe(true);
   });
   it("adds the saved destination while relay rows lag, but respects a current empty net inventory", () => {
     const old = { key: "/|/contact", href: "/contact", kind: "internal" as const, label: null, requestIds: [], status: null };
@@ -147,12 +147,12 @@ it("waits for inventory, caches page wording/originals across changed requests, 
  const hook=renderHook(({version})=>useWalkthroughData({previewVersion:version} as any,true),{wrapper,initialProps:{version:1}});
  await waitFor(()=>expect(m.inventory).toHaveBeenCalled());
  expect(hook.result.current.links.status).toBe("loading");
- finish({path:"/",links:[{key:"0",scope:"page",href:"/gallery",label:"BOOK A CONSULTATION",originalHref:"/contact"}]});
+ finish({path:"/",links:[{key:"0",scope:"page",href:"/gallery",label:"BOOK A CONSULTATION",originalHref:"/contact",publishedHref:"/contact"}]});
  await waitFor(()=>expect(hook.result.current.links.status).toBe("ok"));
  hook.rerender({version:2});
  await waitFor(()=>expect(hook.result.current.links.status).toBe("ok"));
  const result=hook.result.current.links;if(result.status!=="ok")throw new Error("not ready");
- expect(result.groups[0].links[0]).toMatchObject({label:"BOOK A CONSULTATION",originalHref:"/contact"});
+ expect(result.groups[0].links[0]).toMatchObject({label:"BOOK A CONSULTATION",originalHref:"/contact",publishedHref:"/contact"});
  expect(hook.result.current.inventoryUnavailable).toBe(true);
 });
 

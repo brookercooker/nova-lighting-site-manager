@@ -1,7 +1,7 @@
 import { normPath, type ManagerPage, type ChangedRow, type LinkGroup, type LinkKind, type ReviewLink } from "./submitWalkthrough";
 
 /** Verify Changed Links: the frame bridge and the per-page checks of the Submit for Review walkthrough. */
-export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string | null; elementKey?: string; scope?: string; inventoryIndex?: number };
+export type LinkClick = { raw: string; href: string; kind: LinkKind; label: string | null; path: string | null; match?: string | null; elementKey?: string; scope?: string; inventoryIndex?: number; opened?: boolean };
 const KINDS: LinkKind[] = ["internal", "external", "mail", "phone", "anchor"];
 export const KIND_TEXT: Record<LinkKind, string> = { internal: "A page on your site", external: "A different website", mail: "An email address", phone: "A phone number", anchor: "A section of this page" };
 
@@ -41,11 +41,11 @@ function post(frame: HTMLIFrameElement | null, message: Record<string, unknown>)
   catch { return false; } // a frame removed mid-teardown
 }
 export function postLinkCheck(frame: HTMLIFrameElement | null, enabled: boolean, links: LinkCheckEntry[] = []): boolean {
-  return post(frame, enabled ? { type: "link-check", enabled, interceptAll: true, links: links.slice(0, MAX_LISTED_LINKS) } : { type: "link-check", enabled });
+  return post(frame, enabled ? { type: "link-check", enabled, interceptAll: true, openInFrame: true, links: links.slice(0, MAX_LISTED_LINKS) } : { type: "link-check", enabled });
 }
 /** Asks the public frame to scroll to and flash a listed link. */
-export function postLinkFocus(frame: HTMLIFrameElement | null, raw: string): boolean {
-  return post(frame, { type: "link-check-focus", raw });
+export function postLinkFocus(frame: HTMLIFrameElement | null, raw: string, identity?: { elementKey?: string; scope?: string; inventoryIndex?: number }): boolean {
+  return post(frame, { type: "link-check-focus", raw, ...identity });
 }
 /** Sends link-check-focus once the shown frame reports v2 link-check-ready, or after a short timeout so it never hangs. */
 export function focusWhenReady(getFrame: () => HTMLIFrameElement | null, raw: string, timeoutMs = 4000): () => void {
@@ -71,6 +71,7 @@ export function parseLinkClick(event: MessageEvent, frame: HTMLIFrameElement | n
   if (d.path != null && !(str(d.path, 300) && /^\/(?!\/)/.test(d.path))) return null;
   const label = typeof d.label === "string" && d.label.trim() ? d.label.trim().slice(0, 300) : null;
   return { raw: d.raw, href: d.href, kind: d.kind, label, path: d.path ?? null, match: d.match,
+    ...(typeof d.opened === "boolean" ? { opened: d.opened } : {}),
     ...(typeof d.elementKey === "string" && /^(?:link:)?\d+(?:\.\d+)*$/.test(d.elementKey) ? { elementKey: d.elementKey.replace(/^link:/, "") } : {}),
     ...(str(d.scope, 300) && (d.scope === "page" || d.scope.startsWith("object:")) ? { scope: d.scope } : {}),
     ...(Number.isInteger(d.inventoryIndex) && d.inventoryIndex >= 0 && d.inventoryIndex < 500 ? { inventoryIndex: d.inventoryIndex } : {}) };

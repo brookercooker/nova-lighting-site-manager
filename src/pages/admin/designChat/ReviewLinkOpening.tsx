@@ -18,7 +18,7 @@ export function ReviewLinkOpening() {
     const focus = () => {
       const frame = shownPreviewFrame();
       postLinkCheck(frame, true, pending.entries ?? [{ raw: pending.href, state: "todo" }]);
-      postLinkFocus(frame, pending.href);
+      postLinkFocus(frame, pending.href, { elementKey: pending.elementKey, scope: pending.scope, inventoryIndex: pending.inventoryIndex });
     };
     const finish = () => {
       if (walk.get().openingLink !== pending) return;

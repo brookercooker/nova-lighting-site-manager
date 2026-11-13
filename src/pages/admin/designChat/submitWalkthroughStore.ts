@@ -13,7 +13,7 @@ export type Checking = { key: string; kind: "page" | "link"; name: string } | nu
 export type WalkState = {
   groupCompleted: Record<string, boolean>;
   groupExpansion: Record<string, boolean>;
-  openingLink: { key: string; path: string; name: string; href: string; entries?: import("./linkCheck").LinkCheckEntry[]; failed?: boolean } | null;
+  openingLink: { key: string; path: string; name: string; href: string; elementKey?: string; scope?: string; inventoryIndex?: number; entries?: import("./linkCheck").LinkCheckEntry[]; failed?: boolean } | null;
   reviewEdit: { link: ReviewLink; group: LinkGroup; rows: ChangedRow[]; fingerprint: string } | null;
   savedReviewLinks: { path: string; link: ReviewLink; replacedKeys?: string[] }[];
   /** Actual verification-tab clicks only, keyed by link key and its own fingerprint. */

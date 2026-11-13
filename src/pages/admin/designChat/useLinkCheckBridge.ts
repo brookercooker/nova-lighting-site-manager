@@ -21,7 +21,7 @@ export function LinkCheckBridge({ root, frameKey }: { root: RefObject<HTMLElemen
       const frame = shownPreviewFrame(root.current ?? document);
       if (!isLinkCheckReady(event, frame) || walk.get().openingLink) return;
       const link = data.links.status === "ok" ? data.links.groups.flatMap(g => g.links).find(l => l.key === walk.get().checking?.key) : null;
-      if (link) postLinkFocus(frame, link.href);
+      if (link) postLinkFocus(frame, link.href, { elementKey: link.elementKey, scope: link.scope, inventoryIndex: link.inventoryIndex });
     };
     window.addEventListener("message", focus);
     return () => window.removeEventListener("message", focus);
@@ -29,7 +29,7 @@ export function LinkCheckBridge({ root, frameKey }: { root: RefObject<HTMLElemen
   useLinkCheckBridge(root, true, frameKey, links, (click) => {
     const groups = data.links.status === "ok" ? data.links.groups : [];
     const link = changedLinkForClick(groups, click);
-    const opened = openReviewDestination(click);
+    const opened = click.opened ?? openReviewDestination(click);
     walk.selectLink(link?.key ?? null);
     if (opened && link) walk.openedVerification(link.key, ownLinkPrint(link));
     if (!opened) walk.update(w => ({ ...w, linkNote: "Your browser blocked the new tab. Use the open icon on the tile." }));

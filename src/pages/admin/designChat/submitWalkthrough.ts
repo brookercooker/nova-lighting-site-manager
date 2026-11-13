@@ -21,7 +21,7 @@ export function dropRevertedHandEdits(rows: ChangedRow[], pages: ManagerPage[]):
 }
 export type LinkKind = "internal" | "external" | "mail" | "phone" | "anchor";
 export type RelayLinkStatus = { state: "ok" | "redirect" | "broken" | "unconfirmed"; detail?: string } | null;
-export type ReviewLink = { key: string; href: string; originalHref?: string; kind: LinkKind; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; elementKey?: string; scope?: string; inventoryIndex?: number; requestIds: string[]; status: RelayLinkStatus };
+export type ReviewLink = { key: string; href: string; originalHref?: string; publishedHref?: string | null; kind: LinkKind; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; elementKey?: string; scope?: string; inventoryIndex?: number; requestIds: string[]; status: RelayLinkStatus };
 export type LinkGroup = { page: PageRef | null; label: string; links: ReviewLink[]; shared?: { id: string; name: string; pages: PageRef[] } };
 export type ReviewLinks = { groups: LinkGroup[]; unread: number; partial: boolean; truncated: boolean };
 /** Stable value fingerprint; object key order is not a change. */
@@ -128,6 +128,7 @@ export function parseReviewLinks(d: any): ReviewLinks | null {
       links.push({ key: `${page?.path ?? ""}|relay:${index}`, href: l.href, kind: l.kind, label: typeof l.label === "string" && l.label.trim() ? l.label : null,
         ...(typeof (l.elementKey ?? l.key) === "string" && /^(?:link:)?\d+(?:\.\d+)*$/.test(l.elementKey ?? l.key) ? { elementKey: (l.elementKey ?? l.key).replace(/^link:/, ""), scope: typeof l.scope === "string" ? l.scope : "page" } : {}),
         ...(typeof l.originalHref === "string" ? { originalHref: l.originalHref } : {}),
+        ...(typeof l.publishedHref === "string" || l.publishedHref === null ? { publishedHref: l.publishedHref } : {}),
         ...(l.target === null || l.target === "_blank" ? { target: l.target } : {}),
         ...(typeof l.ariaLabel === "string" && l.ariaLabel.trim() ? { ariaLabel: l.ariaLabel.trim().slice(0, 300) } : {}),
         requestIds: Array.isArray(l.requestIds) ? l.requestIds.filter((x: unknown) => typeof x === "string") : [], status: st });

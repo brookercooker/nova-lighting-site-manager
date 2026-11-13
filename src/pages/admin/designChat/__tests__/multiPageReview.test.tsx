@@ -1,0 +1,44 @@
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { SubmitWalkthroughPanel, ownLinkPrint } from "../SubmitWalkthrough";
+import { walk } from "../submitWalkthroughStore";
+import { stableReviewRows } from "../reviewLinkIdentity";
+import { comparedReviewLinks } from "../publishedLinkComparison";
+import { changedLinkForClick } from "../linkCheck";
+const m = vi.hoisted(() => ({ data: null as any, show: vi.fn() }));
+vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: { publish: { open: 3 }, review: { enabled: true } }, showPreviewPath: m.show, preview: null }) }));
+vi.mock("../useWalkthroughData", () => ({ useWalkthroughData: () => m.data }));
+afterEach(() => { cleanup(); walk.reset(); });
+it.each([320, 375, 1280])("keeps five page-scoped approvals through navigation and Back at %spx", width => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  walk.reset(); m.show.mockClear();
+  const pages = [{ path: "/", name: "Homepage", count: 2 }, { path: "/pricing", name: "Pricing", count: 1 }, { path: "/contact", name: "Contact", count: 2 }, { path: "/unchanged", name: "Unchanged", count: 1 }];
+  const groups = pages.map(p => ({ page: p, label: p.name, links: Array.from({ length: p.count }, (_, i) => ({ key: "same-key", elementKey: `0.${i}`, scope: "page", href: "https://example.com/shared", publishedHref: p.name === "Unchanged" ? "https://example.com/shared" : "https://example.com/before", label: `${p.name} ${i + 1}`, kind: "external" as const, requestIds: [], status: null })) }));
+  const links = stableReviewRows(comparedReviewLinks({ groups, unread: 0, partial: false, truncated: false }));
+  m.data = { rows: [], pages, links: { ...links, status: "ok" } };
+  walk.update(w => ({ ...w, open: true, step: "links" }));
+  render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
+  const all = links.groups.flatMap(g => g.links);
+  expect(new Set(all.map(l => l.key)).size).toBe(5);
+  expect(screen.queryByRole("button", { name: /Unchanged ·/ })).toBeNull();
+  expect(screen.getByText("0 of 5 links approved")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Show Pricing 1 on the page" }));
+  expect(m.show).toHaveBeenCalledWith("/pricing"); expect(walk.get().open).toBe(true);
+  expect(walk.get().groupExpansion["/pricing"]).toBe(true);
+  const matching = changedLinkForClick(links.groups, { raw: "https://example.com/shared", href: "https://example.com/shared", kind: "external", path: "/contact", label: null, elementKey: "0.0", scope: "page" });
+  expect(matching?.key).toBe("/contact|page|0.0");
+  for (const [i, l] of all.entries()) {
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("link", { name: `Open link to verify ${l.label}` }));
+    fireEvent.click(screen.getByRole("button", { name: `Approve: ${l.label}` }));
+    expect(walk.get().verificationOpened[l.key]).toBe(ownLinkPrint(l));
+    expect(walk.get().linkTicked).toHaveLength(i + 1);
+  }
+  expect(screen.getByText("5 of 5 links approved")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(walk.get().linkTicked).toHaveLength(5);
+  expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+  act(() => walk.restoreSession()); expect(walk.get().linkTicked).toHaveLength(5);
+});

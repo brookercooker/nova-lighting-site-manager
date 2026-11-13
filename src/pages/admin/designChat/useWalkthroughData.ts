@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { comparedReviewLinks, publishedComparison } from "./publishedLinkComparison";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CONTENT_SAVED } from "./contentSavedEvent";
 import { reviewLinkIdentity, sameReviewLink, stableReviewRows } from "./reviewLinkIdentity";
@@ -13,7 +14,7 @@ import { RELAY, relayHeaders, type RelayState } from "./helper";
 import { changeFingerprint, normPath, changedPages, countHandEdits, dropRevertedHandEdits, mergeReviewLinks, parseReviewLinks, parseReviewPages, relayChangedPages, type ChangedRow, type ManagerPage, type PageRef, type ReviewLinks, type ReviewPages } from "./submitWalkthrough";
 
 export type LinksResult = { status: "loading" } | { status: "failed" } | ({ status: "ok" } & ReviewLinks);
-export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; inventoryLinks?: InventoryLink[]; inventoryUnavailable?: boolean; retryInventory?: () => void; pagesStatus?: "loading" | "failed" | "ok" };
+export type WalkthroughData = { rows: ChangedRow[]; pages: ManagerPage[]; links: LinksResult; comparisonUnavailable?: boolean; inventoryLinks?: InventoryLink[]; inventoryUnavailable?: boolean; retryInventory?: () => void; pagesStatus?: "loading" | "failed" | "ok" };
 
 /** Pages using each shared object, from the same object_page_usages table the Objects tab's Used On reads. */
 async function fetchObjectPages(names: string[]): Promise<{ usages: Record<string, PageRef[]>; shared: SharedReviewObject[] }> {
@@ -103,7 +104,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   const handPaths = useMemo(() => new Set(reviewPages.data ? reviewPages.data.rows.filter(r => r.how.includes("content")).map(r => normPath(r.path))
     : (requests ?? []).filter(r => r.source === "content").flatMap(r => (r.pages ?? (r.page ? [r.page] : [])).map(p => normPath(p.path)))), [reviewPages.data, requests]);
   // True draft-vs-live comparison when the live site is configured and the frames answer link-inventory; otherwise today's list.
-  const live = liveSiteBase();
+  const live = liveSiteBase() ?? liveSiteBase(state?.liveUrl);
   const changedPaths = rows.map(r => r.page?.path).filter((p): p is string => !!p).sort();
   const inventory = useQuery({ refetchOnWindowFocus: false, refetchOnReconnect: false, queryKey: ["walkthrough", "inventory", sig, changedPaths], queryFn: () => loadNetLinks(changedPaths, live), enabled: enabled && !!live && changedPaths.length > 0, retry: false, staleTime: 0, refetchOnMount: "always" });
   const merged = useMemo(() => links.data ? mergeSharedReviewLinks(netReviewLinks(mergeReviewLinks(links.data, pages.data ?? [], handPaths), inventory.data ?? {}, pages.data ?? []), objects.data?.shared ?? [], pages.data ?? []) : null, [links.data, pages.data, handPaths, inventory.data, objects.data]);
@@ -146,8 +147,9 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
     const shared = (objects.data?.shared ?? []).filter(o => row.shared ? o.id === row.shared.id : path && o.pages.some(p => normPath(p.path) === normPath(path))).map(o => ({ id: o.id, edits: stableReviewEdits(o.inlineEdits), content: o.content ?? null })).sort((a,b) => a.id.localeCompare(b.id));
     return { ...row, fingerprint: changeFingerprint({ ids: [...new Set(ids)].sort(), requests: (requests ?? []).filter(r => ids.includes(r.id)).map(r => ({ id: r.id, sha: r.sha, request: r.request, details: r.details })).sort((a,b) => a.id.localeCompare(b.id)), edits: stableReviewEdits(page?.inlineEdits), content: page?.content ?? null, shared, files: !path ? authoritative?.sitewide.files : undefined }) };
   });
-  const withSaved: LinksResult = linkResult.status === "ok" ? { ...stableReviewRows(dropOriginalDestinations(enrichReviewLinks(mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), sharedLabels.data?.links ?? []))), status: "ok" } : linkResult;
-  return { inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data?.links ?? [])], inventoryUnavailable: sharedLabels.data?.unavailable || sharedLabels.isError, retryInventory: () => { void sharedLabels.refetch(); }, rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
+  const comparable = linkResult.status === "ok" ? enrichReviewLinks(mergeSavedReviewLinks(linkResult, walkState.savedReviewLinks, pages.data ?? [], inventory.data ?? {}), sharedLabels.data?.links ?? []) : null;
+  const withSaved: LinksResult = comparable ? { ...stableReviewRows(comparedReviewLinks(comparable)), status: "ok" } : linkResult;
+  return { comparisonUnavailable: comparable?.groups.some(g => g.links.some(l => publishedComparison(l) === "unknown")), inventoryLinks: [...(siteInventory.data ?? []), ...(sharedLabels.data?.links ?? [])], inventoryUnavailable: sharedLabels.data?.unavailable || sharedLabels.isError, retryInventory: () => { void sharedLabels.refetch(); void inventory.refetch(); }, rows: fingerprintedRows, pages: pages.data ?? [], links: withSaved, pagesStatus: pagesStatus === "ok" && (pages.isFetching || reviewPages.isFetching || objects.isFetching) ? "loading" : pagesStatus };
 }
 
 /** Adopt only unique authoritative identities; duplicate destinations never authorize a guess. */
@@ -159,7 +161,7 @@ export function enrichReviewLinks(base: ReviewLinks, inventory: InventoryLink[])
     const matches = link.elementKey ? candidates : named.length ? named : candidates;
     if (matches.length !== 1) return link;
     const item = matches[0];
-    return { ...link, elementKey: item.key, scope: item.scope, inventoryIndex: item.inventoryIndex, originalHref: link.originalHref ?? item.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image };
+    return { ...link, elementKey: item.key, scope: item.scope, inventoryIndex: item.inventoryIndex, publishedHref: link.publishedHref !== undefined ? link.publishedHref : item.publishedHref, originalHref: link.originalHref ?? item.originalHref, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image };
   }) })) };
 }
 /** Only a supplied original destination proves a restore; absent baseline stays visible. */

@@ -26,7 +26,7 @@ export async function resolveReviewLink(path: string, href: string, label: strin
   const pool = named.length ? named : candidates;
   const body = pool.filter(l => l.scope === "page");
   const matches = identity?.elementKey ? candidates.filter(l => l.key === identity.elementKey?.replace(/^link:/, "") && l.scope === (identity.scope ?? "page")) : body.length ? body : pool;
-  if (matches.length !== 1) { mismatch("inventory.identity", { matches: matches.length, storedKey: !!identity?.elementKey }); throw new Error(FIND_LINK_ERROR); }
+  if (matches.length !== 1) { mismatch("inventory.identity", { matches: matches.length, storedKey: !!identity?.elementKey }); throw new Error(identity?.elementKey ? "The page hasn't reported this card's unique editable link yet. Use Open in Manual Edit." : FIND_LINK_ERROR); }
   const element = matches[0];
   const table = element.scope === "page" ? "pages" : "object_registry";
   let query = (supabase as any).from(table).select("id,name,updated_at,inline_edits");

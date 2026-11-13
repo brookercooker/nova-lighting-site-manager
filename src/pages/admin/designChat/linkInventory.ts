@@ -3,7 +3,7 @@ import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { reviewLinkIdentity } from "./reviewLinkIdentity";
 
 /** Link inventory (Public companion, v1): the links a rendered page really has, used for a true draft-vs-live Links step. */
-export type InventoryLink = { key: string; scope: string; href: string; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; originalHref?: string; fingerprint?: string; inventoryIndex?: number; inventoryPath?: string };
+export type InventoryLink = { key: string; scope: string; href: string; publishedHref?: string | null; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; originalHref?: string; fingerprint?: string; inventoryIndex?: number; inventoryPath?: string };
 /** Only repeated inventory keys need an index; destination never disambiguates an element. */
 export function indexedInventory(links: InventoryLink[]): InventoryLink[] {
   const counts = new Map<string, number>();
@@ -58,6 +58,7 @@ export function parseInventory(d: any): Inventory | null {
       ...(l.image && typeof l.image === "object" && typeof l.image.alt === "string" && l.image.alt.length <= 300 ? { image: { alt: l.image.alt, ...(ok(l.image.src, 2048) && /^https:\/\//i.test(l.image.src) ? { src: l.image.src } : {}) } } : {}),
       ...(l.target === null || l.target === "_blank" ? { target: l.target } : {}),
       ...(ok(l.originalHref, 2048) ? { originalHref: l.originalHref } : {}),
+      ...(ok(l.publishedHref, 2048) || l.publishedHref === null ? { publishedHref: l.publishedHref } : {}),
       ...(typeof l.fingerprint === "string" && l.fingerprint.length <= 2048 ? { fingerprint: l.fingerprint } : {}) });
   }
   return { path: d.path, links: indexedInventory(links) };
@@ -97,7 +98,7 @@ const kindOf = (href: string): LinkKind => /^mailto:/i.test(href) ? "mail" : /^t
 export function diffInventories(draft: Inventory, live: Inventory): InventoryLink[] {
   const liveBy = new Map(indexedInventory(live.links).map(l => [inventoryIdentity(l), l.href]));
   const seen = new Set<string>();
-  return indexedInventory(draft.links).map(l => ({ ...l, originalHref: liveBy.get(inventoryIdentity(l)) ?? l.originalHref })).filter(l => { const id = inventoryIdentity(l); const before = liveBy.get(id); if (seen.has(id)) return false; seen.add(id); return before !== l.href; });
+  return indexedInventory(draft.links).map(l => ({ ...l, publishedHref: liveBy.get(inventoryIdentity(l)) ?? null, originalHref: liveBy.get(inventoryIdentity(l)) ?? l.originalHref })).filter(l => { const id = inventoryIdentity(l); const before = liveBy.get(id); if (seen.has(id)) return false; seen.add(id); return before !== l.href; });
 }
 /** Replace each page group that has both inventories with its net changes; pages without them keep the existing rows. */
 export function netReviewLinks(base: ReviewLinks, nets: Record<string, InventoryLink[]>, pages: ManagerPage[]): ReviewLinks {
@@ -108,7 +109,7 @@ export function netReviewLinks(base: ReviewLinks, nets: Record<string, Inventory
     const path = g.page ? normPath(g.page.path) : null;
     if (path === null || !(path in nets)) { groups.push(g); continue; }
     done.add(path);
-    const links = toLinks(g.page!.path, nets[path], g.links);
+    const links = toLinks(g.page?.path ?? path, nets[path], g.links);
     if (links.length) groups.push({ ...g, links });
   }
   for (const [path, list] of Object.entries(nets)) if (!done.has(path) && list.length) groups.push({ page: { name: name(path), path }, label: name(path), links: toLinks(path, list, []) });
@@ -120,7 +121,7 @@ function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): Revi
     const key = reviewLinkIdentity({ ...l, elementKey: l.key, kind: kindOf(l.href), requestIds: [], status: null }, path);
     if (out.some(x => x.key === key)) continue;
     const was = prior.find(x => x.elementKey && reviewLinkIdentity(x, path) === key);
-    out.push({ ...was, key, href: l.href, kind: kindOf(l.href), requestIds: was?.requestIds ?? [], status: was?.href === l.href ? was.status : null, originalHref: l.originalHref ?? was?.originalHref, elementKey: l.key, scope: l.scope, inventoryIndex: l.inventoryIndex, target: l.target ?? null, label: l.label || was?.label || null, ariaLabel: l.ariaLabel || was?.ariaLabel, visibleText: l.visibleText || was?.visibleText, image: l.image || was?.image });
+    out.push({ ...was, key, href: l.href, publishedHref: l.publishedHref, kind: kindOf(l.href), requestIds: was?.requestIds ?? [], status: was?.href === l.href ? was.status : null, originalHref: l.originalHref ?? was?.originalHref, elementKey: l.key, scope: l.scope, inventoryIndex: l.inventoryIndex, target: l.target ?? null, label: l.label || was?.label || null, ariaLabel: l.ariaLabel || was?.ariaLabel, visibleText: l.visibleText || was?.visibleText, image: l.image || was?.image });
   }
   return out;
 }

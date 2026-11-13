@@ -96,7 +96,7 @@ describe("Submit for Review walkthrough", () => {
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
     confirmLinks();
-    expect(within(dialog()).getByRole("button", { name: /About · done/ })).toHaveAttribute("aria-expanded", "false");
+    expect(within(dialog()).getByRole("button", { name: /About · 1 of 1/ })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, href: "/changed" }] }] } };

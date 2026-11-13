@@ -89,7 +89,7 @@ describe("inline link verification", () => {
     fireEvent.click(box);
     expect(walk.get().linkTicked).toEqual([team.key]);
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: /About · done/ }));
+    fireEvent.click(screen.getByRole("button", { name: /About · 1 of 1/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Approve:/ }));
     expect(walk.get().linkTicked).toEqual([]);
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
@@ -140,6 +140,15 @@ function Bridge({ active, links = [] }: { active: boolean; links?: any[] }) {
 }
 const ready = (v = 2) => ({ source: "nova-site", type: "link-check-ready", v, enabled: true });
 describe("frame bridge row selection", () => {
+  it.each([true, false])("honors Public synchronous opened:%s without making a duplicate parent popup", opened => {
+    const f = frameWith(); render(<LinkCheckBridge root={{ current: document.body }} frameKey="public-open" />);
+    act(() => window.dispatchEvent(new MessageEvent("message", { data: click({ opened }), origin: ORIGIN, source: f.contentWindow })));
+    expect(openReviewDestination).not.toHaveBeenCalled();
+    expect(walk.get().selectedLink?.key).toBe(team.key);
+    expect(walk.get().verificationOpened[team.key]).toBe(opened ? ownLinkPrint(team) : undefined);
+    if (!opened) expect(walk.get().linkNote).toBe("Your browser blocked the new tab. Use the open icon on the tile.");
+    f.remove();
+  });
   it("opens a changed destination and unlocks only its own approval", () => {
     const f = frameWith();
     render(<LinkCheckBridge root={{ current: document.body }} frameKey="open-changed" />);
@@ -232,7 +241,7 @@ describe("links needing checks", () => {
     expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ type: "link-check-focus" }), ORIGIN);
     expect(walk.get().openingLink?.path).toBe("/a");
     act(() => walk.confirmLink("/a|/team", "fp", true));
-    expect(screen.getByRole("button", { name: /About · done/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /About · 1 of 1/ })).toHaveAttribute("aria-expanded", "false");
     act(() => walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], linkTicked: [] })));
     if (screen.getByRole("button", { name: /About · 0 of 1/ }).getAttribute("aria-expanded") === "false") fireEvent.click(screen.getByRole("button", { name: /About · 0 of 1/ }));
     const link = document.querySelector("[data-walk-link='/a|/team']") as HTMLElement;
@@ -324,7 +333,7 @@ it("inner verification, confirmation and Correct never activate the card", () =>
   fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
   const confirm = screen.getByRole("button", { name: "Approve: Team" });
   fireEvent.click(confirm);
-  fireEvent.click(screen.getByRole("button", { name: /About · done/ }));
+  fireEvent.click(screen.getByRole("button", { name: /About · 1 of 1/ }));
   const reopened = screen.getByRole("button", { name: "Approve: Team" });
   expect(reopened).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(reopened);
@@ -333,12 +342,12 @@ it("inner verification, confirmation and Correct never activate the card", () =>
   expect(walk.get().reviewEdit?.link.key).toBe(team.key);
   expect(m.show).not.toHaveBeenCalled();
 });
-it("phone card activation closes the review even when the same link was already checked", () => {
+it("phone card activation retains review even when the same link was already checked", () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
   openLinks();
   act(() => walk.update(s => ({ ...s, checking: { key: team.key, kind: "link", name: "Team" } })));
   fireEvent.click(screen.getByRole("button", { name: "Show Team on the page" }));
-  expect(walk.get().open).toBe(false);
+  expect(walk.get().open).toBe(true);
   expect(walk.get().checking?.key).toBe(team.key);
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
 });
@@ -353,6 +362,6 @@ it("shared-object links count toward Next and phone next-link navigation opens t
   fireEvent.click(screen.getByRole("button", { name: "Jump to Next Unconfirmed Link" }));
   expect(m.show).toHaveBeenCalledWith("/about");
   expect(walk.get().openingLink?.key).toBe(shared.key);
-  expect(walk.get().open).toBe(false);
+  expect(walk.get().open).toBe(true);
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
 });

@@ -76,7 +76,7 @@ it("does not auto-collapse a completed group the reviewer opened by hand", () =>
   fireEvent.click(screen.getByRole("button", { name: "Homepage · 0 of 1" }));
   fireEvent.click(screen.getByRole("link", { name: /^Open link to verify / }));
   fireEvent.click(screen.getByRole("button", { name: "Approve: Our Story" }));
-  expect(screen.getByRole("button", { name: "Homepage · done" })).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByRole("button", { name: "Homepage · 1 of 1" })).toHaveAttribute("aria-expanded", "true");
 });
 it("duplicate destinations are not warnings or approval permission", () => {
   m.data.links.groups[0].links = [a, { ...a, key: "d", label: "More Stories" }];

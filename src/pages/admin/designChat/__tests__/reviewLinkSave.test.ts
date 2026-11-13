@@ -69,7 +69,7 @@ describe("review link writes", () => {
     await saveReviewLink(r, "/gallery", false);
     expect(m.save.mock.calls[0][1].inline_edits["link:0.5.0.1"]).toBe('{"href":"/gallery"}');
     expect(r.element.label).toBe("EXPLORE GALLERIES");
-    await expect(resolveReviewLink("/", "/contact", "BOOK A CONSULTATION", undefined, { elementKey: "0.99", scope: "page" })).rejects.toThrow("matched safely");
+    await expect(resolveReviewLink("/", "/contact", "BOOK A CONSULTATION", undefined, { elementKey: "0.99", scope: "page" })).rejects.toThrow("unique editable link");
   });
   it.each(["https://example.com/a", "mailto:a@b.co", "tel:+15550100", "/gallery"])("uses the Manual destination validation for %s", href => expect(validTextLink(href)).toBe(true));
   it.each(["http://example.com", "//example.com", "javascript:alert(1)", "#faq", "https://", "mailto:", "tel:", "/a b", "/a\\b"])("rejects %s before any save", async href => {
