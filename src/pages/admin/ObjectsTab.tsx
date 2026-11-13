@@ -1,3 +1,4 @@
+import LibraryFieldDialog from "./LibraryFieldDialog";
 import { useLibraryView } from "./libraryView";
 import { addLibraryLabelFilter } from "./libraryLabels";
 import LibraryFilterToolbar from "./LibraryFilterToolbar";
@@ -17,7 +18,7 @@ import {
 import InlineEdit from "./InlineEdit";
 import {
   Search, AlertCircle, Archive, RotateCcw,
-  Pencil, AlertTriangle, RefreshCw, ExternalLink, MoreHorizontal, Copy, Type,
+  Pencil, AlertTriangle, RefreshCw, ExternalLink, MoreHorizontal, Copy, Type, FileText, Trash2,
   } from "lucide-react";
 import { RenameDialog } from "./RenameDialog";
 import { renameObject } from "./renameHelpers";
@@ -118,6 +119,7 @@ export default function ObjectsTab() {
   const [editReady, setEditReady] = useState<ObjectRegistryRow | null>(null);
   const [copyFrom, setCopyFrom] = useState<ObjectRegistryRow | null>(null);
   const [renameTarget, setRenameTarget] = useState<ObjectRegistryRow | null>(null);
+  const [descriptionTarget, setDescriptionTarget] = useState<ObjectRegistryRow | null>(null);
   const [preview, setPreview] = useState<ObjectRegistryRow | null>(null);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -181,7 +183,7 @@ export default function ObjectsTab() {
   const updateObjectDescription = async (id: string, description: string) => {
     const { error } = await (supabase as any)
       .from("object_registry").update({ description }).eq("id", id);
-    if (error) { toast.error(error.message); return; }
+    if (error) throw error;
     toast.success("Description saved");
     qc.invalidateQueries({ queryKey: ["admin", "object_registry"] });
   };
@@ -256,6 +258,7 @@ export default function ObjectsTab() {
       if (rangeMs && (Date.now() - new Date(o.updated_at).getTime()) > rangeMs) return false;
       if (f.extra === "used" && !usagesForObject(o).length) return false;
       if (f.extra === "none" && usagesForObject(o).length) return false;
+      if (!["all", "none", "used"].includes(f.extra) && !usagesForObject(o).some(u => u.path === f.extra)) return false;
       return true;
     });
     list = [...list].sort((a, b) => {
@@ -306,7 +309,7 @@ export default function ObjectsTab() {
     <div className="nova-library-layout flex gap-4 items-start">
 
       <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} scope="objects" noun="Objects" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={visible.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{ v: "all", label: "Any" }, { v: "used", label: "In Use" }, { v: "none", label: "Not Used" }]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
+        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} scope="objects" noun="Objects" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Recently Modified" }, { v: "oldest", label: "Oldest Modified" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={visible.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{ v: "all", label: "Any" }, { v: "used", label: "In Use" }, { v: "none", label: "Not Used" }, ...Array.from(new Map([...(usageMap?.values() ?? [])].flat().map(u => [u.path, {v:u.path,label:u.name || u.path}])).values())]} onAdd={() => setCreating(true)} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
         scope="objects"
         usageCounts={usageCounts}
         activeFilters={filterTags}
@@ -331,20 +334,7 @@ export default function ObjectsTab() {
 
         {isLoading && <div className="h-24 animate-pulse bg-muted" />}
         {!isLoading && visible.length === 0 && <p className="py-8 text-sm text-muted-foreground">No objects match the current filters.</p>}
-        <div data-library-items={libraryView} className={libraryView === "grid" ? "nova-library-items-grid" : "min-w-0"}>{visible.map((obj, idx) => <LibraryListRow view={libraryView} key={obj.id} labelScope="objects" labels={obj.labels ?? []} onLabelFilter={path => setFilterTags(cur => addLibraryLabelFilter(cur, path))} name={obj.name} date={new Date(obj.updated_at).toLocaleDateString()} thumbnail={<ObjectThumbnail id={obj.id} storedThumb={obj.thumbnail_url} />} badges={<><span>{obj.archived_at ? "Archived" : obj.site_wide ? "Site-Wide" : usagesForObject(obj).length ? "In Use" : "Not Used"}</span></>} onOpen={() => setPreview(obj)} onTitle={() => gotoObject(obj)} selection={listEditing ? <input type="checkbox" checked={selected.has(obj.id)} aria-label={`Select ${obj.name}`} onChange={() => toggleSelected(obj.id)} /> : undefined} menu={<><DropdownMenuItem onSelect={() => navigate(`/manage/preview?editObject=${encodeURIComponent(obj.id)}`)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(`/objects/${obj.slug_id}`, "_blank", "noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => { void navigator.clipboard.writeText(buildObjectRef({id:obj.slug_id,name:obj.name})).then(() => toast.success("Reference copied"), () => toast.error("Copy failed")); } }>Copy Reference</DropdownMenuItem><UsedOnChip usages={usagesForObject(obj)} hasKey={!!obj.component_key} /><LabelsCell scope="objects" value={obj.labels ?? []} onChange={next => updateObjectLabels(obj.id,next)} itemName={obj.name} />
-                          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                            Description
-                          </DropdownMenuLabel>
-                          <div
-                            className="px-2 pb-2"
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                          >
-                            <InlineEdit
-                              value={obj.description ?? ""}
-                              onSave={(v) => updateObjectDescription(obj.id, v)}
-                            />
-                          </div>
+        <div data-library-items={libraryView} className={libraryView === "grid" ? "nova-library-items-grid" : "min-w-0"}>{visible.map((obj, idx) => <LibraryListRow view={libraryView} key={obj.id} labelScope="objects" labels={obj.labels ?? []} onLabelFilter={path => setFilterTags(cur => addLibraryLabelFilter(cur, path))} name={obj.name} date={new Date(obj.updated_at).toLocaleDateString()} thumbnail={<ObjectThumbnail id={obj.id} storedThumb={obj.thumbnail_url} />} badges={<><span>{obj.archived_at ? "Archived" : obj.site_wide ? "Site-Wide" : usagesForObject(obj).length ? "In Use" : "Not Used"}</span></>} onOpen={() => setPreview(obj)} onTitle={() => gotoObject(obj)} selection={listEditing ? <input type="checkbox" checked={selected.has(obj.id)} aria-label={`Select ${obj.name}`} onChange={() => toggleSelected(obj.id)} /> : undefined} menu={<><DropdownMenuItem onSelect={() => navigate(`/manage/preview?editObject=${encodeURIComponent(obj.id)}`)}><Pencil className="mr-2 h-4 w-4" />Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(`/objects/${obj.slug_id}`, "_blank", "noopener,noreferrer")}><ExternalLink className="mr-2 h-4 w-4" />Open in New Tab</DropdownMenuItem><DropdownMenuItem onSelect={() => { void navigator.clipboard.writeText(buildObjectRef({id:obj.slug_id,name:obj.name})).then(() => toast.success("Reference copied"), () => toast.error("Copy failed")); } }><Copy className="mr-2 h-4 w-4" />Copy Reference</DropdownMenuItem><LabelsCell scope="objects" value={obj.labels ?? []} onChange={next => updateObjectLabels(obj.id,next)} itemName={obj.name} />
                           <DropdownMenuSeparator />
                           {!!obj.archived_at && (
                             <>
@@ -358,8 +348,9 @@ export default function ObjectsTab() {
                             <Copy className="w-4 h-4 mr-2" /> Make a Copy…
                           </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => setRenameTarget(obj)}>
-                            <Type className="w-4 h-4 mr-2" /> Rename…
+                            <Pencil className="w-4 h-4 mr-2" /> Rename
                           </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setDescriptionTarget(obj)}><FileText className="mr-2 h-4 w-4" />Edit Description</DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {!!obj.component_key && (
                             <>
@@ -370,7 +361,7 @@ export default function ObjectsTab() {
                             </>
                           )}
                           {!obj.site_wide && <DropdownMenuItem onSelect={() => setConfirmArchive(obj)}>
-                            <Archive className="w-4 h-4 mr-2" /> Archive (Reversible)
+                            <Archive className="w-4 h-4 mr-2" /> Archive
                           </DropdownMenuItem>}
                           {!obj.site_wide && <DropdownMenuSeparator />}
                           <DropdownMenuItem
@@ -409,6 +400,8 @@ export default function ObjectsTab() {
             qc.invalidateQueries({ queryKey: ["admin", "object_registry"] });
           }}
         />
+
+        {descriptionTarget && <LibraryFieldDialog title={`Edit Description — ${descriptionTarget.name}`} value={descriptionTarget.description ?? ""} multiline onClose={() => setDescriptionTarget(null)} onSave={value => updateObjectDescription(descriptionTarget.id, value)} />}
 
         <EditReadyDialog
           obj={editReady}

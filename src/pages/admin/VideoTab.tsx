@@ -1,3 +1,4 @@
+import LibraryFieldDialog from "./LibraryFieldDialog";
 import { useLibraryView } from "./libraryView";
 import LabelsCell from "./LabelsCell";
 import { addLibraryLabelFilter } from "./libraryLabels";
@@ -18,7 +19,7 @@ import { formatBytes } from "@/lib/imageOptimize";
 import TagsPanel from "./TagsPanel";
 import {
   Copy, Trash2, Search, Archive, ArchiveRestore, RefreshCw, Link as LinkIcon,
-  Play, Youtube, Video as VideoIcon, Download, Lock, Globe,
+  Pencil, FileText, ExternalLink, Play, Youtube, Video as VideoIcon, Download, Lock, Globe,
 } from "lucide-react";
 import { downloadOriginalVideo, downloadVideosAsZip } from "./downloadAssets";
 import { useVideos } from "./useAdminData";
@@ -126,9 +127,9 @@ export default function VideoTab() {
   const qc = useQueryClient();
   const { data: videos = [], isLoading } = useVideos();
 
-  const [addingMedia, setAddingMedia] = useState(false);
   const [libraryView, setLibraryView] = useLibraryView("videos");
   const [listEditing, setListEditing] = useState(false);
+  const [fieldEdit, setFieldEdit] = useState<{ id: string; name: string; value: string; field: "description" | "name" } | null>(null);
   const [q, setQ] = useState("");
   const [searchField, setSearchField] = useState<Field>("all");
   const [filterTags, setFilterTags] = useState<string[]>([]);
@@ -548,7 +549,8 @@ export default function VideoTab() {
   };
 
   const saveField = async (id: string, field: "description" | "alt_text" | "name", value: string) => {
-    await (supabase as any).from("videos").update({ [field]: value }).eq("id", id);
+    const { error } = await (supabase as any).from("videos").update({ [field]: value }).eq("id", id);
+    if (error) throw error;
     invalidate();
   };
 
@@ -686,11 +688,11 @@ export default function VideoTab() {
     v.source_type === "upload" ? (v.storage_url ?? "") : (v.external_url ?? "");
 
   return (
-    <div className="nova-library-layout flex gap-4 items-start" onDragEnter={e => { if(e.dataTransfer.types.includes("Files")) setAddingMedia(true); }}>
+    <div className="nova-library-layout flex gap-4 items-start">
 
 
       <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { invalidate(); toast.success("Videos refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="videos" noun="Videos" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { setAddingMedia(true); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
+        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { invalidate(); toast.success("Videos refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="videos" noun="Videos" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { fileRef.current?.click(); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
         scope="videos"
         usageCounts={usageCounts}
         activeFilters={filterTags}
@@ -703,29 +705,29 @@ export default function VideoTab() {
         filteredCount={filtered.length}
         onSelectAllFiltered={() => setSelected(new Set(filtered.map((v) => v.id)))}
       />} />
-<div hidden={!addingMedia && !busy && !dragActive && !justAddedIds.length}>        <div
+<div hidden={listEditing}>        <div
           onDrop={onDrop}
           onDragEnter={onDragEnter}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
-          className={`border-2 border-dashed rounded-lg py-12 px-6 text-center text-base cursor-pointer transition-colors ${
+          className={`border-2 border-dashed rounded-lg py-3 px-3 text-center text-sm transition-colors ${
             dragActive
               ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/40"
               : "text-muted-foreground hover:border-primary hover:bg-primary/5"
           }`}
-          onClick={() => fileRef.current?.click()}
-        >
+                  >
           {dragActive
             ? `Drop ${dragCount || ""} file${dragCount === 1 ? "" : "s"} to upload`
             : uploadProgress
               ? `Uploading ${uploadProgress.done} of ${uploadProgress.total}…`
               : busy
                 ? "Uploading…"
-                : "Drop video files here or click to select"}
+                : "Drop videos here"}
           <div className="mt-1 text-xs text-muted-foreground">
-            Uploads are capped at 150 MB per file. For anything larger, upload to YouTube and paste the link below.
+            150 MB per file maximum.
           </div>
 
+          <Button variant="outline" className="mt-2 h-11" disabled={busy} onClick={() => fileRef.current?.click()}>Choose Files</Button>
           <input ref={fileRef} type="file" accept="video/*" multiple hidden aria-label="Upload Videos" onChange={onPick} />
         </div>
 
@@ -795,7 +797,7 @@ export default function VideoTab() {
           </Button>
         </SelectionBar>
 
-        <div data-library-items={libraryView} className={libraryView === "grid" ? "nova-library-items-grid" : "min-w-0"}>{shown.map(v => <LibraryWindow key={v.id} kind="video" compact grid={libraryView === "grid"}>{() => <LibraryListRow view={libraryView} labelScope="videos" labels={v.tags} onLabelFilter={path => setFilterTags(cur => addLibraryLabelFilter(cur, path))} name={v.name} date={formatRelative(v.created_at)} thumbnail={<SignedThumbImg url={v.poster_url} alt={v.name} className="h-14 w-14 object-cover" fallback={<Play className="h-6 w-6 text-muted-foreground" />} />} badges={<><span>{v.archived_at ? "Archived" : sourceLabel(v)}</span></>} onOpen={() => setDetail(v)} draggable onDragStart={e => onTileDragStart(e,v.id)} selection={listEditing ? <input type="checkbox" checked={selected.has(v.id)} aria-label={`Select ${v.name}`} onChange={() => setSelected(cur => {const next=new Set(cur);next.has(v.id)?next.delete(v.id):next.add(v.id);return next;})} /> : undefined} menu={<><LabelsCell scope="videos" value={v.tags} itemName={v.name} onChange={next => { next.filter(t => !v.tags.includes(t)).forEach(t => addTag(v.id, t)); v.tags.filter(t => !next.includes(t)).forEach(t => removeTag(v.id, t)); }} /><DropdownMenuItem onSelect={() => setDetail(v)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(playbackUrl(v),"_blank","noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(buildVideoRef({id:v.slug_id,name:v.name,source:v.source_type,url:playbackUrl(v),altUrl:v.alt_url,posterUrl:v.poster_url})).then(()=>toast.success("Reference copied"),()=>toast.error("Copy failed"))}>Copy Reference</DropdownMenuItem><DropdownMenuItem onSelect={() => downloadOriginalVideo(v)}>{v.source_type === "upload" ? "Download Original" : "Open Source"}</DropdownMenuItem><DropdownMenuItem onSelect={() => v.archived_at ? unarchive([v.id]) : archive([v.id])}>{v.archived_at ? "Restore" : "Archive"}</DropdownMenuItem><DropdownMenuItem onSelect={() => requestDelete([v])} className="text-destructive">Delete Video</DropdownMenuItem></>} />}</LibraryWindow>)}</div>
+        <div data-library-items={libraryView} className={libraryView === "grid" ? "nova-library-items-grid" : "min-w-0"}>{shown.map(v => <LibraryWindow key={v.id} kind="video" compact grid={libraryView === "grid"}>{() => <LibraryListRow view={libraryView} labelScope="videos" labels={v.tags} onLabelFilter={path => setFilterTags(cur => addLibraryLabelFilter(cur, path))} name={v.name} date={formatRelative(v.created_at)} thumbnail={<SignedThumbImg url={v.poster_url} alt={v.name} className="h-14 w-14 object-cover" fallback={<Play className="h-6 w-6 text-muted-foreground" />} />} badges={<><span>{v.archived_at ? "Archived" : sourceLabel(v)}</span></>} onOpen={() => setDetail(v)} draggable onDragStart={e => onTileDragStart(e,v.id)} selection={listEditing ? <input type="checkbox" checked={selected.has(v.id)} aria-label={`Select ${v.name}`} onChange={() => setSelected(cur => {const next=new Set(cur);next.has(v.id)?next.delete(v.id):next.add(v.id);return next;})} /> : undefined} menu={<><LabelsCell scope="videos" value={v.tags} itemName={v.name} onChange={next => { next.filter(t => !v.tags.includes(t)).forEach(t => addTag(v.id, t)); v.tags.filter(t => !next.includes(t)).forEach(t => removeTag(v.id, t)); }} /><DropdownMenuItem onSelect={() => setFieldEdit({id:v.id,name:v.name,value:v.name,field:"name"})}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem><DropdownMenuItem onSelect={() => setFieldEdit({id:v.id,name:v.name,value:v.description ?? "",field:"description"})}><FileText className="mr-2 h-4 w-4" />Edit Description</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(playbackUrl(v),"_blank","noopener,noreferrer")}><ExternalLink className="mr-2 h-4 w-4" />Open in New Tab</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(buildVideoRef({id:v.slug_id,name:v.name,source:v.source_type,url:playbackUrl(v),altUrl:v.alt_url,posterUrl:v.poster_url})).then(()=>toast.success("Reference copied"),()=>toast.error("Copy failed"))}><Copy className="mr-2 h-4 w-4" />Copy Reference</DropdownMenuItem><DropdownMenuItem onSelect={() => downloadOriginalVideo(v)}><Download className="mr-2 h-4 w-4" />{v.source_type === "upload" ? "Download Original" : "Open Source"}</DropdownMenuItem><DropdownMenuItem onSelect={() => v.archived_at ? unarchive([v.id]) : archive([v.id])}>{v.archived_at ? <ArchiveRestore className="mr-2 h-4 w-4" /> : <Archive className="mr-2 h-4 w-4" />}{v.archived_at ? "Restore" : "Archive"}</DropdownMenuItem><DropdownMenuItem onSelect={() => requestDelete([v])} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Delete Video</DropdownMenuItem></>} />}</LibraryWindow>)}</div>
         {!isLoading && visibleCount < filtered.length && (
           <div ref={sentinelRef} className="py-6 flex flex-col items-center gap-2">
             <div className="text-xs text-muted-foreground">
@@ -807,6 +809,7 @@ export default function VideoTab() {
           </div>
         )}
 
+        {fieldEdit && <LibraryFieldDialog title={`${fieldEdit.field === "description" ? "Edit Description" : "Rename"} — ${fieldEdit.name}`} value={fieldEdit.value} multiline={fieldEdit.field === "description"} onClose={() => setFieldEdit(null)} onSave={value => saveField(fieldEdit.id, fieldEdit.field, value)} />}
         <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
           <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>

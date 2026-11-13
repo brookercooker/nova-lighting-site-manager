@@ -22,13 +22,14 @@ describe("staged library panel",()=>{
     cleanup();render(<Harness/>);fireEvent(window,new CustomEvent("nova:manage-library-labels",{detail:"images"}));expect(screen.queryByRole("heading",{name:"Manage Labels"})).toBeNull();
     fireEvent(window,new CustomEvent("nova:manage-library-labels",{detail:"objects"}));expect(screen.getByRole("heading",{name:"Manage Labels"})).toBeInTheDocument();
   });
-  it("previews results without applying and discards on closing",()=>{
+  it("applies labels immediately without a second Done and keeps them on closing",()=>{
     render(<Harness/>);fireEvent.click(screen.getByRole("button",{name:"Filter"}));
     fireEvent.click(screen.getByRole("button",{name:"Footer"}));
-    expect(screen.getByRole("button",{name:"Show 3 Results"})).toBeEnabled();expect(h.applied).not.toHaveBeenCalled();
+    expect(screen.getByRole("button",{name:"Show 3 Results"})).toBeEnabled();expect(h.applied).toHaveBeenLastCalledWith({...clearLibraryFilters(),labels:["footer"]});
+    expect(within(screen.getByRole("dialog")).queryByRole("button",{name:"Done"})).toBeNull();
     fireEvent.click(screen.getByRole("button",{name:"Close Filters"}));
-    fireEvent.click(screen.getByRole("button",{name:"Filter"}));
-    expect(screen.getByRole("button",{name:"Footer"})).toHaveAttribute("aria-pressed","false");
+    fireEvent.click(screen.getByRole("button",{name:"Filter: 1 Active"}));
+    expect(screen.getByRole("button",{name:"Remove footer"})).toHaveAttribute("aria-pressed","true");
   });
   it("commits only on Show Results and removal clears only that chip",()=>{
     render(<Harness/>);fireEvent.click(screen.getByRole("button",{name:"Filter"}));fireEvent.click(screen.getByRole("button",{name:"Footer"}));fireEvent.click(screen.getByRole("button",{name:"Show 3 Results"}));

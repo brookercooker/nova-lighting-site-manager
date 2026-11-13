@@ -1,3 +1,4 @@
+import LibraryFieldDialog from "./LibraryFieldDialog";
 import { useLibraryView } from "./libraryView";
 import LabelsCell from "./LabelsCell";
 import { addLibraryLabelFilter } from "./libraryLabels";
@@ -20,7 +21,7 @@ import { tileSrcCandidates } from "./imageTileSrc";
 import { libraryImageCandidates } from "./imageTileSrc";
 import LibraryImageThumbnail from "./LibraryImageThumbnail";
 import TagsPanel from "./TagsPanel";
-import { Trash2, Search, Archive, ArchiveRestore, AlertTriangle, RefreshCw, Download, Globe, Lock } from "lucide-react";
+import { Trash2, Search, Archive, ArchiveRestore, AlertTriangle, RefreshCw, Download, Globe, Lock, Pencil, FileText, ExternalLink, Copy } from "lucide-react";
 import { GATED_BUCKET, clearAssetUrlCache } from "@/lib/assetUrl";
 import { downloadOriginalImage, downloadImagesAsZip } from "./downloadAssets";
 import { useImages, useImageThumbnails, usePages } from "./useAdminData";
@@ -120,9 +121,9 @@ export default function ImagesTab() {
     () => (rawImages as Img[]).filter((i) => isImageAsset(i.filename || i.web_url)),
     [rawImages],
   );
-  const [addingMedia, setAddingMedia] = useState(false);
   const [libraryView, setLibraryView] = useLibraryView("images");
   const [listEditing, setListEditing] = useState(false);
+  const [fieldEdit, setFieldEdit] = useState<{ id: string; name: string; value: string; field: "description" | "filename" } | null>(null);
   const [q, setQ] = useState("");
   const [searchField, setSearchField] = useState<Field>("all");
   const [filterTags, setFilterTags] = useState<string[]>([]);
@@ -629,8 +630,9 @@ export default function ImagesTab() {
 
 
 
-  const saveField = async (id: string, field: "description" | "alt_text" | "place_name", value: string) => {
-    await (supabase as any).from("images").update({ [field]: value }).eq("id", id);
+  const saveField = async (id: string, field: "description" | "alt_text" | "place_name" | "filename", value: string) => {
+    const { error } = await (supabase as any).from("images").update({ [field]: value }).eq("id", id);
+    if (error) throw error;
     invalidate();
   };
 
@@ -658,11 +660,11 @@ export default function ImagesTab() {
 
 
   return (
-    <div className="nova-library-layout flex gap-4 items-start" onDragEnter={e => { if(e.dataTransfer.types.includes("Files")) setAddingMedia(true); }}>
+    <div className="nova-library-layout flex gap-4 items-start">
 
 
       <div className="nova-library-content flex-1 min-w-0 space-y-3">
-        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { setBrokenIds(new Set()); setFailedTileSources({}); invalidate(); toast.success("Images refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="images" noun="Images" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { setAddingMedia(true); fileRef.current?.click(); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
+        <LibraryFilterToolbar view={libraryView} onViewChange={setLibraryView} labelUsageCounts={usageCounts} action={listEditing && <Button variant="ghost" className="h-10 w-10 p-0" aria-label="Refresh" onClick={() => { setBrokenIds(new Set()); setFailedTileSources({}); invalidate(); toast.success("Images refreshed"); }}><RefreshCw className="h-4 w-4" /></Button>} scope="images" noun="Images" search={q} onSearch={setQ} value={filterValue} onApply={applyFilters} fields={FIELDS} sort={sort} onSort={v => setSort(v as typeof sort)} sortOptions={[{ v: "newest", label: "Newest Added" }, { v: "oldest", label: "Oldest Added" }, { v: "name", label: "Name (A–Z)" }, { v: "name_desc", label: "Name (Z–A)" }]} count={filtered.length} countResults={f => filterRows(f).length} extraLabel="Used On" extraOptions={[{v:"all",label:"Any"},{v:"none",label:"Not Used"}, ...pageOptions.map(p=>({v:p.id,label:p.name || p.path}))]} onAdd={() => { fileRef.current?.click(); }} editing={listEditing} onEdit={() => setListEditing(v => !v)} editTools={      <TagsPanel
         scope="images"
         usageCounts={usageCounts}
         activeFilters={filterTags}
@@ -675,18 +677,17 @@ export default function ImagesTab() {
         filteredCount={filtered.length}
         onSelectAllFiltered={() => setSelected(new Set(filtered.map((i) => i.id)))}
       />} />
-<div hidden={!addingMedia && !busy && !dragActive && !justAddedIds.length}>      <div
+<div hidden={listEditing}>      <div
         onDrop={onDrop}
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
-        className={`border-2 border-dashed rounded-lg py-12 px-6 text-center text-base cursor-pointer transition-colors ${
+        className={`border-2 border-dashed rounded-lg py-3 px-3 text-center text-sm transition-colors ${
           dragActive
             ? "border-primary bg-primary/10 text-primary ring-2 ring-primary/40"
             : "text-muted-foreground hover:border-primary hover:bg-primary/5"
         }`}
-        onClick={() => fileRef.current?.click()}
-      >
+              >
         <div className="flex flex-wrap items-center justify-center gap-2">
         {uploadPreviews.map((preview) => (
           <img key={preview.url} src={preview.url} alt={preview.name} width={48} height={48}
@@ -698,9 +699,10 @@ export default function ImagesTab() {
             ? `Uploading ${uploadProgress.done} of ${uploadProgress.total}…`
             : busy
               ? "Uploading…"
-              : "Drop images here or click to select files from your computer"}</span>
+              : "Drop images here"}</span>
         </div>
-        <input ref={fileRef} type="file" accept="image/*" multiple hidden aria-label="Upload Images" onChange={onPick} />
+        <Button variant="outline" className="mt-2 h-11" disabled={busy} onClick={() => fileRef.current?.click()}>Choose Files</Button>
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden aria-label="Upload Images" onChange={onPick} />
       </div>
 
       {justAddedIds.length > 0 && justAddedAt && (
@@ -755,7 +757,7 @@ export default function ImagesTab() {
 
 
       <div data-library-items={libraryView} className={libraryView === "grid" ? "nova-library-items-grid" : "min-w-0"}>{shown.map(img => <LibraryWindow key={img.id} kind="image" compact grid={libraryView === "grid"}>{() => <LibraryListRow view={libraryView} labelScope="images" labels={img.tags} onLabelFilter={path => setFilterTags(cur => addLibraryLabelFilter(cur, path))} name={img.filename} date={formatRelative(img.created_at)} thumbnail={<LibraryImageThumbnail candidates={tileSrcCandidates({gated:(img as any).visibility === "gated",thumb: img.web_path ? thumbUrls[img.web_path] : undefined,local:localPreviews[img.id],webUrl:img.web_url,fallbackUrl:img.fallback_url,originalUrl:img.original_url})} className="h-14 w-14" />} badges={<><span>{img.archived_at ? "Archived" : (img as any).visibility === "gated" ? "Gated" : "Public"}</span></>} onOpen={() => setDetail(img)} draggable onDragStart={e => onTileDragStart(e,img.id)} selection={listEditing ? <input type="checkbox" checked={selected.has(img.id)} aria-label={`Select ${img.filename}`} onChange={() => setSelected(cur => {const next=new Set(cur);next.has(img.id)?next.delete(img.id):next.add(img.id);return next;})} /> : undefined} menu={<><LabelsCell scope="images" value={img.tags} itemName={img.filename} onChange={next => { next.filter(t => !img.tags.includes(t)).forEach(t => addTag(img.id, t)); img.tags.filter(t => !next.includes(t)).forEach(t => removeTag(img.id, t)); }} />
-        <DropdownMenuItem onSelect={() => setDetail(img)}>Edit</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(img.web_url,"_blank","noopener,noreferrer")}>Open</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(buildImageRef({id:img.slug_id,filename:img.filename,url:img.web_url,fallbackUrl:img.fallback_url})).then(()=>toast.success("Reference copied"),()=>toast.error("Copy failed"))}>Copy Reference</DropdownMenuItem><DropdownMenuItem onSelect={() => downloadOriginalImage(img)}>Download Original</DropdownMenuItem><DropdownMenuItem onSelect={() => img.archived_at ? unarchiveImages([img.id]) : archiveImages([img.id])}>{img.archived_at ? "Restore" : "Archive"}</DropdownMenuItem><DropdownMenuItem onSelect={() => remove(img)} className="text-destructive">Delete Image</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setFieldEdit({id:img.id,name:img.filename,value:img.filename,field:"filename"})}><Pencil className="mr-2 h-4 w-4" />Rename</DropdownMenuItem><DropdownMenuItem onSelect={() => setFieldEdit({id:img.id,name:img.filename,value:img.description ?? "",field:"description"})}><FileText className="mr-2 h-4 w-4" />Edit Description</DropdownMenuItem><DropdownMenuItem onSelect={() => window.open(img.web_url,"_blank","noopener,noreferrer")}><ExternalLink className="mr-2 h-4 w-4" />Open in New Tab</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(buildImageRef({id:img.slug_id,filename:img.filename,url:img.web_url,fallbackUrl:img.fallback_url})).then(()=>toast.success("Reference copied"),()=>toast.error("Copy failed"))}><Copy className="mr-2 h-4 w-4" />Copy Reference</DropdownMenuItem><DropdownMenuItem onSelect={() => downloadOriginalImage(img)}><Download className="mr-2 h-4 w-4" />Download Original</DropdownMenuItem><DropdownMenuItem onSelect={() => img.archived_at ? unarchiveImages([img.id]) : archiveImages([img.id])}>{img.archived_at ? <ArchiveRestore className="mr-2 h-4 w-4" /> : <Archive className="mr-2 h-4 w-4" />}{img.archived_at ? "Restore" : "Archive"}</DropdownMenuItem><DropdownMenuItem onSelect={() => remove(img)} className="text-destructive"><Trash2 className="mr-2 h-4 w-4" />Delete Image</DropdownMenuItem>
       </>} />}</LibraryWindow>)}</div>
       {!imagesLoading && visibleCount < filtered.length && (
         <div ref={sentinelRef} className="py-6 flex flex-col items-center gap-2">
@@ -773,7 +775,8 @@ export default function ImagesTab() {
 
 
 
-      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+      {fieldEdit && <LibraryFieldDialog title={`${fieldEdit.field === "description" ? "Edit Description" : "Rename"} — ${fieldEdit.name}`} value={fieldEdit.value} multiline={fieldEdit.field === "description"} onClose={() => setFieldEdit(null)} onSave={value => saveField(fieldEdit.id, fieldEdit.field, value)} />}
+        <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
         <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] flex flex-col p-0 gap-0" onOpenAutoFocus={event => { event.preventDefault(); detailTitleRef.current?.focus(); }}>
           <DialogHeader className="px-6 pt-5 pb-3 border-b shrink-0"><DialogTitle ref={detailTitleRef} tabIndex={-1} data-image-detail-title className="text-sm truncate pr-8">{detail?.filename}</DialogTitle></DialogHeader>
           {detail && <ImageDetail img={detail} tags={((images as Img[]).find((i) => i.id === detail.id)?.tags) ?? detail.tags ?? []} allTags={Object.keys(usageCounts)}

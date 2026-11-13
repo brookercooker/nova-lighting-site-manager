@@ -33,7 +33,7 @@ async def main():
      await row.get_by_role('button',name='Options for ',exact=False).click()
      assert await page.get_by_role('menu').is_visible()
      await page.keyboard.press('Escape')
-     await page.locator('[data-library-toolbar]').get_by_role('button',name='Edit',exact=True).click()
+     await page.locator('[data-library-toolbar]').get_by_role('button',name='Select' if scope in ['objects','images','videos'] else 'Edit',exact=True).click()
      await page.screenshot(path=str(OUT/f'{scope}-{width}-selection.png'))
      checkbox=page.get_by_role('checkbox',name='Select ',exact=False).first
      await checkbox.check()
