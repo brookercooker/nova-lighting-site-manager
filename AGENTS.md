@@ -46,3 +46,5 @@
 - Image deletion merges public usage with saved page/object references, confirms single/bulk actions and reuses the five-second deferred delete; remove correct bucket files before rows and stop on storage failure.
 - Read nested AGENTS.md; admin rules cover picker scrolling and authoritative retry snapshots to preserve context.
 - Manager libraries share a content-width container and the existing label list in a dialog; narrow card layouts reuse all item actions so no separate data or action paths diverge.
+
+- Library card labels share LibraryCardLabels and libraryLabels for bounded names, overflow and additive filters; LibraryFilterToolbar owns the existing management dialog so every scope keeps its storage/actions.
