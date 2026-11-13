@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDesignChat } from "./DesignChatContext";
+import { reviewDisplayCount } from "./reviewLog";
 import { useState } from "react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 /** Review Status as a Tools menu item: expands the column first, then toggles the review view. */
 export function StatusMenuItem({ onExpand }: { onExpand?: () => void }) {
   const { state, editing, reviewOpen, setReviewOpen } = useDesignChat();
-  const count = state?.publish?.open ?? 0;
+  const count = reviewDisplayCount(state);
   return <DropdownMenuItem disabled={editing} aria-label={`Review Status${count ? `: ${count} Waiting` : ""}`} onClick={() => { onExpand?.(); setReviewOpen(!reviewOpen); }}>
     <ClipboardList className="mr-2 h-4 w-4" aria-hidden />Status
     <span className="ml-auto pl-3 text-xs text-muted-foreground">{count > 0 ? `${count} ${count === 1 ? "change" : "changes"} waiting` : "No changes waiting"}</span>
@@ -22,7 +23,7 @@ export function StatusMenuItem({ onExpand }: { onExpand?: () => void }) {
 export default function HeaderActions({ onExpand, menuItems = false, showLabels = true, hideStatus = false }: { onExpand?: () => void; menuItems?: boolean; showLabels?: boolean; hideStatus?: boolean }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const { state, editing, previewLocation, workingPage, reviewOpen, setReviewOpen } = useDesignChat();
-  const count = state?.publish?.open ?? 0;
+  const count = reviewDisplayCount(state);
   const copySummary = async () => {
     const latest = [...(state?.history ?? [])].reverse().find((entry) => entry.role === "user" || entry.role === "assistant");
     const page = previewLocation?.path ?? workingPage?.path ?? "No page selected";

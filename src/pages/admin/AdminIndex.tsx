@@ -26,6 +26,7 @@ import ReviewChangesView from "./designChat/ReviewChangesView";
 import { SubmitWalkthroughPanel } from "./designChat/SubmitWalkthrough";
 import { LinkFixBanner, useClearFixOnExit } from "./designChat/linkFix";
 import { useWalk, walk } from "./designChat/submitWalkthroughStore";
+import { reviewDisplayCount } from "./designChat/reviewLog";
 import { HEADER_HEIGHT_CLASS } from "./designChat/layout";
 import { rememberTopDropAnchor } from "./designChat/TopDropPanel";
 import ManualPageSwitcher, { useManualPageNavigation } from "./designChat/ManualPageSwitcher";
@@ -246,6 +247,15 @@ function AdminShell() {
   const sidePanelWidth = layout.tier === "wide" ? undefined : clampPanelWidth(panelWidth, layout.tier);
   const reviewShown = designChat.reviewOpen && !manual && (phone || !chatCollapsed);
   const walkthrough = useWalk();
+  const reviewChecking = !!walkthrough.checking && !manual;
+  const [editHintDismissed, setEditHintDismissed] = useState(false);
+  useEffect(() => { if (!manual) setEditHintDismissed(false); }, [manual]);
+  useEffect(() => {
+    if (!manual || !phone) return;
+    const dismiss = () => setEditHintDismissed(true);
+    const timer = window.setTimeout(dismiss, 4000);
+    return () => window.clearTimeout(timer);
+  }, [manual, phone]);
   useClearFixOnExit(editing);
   useEffect(() => {
     if (!walkthrough.open) return;
@@ -386,7 +396,7 @@ function AdminShell() {
           </header>
           <WaitProgress progress={saveProgress} className="shrink-0 border-b bg-background px-3 py-2" />
           {!phone && !manual && <WaitProgress progress={designChat.waitProgress?.submit} className="shrink-0 border-b bg-background px-3 py-2" />}
-          {tab === "preview" && <PreviewToolbar onManualNavigate={pageNavigation.requestPath} manualDisabled={pageNavigation.disabled} />}
+          {tab === "preview" && !reviewChecking && <PreviewToolbar onManualNavigate={pageNavigation.requestPath} manualDisabled={pageNavigation.disabled} />}
 
           <ChangeMyPasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
 
@@ -531,7 +541,7 @@ function AdminShell() {
               {chatCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </Button>}
           </div>
-          {phone && phonePane === "main" && manual && tab === "preview" && sheet === "peek" && <p className="px-3 pb-2 text-xs text-muted-foreground">Tap something on the page to edit it.</p>}
+          {phone && phonePane === "main" && manual && tab === "preview" && sheet === "peek" && !editHintDismissed && <p className="px-3 pb-2 text-xs text-muted-foreground">Tap something on the page to edit it.</p>}
           {!phone && !reviewShown && <ModeToggle collapsed={chatCollapsed && !manual} onChat={() => setChatCollapsed(false)} />}
           {/* Which page you're on, just below the Chat / Manual Edit switch. */}
           {!phone && !reviewShown && (manual || !chatCollapsed) && <WorkingPageChip className="mx-2 my-2 shrink-0" />}
@@ -581,7 +591,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
   const { requestAdd } = useEditorSlot();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
-  const count = state?.publish?.open ?? 0;
+  const count = reviewDisplayCount(state);
   // The confirmation lives outside the menu, so it stays open after the menu closes.
   const [submitConfirm, setSubmitConfirm] = useState(false);
   // Closed when the walkthrough opens, so it never covers the preview's checking bar after View Page.

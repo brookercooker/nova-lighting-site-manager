@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, ArrowRight, Check, ChevronDown, ExternalLink, Send, Undo2 } from "lucide-react";
+import { ArrowLeft, Pencil, ArrowRight, Check, ChevronDown, ExternalLink, Send, Undo2, MoreHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -377,7 +379,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
 export function WalkthroughCheckBar(): ReactNode {
   const s = useWalk();
   // The lookups only mount while checking, so an idle preview never queries anything.
-  return s.checking && !s.open ? <CheckBar c={s.checking} /> : null;
+  return s.checking ? <CheckBar c={s.checking} /> : null;
 }
 
 function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"]> }) {
@@ -392,22 +394,26 @@ function CheckBar({ c }: { c: NonNullable<ReturnType<typeof walk.get>["checking"
   const links = linkFingerprints(data);
   useEffect(() => { if (ready) walk.reconcile(fingerprints, data.links.status === "ok" ? links : undefined, data.links.status === "ok" ? ownLinkFingerprints(data) : undefined); }, [ready, changeFingerprint(fingerprints), changeFingerprint(links)]);
   const enabled = ready && c.kind === "page" && s.viewed.includes(c.key);
+  const [guidance, setGuidance] = useState(false);
+  const approved = s.ticked.includes(c.key);
   const yup = () => {
-    const fingerprint = c.kind === "page" ? data.rows.find(r => r.key === c.key)?.fingerprint ?? changeFingerprint(data.rows.find(r => r.key === c.key)) : linkFingerprints(data)[c.key];
-    if (!(c.kind === "page" ? walk.get().ticked : walk.get().linkTicked).includes(c.key)) walk.approve(c.key, fingerprint, c.kind === "link");
+    if (!enabled) return;
+    walk.approve(c.key, data.rows.find(r => r.key === c.key)?.fingerprint ?? changeFingerprint(data.rows.find(r => r.key === c.key)));
     walk.reopen(back); setReviewOpen?.(true);
   };
-  return (
-    <div role="region" aria-label="Checking Changes" className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-secondary px-3 py-1.5 text-sm text-secondary-foreground">
-      <Button type="button" variant="outline" className="h-11" onClick={() => { walk.keepEditing(); setReviewOpen?.(false); }}>Keep Editing</Button>
-      <p className="w-full min-w-0 break-words sm:w-auto sm:flex-1">
-        Checking {c.name}{c.kind === "page" && at >= 0 ? ` · ${at + 1} of ${pageRows.length} pages` : ""}
-      </p>
-      <Button type="button" variant="outline" className="h-11 flex-1 sm:flex-none" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft className="h-4 w-4" aria-hidden />Back to Review</Button>
-      {c.kind === "page" && <Button type="button" className="h-11 flex-1 sm:flex-none" disabled={!enabled} onClick={yup}><Check className="h-4 w-4" aria-hidden />Approve</Button>}
-
+  return <>
+    <div role="region" aria-label="Checking Changes" className="sticky top-0 z-40 flex h-14 min-w-0 shrink-0 items-center gap-1 border-b bg-secondary px-1 text-secondary-foreground">
+      <Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Back to review" onClick={() => { walk.reopen(back); setReviewOpen?.(true); }}><ArrowLeft aria-hidden className="h-4 w-4" /></Button>
+      <p className="min-w-0 flex-1 truncate text-xs" title={c.name}>{c.kind === "page" ? c.name : `Checking ${c.name}`}{c.kind === "page" && at >= 0 ? ` · ${at + 1} of ${pageRows.length}` : ""}</p>
+      {c.kind === "page" && <Button type="button" className="h-11 shrink-0 gap-1 px-2 text-xs" disabled={!enabled} aria-pressed={approved} onClick={yup}><Check aria-hidden className="h-4 w-4" />{approved ? "Approved" : "Approve"}</Button>}
+      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Review Options"><MoreHorizontal aria-hidden className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
+        <DropdownMenuItem className="min-h-11" onSelect={() => { walk.keepEditing(); setReviewOpen?.(false); }}>Keep Editing</DropdownMenuItem>
+        <DropdownMenuItem className="min-h-11" onSelect={() => setGuidance(true)}>Things to Look At</DropdownMenuItem>
+      </DropdownMenuContent></DropdownMenu>
     </div>
-  );
+    <Dialog open={guidance} onOpenChange={setGuidance}><DialogContent className="w-[calc(100vw-24px)] max-w-lg"><DialogHeader><DialogTitle>Things to Look At</DialogTitle></DialogHeader><ul className="list-disc space-y-2 pl-4 text-sm"><li>Changed wording</li><li>Pictures and layout</li><li>Phone appearance</li></ul></DialogContent></Dialog>
+  </>;
+
 }
 
 /** The address a link leads to inside the public site (path, query and part), or null when it isn't one. */

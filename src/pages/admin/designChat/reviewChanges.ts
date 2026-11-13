@@ -41,6 +41,4 @@ export function relativeTime(ms: number, now: number): string {
   return "just now";
 }
 
-export const waitingLine = (count: number) =>
-  count === 0 ? "Nothing is waiting for review."
-    : `${count} ${count === 1 ? "change is" : "changes are"} waiting for review. ${count === 1 ? "It is" : "They are"} in the draft preview but not on the public site.`;
+export const waitingLine = (count: number) => `${count} ${count === 1 ? "change" : "changes"}`;

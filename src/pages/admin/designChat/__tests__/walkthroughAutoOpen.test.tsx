@@ -63,7 +63,7 @@ describe("walkthrough auto-open and link lines", () => {
     expect(walk.get().checking?.key).toBe("page:/a");
     expect(walk.get().open).toBe(false);
     expect(walk.get().viewed).toContain("page:/a");
-    fireEvent.click(screen.getByRole("button", { name: "Back to Review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to review" }));
     expect(walk.get().open).toBe(true);
     expect(screen.getAllByRole("button", { name: "Approve" })[1]).toBeEnabled();
     expect(m.show).toHaveBeenCalledTimes(1);

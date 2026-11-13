@@ -12,6 +12,16 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("Left-header actions", () => {
+  it("shares the published net count rather than inflated request totals", () => {
+    m.state.publish.open = 14;
+    m.state.draft = { requests: [], netChanges: { baseline: "published", items: [
+      { id: "footer", summary: "Footer link", changed: false, requestIds: [] },
+      ...["text", "picture", "chat"].map(id => ({ id, summary: id, changed: true, requestIds: [] })),
+    ] } };
+    render(<HeaderActions />);
+    expect(screen.getByRole("button", { name: "Review Status: 3 Waiting" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Review Status: 14 Waiting" })).toBeNull();
+  });
   it("expands the collapsed column before opening Review Status", () => {
     m.reviewOpen = false; const expand = vi.fn(); render(<HeaderActions onExpand={expand} />);
     fireEvent.click(screen.getByRole("button", { name: "Review Status: 2 Waiting" }));

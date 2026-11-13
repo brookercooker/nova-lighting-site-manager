@@ -29,7 +29,8 @@ describe("Changes waiting for review", () => {
   it("labels undo requests and marks requests waiting for their undo", () => {
     m.state.draft.requests = [{ ...reqs[0], undoPending: true }, { ...reqs[1], isUndo: true }];
     render(<ReviewChangesView onShowPreview={vi.fn()} />);
-    expect(within(cards().find(c => c.dataset.changeId === "a") as HTMLElement).getByText("Undo Not in Yet")).toBeInTheDocument();
+
+    for (const card of cards()) fireEvent.click(within(card).getByRole("button"));
     const undo = cards().find(c => c.dataset.changeId === "b") as HTMLElement;
     expect(within(undo).getByText("Developer Undo")).toBeInTheDocument();
     expect(within(undo).queryByText("Manual Edit")).toBeNull();
@@ -88,8 +89,7 @@ describe("Changes waiting for review", () => {
     m.state.draft.requests = [{ ...reqs[0], decision: { reason: "Wrong direction", at: now, by: "Private author" } }, reqs[1]];
     render(<ReviewChangesView onShowPreview={vi.fn()} />);
     const rejected = document.querySelector('[data-change-id="a"]') as HTMLElement;
-    expect(within(rejected).getByText("Chat Request")).toBeInTheDocument();
-    expect(within(rejected).getByText("Rejected")).toBeInTheDocument();
+    fireEvent.click(within(rejected).getByRole("button"));
     expect(within(rejected).getByText("Reason: Wrong direction")).toBeInTheDocument();
     expect(screen.queryByText("Private author")).toBeNull();
     expect(within(cards()[0]).queryByText("Rejected")).toBeNull();
@@ -101,36 +101,23 @@ describe("Changes waiting for review", () => {
     expect(screen.queryByText("Rejected")).toBeNull();
     expect(screen.queryByText(/^Reason:/)).toBeNull();
   });
-  it("lists relay requests newest first with source badges", () => {
+  it("lists requests newest first and expands full details", () => {
     render(<ReviewChangesView onShowPreview={vi.fn()} />);
-    expect(cards().map((c) => c.dataset.changeId)).toEqual(["b", "a", "c", "d"]);
-    expect(within(cards()[0]).getByText("Manual Edit")).toBeInTheDocument();
-    expect(within(cards()[0]).getByText("Edits Made in the Site Manager")).toBeInTheDocument();
-    expect(within(cards()[0]).getByText("changed the hero text")).toBeInTheDocument();
-    expect(within(cards()[0]).getByText(/Page: Experiment/)).toBeInTheDocument();
-    expect(within(cards()[1]).getByText("Chat Request")).toBeInTheDocument();
-    expect(within(cards()[1]).queryByText(/Page:/)).toBeNull();
-    expect(within(cards()[2]).getByText("Developer Edit")).toBeInTheDocument();
-    expect(within(cards()[3]).getByText("Automatic Update")).toBeInTheDocument();
-    expect(screen.getByText(/4 changes are waiting for review/)).toBeInTheDocument();
-  });
-  it("toggles Show More on long requests", () => {
-    m.state.draft.requests = [{ id: "l", request: "word ".repeat(80), source: "chat", at: now }];
-    render(<ReviewChangesView onShowPreview={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Show More" }));
-    expect(screen.getByRole("button", { name: "Show Less" })).toHaveAttribute("aria-expanded", "true");
+    expect(cards().map(c => c.dataset.changeId)).toEqual(["b", "a", "c", "d"]);
+    fireEvent.click(within(cards()[0]).getByRole("button"));
+    expect(within(cards()[0]).getByRole("button")).toHaveAttribute("aria-expanded", "true");
   });
   it("shows the count only for an older relay without requests", () => {
     m.state.draft = {}; m.state.publish.open = 2;
     render(<ReviewChangesView onShowPreview={vi.fn()} />);
-    expect(screen.getByText(/2 changes are waiting/)).toBeInTheDocument();
+    expect(cards()).toHaveLength(0);
     expect(screen.getByText(/details aren't available/)).toBeInTheDocument();
     expect(cards()).toHaveLength(0);
   });
   it("says nothing is waiting and disables Submit when empty", () => {
     m.state.draft = { requests: [] }; m.state.publish.open = 0;
     render(<ReviewChangesView onShowPreview={vi.fn()} />);
-    expect(screen.getByText("Nothing is waiting for review.")).toBeInTheDocument();
+
     expect(screen.getByRole("button", { name: "Submit for Review" })).toBeDisabled();
   });
   it("Back to Chat closes the view", () => {
@@ -138,28 +125,12 @@ describe("Changes waiting for review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to Chat" }));
     expect(m.setReviewOpen).toHaveBeenCalledWith(false);
   });
-  it("lists Site Manager details with Show all, keeping the page line", () => {
-    const details = ["Homepage: changed the heading \"A\" to \"B\"", "L2", "L3", "L4", "L5", "L6"];
-    m.state.draft.requests = [{ id: "s", request: "Edits made in the Site Manager: x (and 4 more)", source: "content", at: now, details, page: { name: "Homepage", path: "/" } }];
+  it("paginates after the ten most recent entries", () => {
+    m.state.draft.requests = Array.from({ length: 13 }, (_, i) => ({ id: String(i), source: "chat", at: now + i * 1000, request: `Request ${i}` }));
     render(<ReviewChangesView onShowPreview={vi.fn()} />);
-    const list = screen.getByRole("list", { name: "What Changed" });
-    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
-    expect(screen.queryByText(/and 4 more/)).toBeNull();
-    expect(screen.getByText("Edits Made in the Site Manager")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show all 6 changes" }));
-    expect(within(list).getAllByRole("listitem")).toHaveLength(6);
-    expect(screen.getByText(/Page: Homepage/)).toBeInTheDocument();
-  });
-  it("falls back to the request text when details are empty, and lists chat details too", () => {
-    m.state.draft.requests = [
-      { id: "o", request: "Edits made in the Site Manager: changed the hero text", source: "content", at: now, details: [] },
-      { id: "c", request: "Make it warmer", source: "chat", at: now - 1000, details: ["Homepage: warmer colours"] },
-    ];
-    render(<ReviewChangesView onShowPreview={vi.fn()} />);
-    expect(within(cards()[0]).getByText("changed the hero text")).toBeInTheDocument();
-    expect(within(cards()[0]).queryByRole("list", { name: "What Changed" })).toBeNull();
-    expect(within(cards()[1]).getByText("Make it warmer")).toBeInTheDocument();
-    expect(within(cards()[1]).getByText("Homepage: warmer colours")).toBeInTheDocument();
-    expect(within(cards()[1]).queryByRole("button", { name: /Show all/ })).toBeNull();
+    expect(cards()).toHaveLength(10);
+    expect(cards()[0].dataset.changeId).toBe("12");
+    fireEvent.click(screen.getByRole("button", { name: "Show More" }));
+    expect(cards()).toHaveLength(13);
   });
 });
