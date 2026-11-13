@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchReviewPages, useWalkthroughData, mergeSavedReviewLinks, enrichReviewLinks, dropOriginalDestinations } from "../useWalkthroughData";
 import type { ReactNode } from "react";
 
-const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn(), inventory: vi.fn() }));
-vi.mock("../linkInventory", async importOriginal => ({...await importOriginal<typeof import("../linkInventory")>(), requestInventory: m.inventory}));
+const m = vi.hoisted(() => ({ headers: vi.fn(), from: vi.fn(), inventory: vi.fn(), nets: vi.fn() }));
+vi.mock("../linkInventory", async importOriginal => ({...await importOriginal<typeof import("../linkInventory")>(), requestInventory: m.inventory, loadNetLinks: m.nets}));
 vi.mock("../helper", () => ({ RELAY: "https://relay.example", relayHeaders: m.headers }));
 vi.mock("@/prototype/client", () => ({ supabase: { from: m.from } }));
 vi.mock("../../siteManifest", () => ({ loadSiteManifest: async () => ({}), codePagePaths: () => [] }));
@@ -19,6 +19,7 @@ it("pins two same-destination links by unique wording and keeps ambiguous card r
   expect(dropOriginalDestinations(result).groups[0].links.map(l => l.key)).toEqual(["b", "c"]);
 });
 beforeEach(() => {
+  m.nets.mockResolvedValue({});
   m.inventory.mockResolvedValue(null);
   m.headers.mockResolvedValue({ Authorization: "Bearer test-staff" });
   m.from.mockImplementation((table: string) => {
@@ -29,6 +30,18 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("review pages fetch", () => {
+  it("includes all new Pricing inventory links even when the relay has no Pricing group", async () => {
+    m.nets.mockResolvedValue({ "/draft/experiment": [0, 1, 2].map(i => ({ key: `0.${i}`, scope: "page", href: i === 0 ? "/brands" : "/contact", label: i === 0 ? "Discuss pricing" : `Pricing ${i}`, publishedHref: null })) });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] }))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const hook = renderHook(() => useWalkthroughData(null, true), { wrapper });
+    await waitFor(() => expect(hook.result.current.links.status).toBe("ok"));
+    const result = hook.result.current.links;
+    if (result.status !== "ok") throw new Error("not ready");
+    expect(result.groups[0].links).toHaveLength(3);
+    expect(result.groups[0].links[0]).toMatchObject({ href: "/brands", label: "Discuss pricing", publishedHref: null });
+  });
   it("does not refetch any walkthrough query on returning window focus", async () => {
     const fetcher = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("review-pages") ? body : { ok: true, groups: [] })));
     vi.stubGlobal("fetch", fetcher);

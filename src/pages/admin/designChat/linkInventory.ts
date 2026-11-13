@@ -11,7 +11,7 @@ export function indexedInventory(links: InventoryLink[]): InventoryLink[] {
   return links.map((l, index) => (counts.get(`${l.scope}|${l.key}`) ?? 0) > 1 ? { ...l, inventoryIndex: l.inventoryIndex ?? index } : l);
 }
 export const inventoryIdentity = (l: InventoryLink) => `${l.scope}|${l.key}${l.inventoryIndex === undefined ? "" : `|index:${l.inventoryIndex}`}`;
-export type Inventory = { path: string; links: InventoryLink[] };
+export type Inventory = { path: string; links: InventoryLink[]; published?: boolean };
 /** Retain display facts only for the same reported identity and destination; fresh membership always wins. */
 export function retainInventoryMetadata(fresh: Inventory | null, previous?: Inventory): Inventory | null {
   if (!fresh) return previous ?? null;
@@ -61,7 +61,7 @@ export function parseInventory(d: any): Inventory | null {
       ...(ok(l.publishedHref, 2048) || l.publishedHref === null ? { publishedHref: l.publishedHref } : {}),
       ...(typeof l.fingerprint === "string" && l.fingerprint.length <= 2048 ? { fingerprint: l.fingerprint } : {}) });
   }
-  return { path: d.path, links: indexedInventory(links) };
+  return { path: d.path, links: indexedInventory(links), ...(typeof d.published === "boolean" ? { published: d.published } : {}) };
 }
 
 /** The deployed live site, when configured; without it the Links step keeps the relay-based list. */
@@ -125,15 +125,27 @@ function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): Revi
   }
   return out;
 }
-/** Per changed page, the net link changes; empty object when the frame doesn't support inventories (first page probes). */
+/** A live inventory proves a published page unless explicitly marked absent. Unknown/absent pages verify all page-owned links. */
+export function reviewPageInventory(draft: Inventory, live: Inventory | null): InventoryLink[] {
+  if (live && live.published !== false) return diffInventories(draft, live);
+  if (!live && draft.links.some(link => typeof link.publishedHref === "string")) {
+    return indexedInventory(draft.links).filter(link => link.publishedHref !== undefined && link.href !== link.publishedHref);
+  }
+  const seen = new Set<string>();
+  return indexedInventory(draft.links).filter(link => {
+    const id = inventoryIdentity(link);
+    if (link.scope !== "page" || seen.has(id)) return false;
+    seen.add(id); return true;
+  }).map(link => ({ ...link, publishedHref: null, originalHref: undefined }));
+}
+/** Load every changed page independently; a failed live comparison never suppresses another page's inventory. */
 export async function loadNetLinks(paths: string[], live: string | null, request = requestInventory): Promise<Record<string, InventoryLink[]>> {
-  if (!live || !paths.length) return {};
+  if (!paths.length) return {};
   let draft: string; try { draft = publicPreviewBase(null); } catch { return {}; }
-  const pair = async (p: string) => { const [d, l] = await Promise.all([request(publicPreviewPage(draft, p)), request(publicPreviewPage(live, p))]); return d && l ? diffInventories(d, l) : null; };
-  const [first, ...rest] = paths;
-  const head = await pair(first);
-  if (!head) return {};
-  const out: Record<string, InventoryLink[]> = { [normPath(first)]: head };
-  (await Promise.all(rest.slice(0, 19).map(pair))).forEach((r, i) => { if (r) out[normPath(rest[i])] = r; });
+  const out: Record<string, InventoryLink[]> = {};
+  await Promise.all([...new Set(paths)].map(async p => {
+    const [d, l] = await Promise.all([request(publicPreviewPage(draft, p)), live ? request(publicPreviewPage(live, p)) : Promise.resolve(null)]);
+    if (d) out[normPath(p)] = reviewPageInventory(d, l);
+  }));
   return out;
 }

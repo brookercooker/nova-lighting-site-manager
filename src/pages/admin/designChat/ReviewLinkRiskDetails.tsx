@@ -12,7 +12,7 @@ export function ReviewDestination({ link, flags }: { link: ReviewLink; pages?: M
   try { const u = new URL(link.href); suffix = u.pathname === "/" && !u.search && !u.hash ? "" : u.pathname + u.search + u.hash; } catch { /* site path */ }
   return <div className="min-w-0 space-y-1">
     <p className="break-all text-sm leading-snug text-foreground">{host && expected ? <>{link.href.startsWith("https:") ? "https://" : "http://"}{[...host].map((c, i) => <span key={i} className={differences[i] ? "nova-link-risk-character" : undefined}>{c}</span>)}{publicLinkAddress(suffix)}</> : publicLinkAddress(link.href)}</p>
-    {link.originalHref && link.originalHref !== link.href && <p className="break-all text-xs text-muted-foreground">was {publicLinkAddress(link.originalHref)} → now {publicLinkAddress(link.href)}</p>}
+    {link.publishedHref !== null && link.originalHref && link.originalHref !== link.href && <p className="break-all text-xs text-muted-foreground">was {publicLinkAddress(link.originalHref)} → now {publicLinkAddress(link.href)}</p>}
   </div>;
 }
 export function ReviewRiskFlags({ flags, onJump }: { flags: RiskFlag[]; onJump: (key: string) => void }) {
