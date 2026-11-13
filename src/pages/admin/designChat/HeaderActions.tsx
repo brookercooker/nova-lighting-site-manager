@@ -5,15 +5,25 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDesignChat } from "./DesignChatContext";
 import { reviewDisplayCount } from "./reviewLog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { useWalk } from "./submitWalkthroughStore";
+import ReviewChangesView from "./ReviewChangesView";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+export function ReviewStatusDialog() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => { const show = () => setOpen(true); window.addEventListener("nova-review-status", show); return () => window.removeEventListener("nova-review-status", show); }, []);
+  return <Dialog open={open} onOpenChange={setOpen}><DialogContent className="flex max-h-[85dvh] min-w-0 flex-col overflow-hidden"><DialogHeader><DialogTitle>Status</DialogTitle></DialogHeader><ReviewChangesView embedded onShowPreview={() => {}} /></DialogContent></Dialog>;
+}
 
 /** Review Status as a Tools menu item: expands the column first, then toggles the review view. */
 export function StatusMenuItem({ onExpand }: { onExpand?: () => void }) {
   const { state, editing, reviewOpen, setReviewOpen } = useDesignChat();
+  const w = useWalk();
+  const showStatus = () => { onExpand?.(); if (w.open || w.checking) window.dispatchEvent(new Event("nova-review-status")); else setReviewOpen(!reviewOpen); };
   const count = reviewDisplayCount(state);
-  return <DropdownMenuItem disabled={editing} aria-label={`Review Status${count ? `: ${count} Waiting` : ""}`} onClick={() => { onExpand?.(); setReviewOpen(!reviewOpen); }}>
+  return <DropdownMenuItem disabled={editing} aria-label={`Review Status${count ? `: ${count} Waiting` : ""}`} onClick={showStatus}>
     <ClipboardList className="mr-2 h-4 w-4" aria-hidden />Status
     <span className="ml-auto pl-3 text-xs text-muted-foreground">{count > 0 ? `${count} ${count === 1 ? "change" : "changes"} waiting` : "No changes waiting"}</span>
   </DropdownMenuItem>;
@@ -23,6 +33,8 @@ export function StatusMenuItem({ onExpand }: { onExpand?: () => void }) {
 export default function HeaderActions({ onExpand, menuItems = false, showLabels = true, hideStatus = false }: { onExpand?: () => void; menuItems?: boolean; showLabels?: boolean; hideStatus?: boolean }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const { state, editing, previewLocation, workingPage, reviewOpen, setReviewOpen } = useDesignChat();
+  const w = useWalk();
+  const showStatus = () => { onExpand?.(); if (w.open || w.checking) window.dispatchEvent(new Event("nova-review-status")); else setReviewOpen(!reviewOpen); };
   const count = reviewDisplayCount(state);
   const copySummary = async () => {
     const latest = [...(state?.history ?? [])].reverse().find((entry) => entry.role === "user" || entry.role === "assistant");
@@ -33,7 +45,7 @@ export default function HeaderActions({ onExpand, menuItems = false, showLabels 
     } catch { toast.error("The summary couldn't be copied. Try again."); }
   };
   if (menuItems) return <>
-    <DropdownMenuItem disabled={editing} onClick={() => { onExpand?.(); setReviewOpen(!reviewOpen); }}><ClipboardList className="mr-2 h-4 w-4" />Status<span className="ml-auto pl-3 text-xs text-muted-foreground">{count > 0 ? `${count} ${count === 1 ? "change" : "changes"} waiting` : "No changes waiting"}</span></DropdownMenuItem>
+    <DropdownMenuItem disabled={editing} onClick={showStatus}><ClipboardList className="mr-2 h-4 w-4" />Status<span className="ml-auto pl-3 text-xs text-muted-foreground">{count > 0 ? `${count} ${count === 1 ? "change" : "changes"} waiting` : "No changes waiting"}</span></DropdownMenuItem>
     <DropdownMenuItem onSelect={e => { e.preventDefault(); setHelpOpen(true); }}><CircleHelp className="mr-2 h-4 w-4" />Help</DropdownMenuItem>
     <Dialog open={helpOpen} onOpenChange={setHelpOpen}><DialogContent><DialogHeader><DialogTitle>Help</DialogTitle></DialogHeader><p className="text-sm">Describe a change in chat, or choose Edit to change the page by hand. Save Changes saves your edits. Status lists changes waiting for review.</p><Button variant="outline" onClick={() => void copySummary()}><Copy className="h-4 w-4" />Copy Problem Summary</Button></DialogContent></Dialog>
   </>;
@@ -41,7 +53,7 @@ export default function HeaderActions({ onExpand, menuItems = false, showLabels 
     <div className="flex max-w-full shrink-0 items-center justify-center gap-1">
       {!hideStatus && <Tooltip><TooltipTrigger asChild>
         <span tabIndex={editing ? 0 : undefined}>
-          <Button variant={reviewOpen ? "secondary" : "ghost"} size={showLabels ? "sm" : "icon"} className={showLabels ? "h-8 shrink-0 gap-1.5 whitespace-nowrap px-2" : "h-8 w-8 shrink-0"} aria-label={`Review Status${count ? `: ${count} Waiting` : ""}`} aria-pressed={reviewOpen} disabled={editing} onClick={() => { onExpand?.(); setReviewOpen(!reviewOpen); }}>
+          <Button variant={reviewOpen ? "secondary" : "ghost"} size={showLabels ? "sm" : "icon"} className={showLabels ? "h-8 shrink-0 gap-1.5 whitespace-nowrap px-2" : "h-8 w-8 shrink-0"} aria-label={`Review Status${count ? `: ${count} Waiting` : ""}`} aria-pressed={reviewOpen} disabled={editing} onClick={showStatus}>
             <ClipboardList className="h-4 w-4" aria-hidden />
             {showLabels && <span>Status</span>}
             {showLabels && count > 0 && <span aria-hidden className="text-xs font-normal text-muted-foreground">{count}</span>}

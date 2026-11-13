@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { walk } from "../submitWalkthroughStore";
 import HeaderActions from "../HeaderActions";
 const m = vi.hoisted(() => ({ state: null as any, editing: false, reviewOpen: false, setReviewOpen: vi.fn(), post: vi.fn(), refresh: vi.fn(), copy: vi.fn() }));
 vi.mock("../DesignChatContext", () => ({ useDesignChat: () => ({ state: m.state, editing: m.editing, refreshSoon: m.refresh, previewLocation: { path: "/draft" }, workingPage: null, reviewOpen: m.reviewOpen, setReviewOpen: m.setReviewOpen }) }));
 vi.mock("../helper", () => ({ postToHelper: m.post }));
 beforeEach(() => {
-  vi.clearAllMocks(); m.editing = false;
+  vi.clearAllMocks(); walk.reset(); m.editing = false;
   m.state = { busy: false, history: [{ role: "user", text: "Add an image" }], publish: { ok: true, open: 2 } };
   m.post.mockResolvedValue({ ok: true }); m.copy.mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: m.copy } });
@@ -36,6 +37,18 @@ describe("Left-header actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review Status: 2 Waiting" }));
     expect(m.setReviewOpen).toHaveBeenLastCalledWith(false);
     m.reviewOpen = false;
+  });
+  it("Status preserves the review step and approvals rather than returning to chat", () => {
+    walk.open("panel"); walk.update(w => ({ ...w, step: "checklist", checks: ["phone"], ticked: ["page:/a"] }));
+    const show = vi.fn(); window.addEventListener("nova-review-status", show);
+    render(<HeaderActions />);
+    fireEvent.click(screen.getByRole("button", { name: "Review Status: 2 Waiting" }));
+    expect(show).toHaveBeenCalledOnce();
+    expect(m.setReviewOpen).not.toHaveBeenCalled();
+    expect(walk.get().step).toBe("checklist");
+    expect(walk.get().checks).toEqual(["phone"]);
+    expect(walk.get().ticked).toEqual(["page:/a"]);
+    window.removeEventListener("nova-review-status", show);
   });
   it("is disabled during Manual Edit Mode", () => {
     m.editing = true; render(<HeaderActions />);

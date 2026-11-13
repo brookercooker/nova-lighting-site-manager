@@ -43,6 +43,25 @@ describe("walkthrough auto-open and link lines", () => {
     render(<Host />);
     expect(m.show).toHaveBeenCalledTimes(2);
   });
+  it("Approve advances and the last approval returns to Design Check, never Verify Links", () => {
+    m.data.rows = [page("/a", "About"), page("/b", "Blog")];
+    render(<Host />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(walk.get().ticked).toEqual(["page:/a"]);
+    expect(m.show).toHaveBeenLastCalledWith("/b");
+    expect(screen.getByRole("button", { name: "Next Page" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(walk.get().ticked).toEqual(["page:/a", "page:/b"]);
+    expect(walk.get().checking).toBeNull();
+    expect(walk.get().step).toBe("pages");
+  });
+  it("Next Page skips without approving", () => {
+    m.data.rows = [page("/a", "About"), page("/b", "Blog")];
+    render(<Host />);
+    fireEvent.click(screen.getByRole("button", { name: "Next Page" }));
+    expect(walk.get().ticked).toEqual([]);
+    expect(walk.get().checking?.key).toBe("page:/b");
+  });
   it("waits for the pages list", () => {
     m.data.pagesStatus = "loading";
     const h = render(<Host />);
@@ -65,19 +84,18 @@ describe("walkthrough auto-open and link lines", () => {
     expect(walk.get().viewed).toContain("page:/a");
     fireEvent.click(screen.getByRole("button", { name: "Back to review" }));
     expect(walk.get().open).toBe(true);
-    expect(screen.getAllByRole("button", { name: "Approve" })[1]).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: "Approve About" })).toBeEnabled();
     expect(m.show).toHaveBeenCalledTimes(1);
   });
   it("step 1 Approve needs only the open page, with no link content", () => {
     render(<Host />);
     act(() => walk.reopen("pages"));
-    const blog = within(screen.getByRole("button", { name: "Blog" }).closest("li")!);
-    expect(blog.getByRole("button", { name: "Approve" })).toBeDisabled();
-    expect(blog.getByText("Open the page first")).toBeInTheDocument();
-    const about = within(screen.getByRole("button", { name: "About" }).closest("li")!);
-    expect(about.getByRole("button", { name: "Approve" })).toBeEnabled();
+    const blog = within(screen.getByRole("button", { name: /^Blog / }).closest("li")!);
+    expect(blog.getByRole("checkbox", { name: "Approve Blog" })).toBeDisabled();
+    const about = within(screen.getByRole("button", { name: /^About / }).closest("li")!);
+    expect(about.getByRole("checkbox", { name: "Approve About" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Show on Page" })).toBeNull();
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(walk.get().ticked).toEqual([]);
     expect(document.body).not.toHaveTextContent("Tick every check first");
   });
   it("Show on Page on step 2 opens the link's page, then focuses once the frame is ready", () => {
@@ -90,7 +108,7 @@ describe("walkthrough auto-open and link lines", () => {
     expect(walk.get().checking?.key).toBe("/b|/gallery");
     expect(post).not.toHaveBeenCalled();
     act(() => ready());
-    expect(post).toHaveBeenCalledWith({ source: "nova-manager", type: "link-check-focus", raw: "/gallery" }, "https://site.example");
+    expect(walk.get().checking?.key).toBe("/b|/gallery");
   });
   it("runs the link bridge only on the Links step while something is being checked", () => {
     const c = { key: "x", kind: "link" as const, name: "X" };

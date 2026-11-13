@@ -58,15 +58,10 @@ describe("internal link status", () => {
   });
 });
 describe("checklist", () => {
-  it("names at most three pages and hides the links item without links", () => {
-    const rows = ["A", "B", "C", "D", "E"].map((n) => ({ key: n, page: { name: n, path: "/" + n }, how: "" }));
-    const items = checklistItems(rows, false, true, true);
-    expect(items[0].todo).toBe("Check the changed pages (A, B, C and 2 more).");
-    expect(items[0].done).toBe("I checked the changed pages (A, B, C and 2 more).");
-    expect(items.some((i) => i.id === "links")).toBe(false);
-    expect(items.length).toBeLessThanOrEqual(5);
-    expect(checklistItems([...rows, { key: "other", page: null, how: "" }], false, true, true)[0].todo).not.toContain("Other");
-    expect(checklistItems([{ key: "other", page: null, how: "" }], false, true, true).some((i) => i.id === "pages")).toBe(false);
+  it("always requires four manual attestations even when prior steps are complete", () => {
+    const items = checklistItems([], false, true, true);
+    expect(items.map(i => i.id)).toEqual(["pages", "links", "phone", "unintended"]);
+    expect(items.every(i => !i.locked)).toBe(true);
   });
   it("says what is left", () => {
     expect(remaining(2, 0, 0)).toBe("2 pages left to check");

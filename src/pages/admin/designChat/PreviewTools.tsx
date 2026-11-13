@@ -10,7 +10,7 @@ import { undoPendingGate, undoPendingReason } from "./logic";
  * Device size stays with the component pickers; navigation lives in PreviewToolbar.
  * Submit for review stays in the top bar (SubmitButton).
  */
-export default function PreviewTools({ showViewControls, tight = false }: { showViewControls: boolean; tight?: boolean }) {
+export default function PreviewTools({ showViewControls, tight = false, review = false }: { showViewControls: boolean; tight?: boolean; review?: boolean }) {
   const { device, setDevice } = useDesignChat();
 
   return (
@@ -18,7 +18,7 @@ export default function PreviewTools({ showViewControls, tight = false }: { show
       {showViewControls && (
         <>
           {!tight && <ToggleGroup type="single" value={device} onValueChange={(v) => v && setDevice(v as Device)} variant="outline" size="sm"
-            className="flex gap-0 [&>button]:rounded-none [&>button:first-child]:rounded-l-md [&>button:last-child]:rounded-r-md [&>button+button]:-ml-px" aria-label="Preview Size">
+            className={`flex gap-0 [&>button]:rounded-none [&>button:first-child]:rounded-l-md [&>button:last-child]:rounded-r-md [&>button+button]:-ml-px ${review ? "[&>button]:h-11 [&>button]:w-11" : ""}`} aria-label="Preview Size">
             <ToggleGroupItem value="mobile" aria-label="Mobile Preview" title="Mobile Preview"><Smartphone className="h-4 w-4" /></ToggleGroupItem>
             <ToggleGroupItem value="tablet" aria-label="Tablet Preview" title="Tablet Preview"><Tablet className="h-4 w-4" /></ToggleGroupItem>
             <ToggleGroupItem value="desktop" aria-label="Desktop Preview" title="Desktop Preview"><Monitor className="h-4 w-4" /></ToggleGroupItem>

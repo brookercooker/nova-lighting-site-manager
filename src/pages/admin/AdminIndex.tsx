@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileText, Box, Image as ImageIcon, Video as VideoLucide, Shield, UserCircle2, KeyRound, LogOut, Camera, Eye, PanelLeftClose, PanelLeftOpen, Save, Trash2, Code, Loader2, Wrench } from "lucide-react";
+import { FileText, Box, Image as ImageIcon, Video as VideoLucide, Shield, UserCircle2, KeyRound, LogOut, Camera, Eye, PanelLeftClose, PanelLeftOpen, Save, Trash2, Code, Loader2, Wrench, Pencil } from "lucide-react";
 import ChangeMyPasswordDialog from "./ChangeMyPasswordDialog";
 import ChatPanel from "./designChat/ChatPanel";
 import PreviewTools, { SubmitButton, SubmitConfirmDialog } from "./designChat/PreviewTools";
@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { ModeSwitchProvider } from "./designChat/ModeSwitchContext";
 import ModeToggle, { ModeSwitchMenuItem, useModeSwitchActions } from "./designChat/ModeToggle";
 import ModePageChooser from "./designChat/ModePageChooser";
-import HeaderActions, { StatusMenuItem } from "./designChat/HeaderActions";
+import HeaderActions, { StatusMenuItem, ReviewStatusDialog } from "./designChat/HeaderActions";
 import WorkingPageChip from "./designChat/WorkingPageChip";
 import ContentSyncNote from "./designChat/ContentSyncNote";
 import ReviewChangesView from "./designChat/ReviewChangesView";
@@ -248,6 +248,8 @@ function AdminShell() {
   const reviewShown = designChat.reviewOpen && !manual && (phone || !chatCollapsed);
   const walkthrough = useWalk();
   const reviewChecking = !!walkthrough.checking && !manual;
+  const reviewActive = !manual && (walkthrough.open || reviewChecking);
+  const keepEditing = () => { walk.keepEditing(); designChat.setReviewOpen(false); };
   const [editHintDismissed, setEditHintDismissed] = useState(false);
   useEffect(() => { if (!manual) setEditHintDismissed(false); }, [manual]);
   useEffect(() => {
@@ -343,7 +345,7 @@ function AdminShell() {
           <header data-top-bar className={cn("z-30 w-full shrink-0 border-b bg-background", HEADER_HEIGHT_CLASS)}>
             <div ref={rowRef} className={cn("flex h-full w-full items-center px-2 sm:gap-3 sm:px-4", phone && !manual ? "gap-0" : "gap-1")}>
               <nav ref={navRef} className={cn("min-w-0 flex flex-nowrap items-center gap-1 overflow-hidden", phone ? "flex-none" : "flex-1")} aria-label="Site Manager Sections">
-                {TABS.filter(({ key }) => !phone || !manual || key === "preview").map(({ key, label, Icon }) => {
+                {(!reviewActive ? TABS : []).filter(({ key }) => !phone || !manual || key === "preview").map(({ key, label, Icon }) => {
                   const active = tab === key;
                   const className = `inline-flex shrink-0 items-center gap-2 whitespace-nowrap ${phone ? "h-11 w-11 px-0" : compact ? (active && squeeze < 3 ? "px-2.5" : "w-8 px-0") : "px-3"} py-2 rounded-md text-sm font-medium transition-colors border ${
                     active
@@ -377,26 +379,26 @@ function AdminShell() {
                 })}
               </nav>
 
-              {phone && (
+              {phone && !reviewActive && (
                 <Button type="button" size="sm" data-capture-primary className="ml-1 h-11 min-w-0 flex-1 gap-1.5 px-2" aria-label="Capture" title="Capture" onClick={() => navigate("/manage/capture")}>
                   <Camera className="h-4 w-4 shrink-0" aria-hidden /><span className="truncate">Capture</span>
                 </Button>
               )}
-              {!phone && <PreviewTools showViewControls={tab === "preview"} tight={squeeze >= 2} />}
+              {(!phone || reviewActive) && <PreviewTools showViewControls={tab === "preview"} tight={!reviewActive && squeeze >= 2} review={reviewActive} />}
 
               <div aria-hidden className={cn("h-9 w-px bg-border shrink-0", compact && "hidden")} />
-              {!phone && !manual && !editing && <SubmitButton compact={compact} showProgress={false} />}
+              {!phone && !manual && !editing && (reviewActive ? <Button variant="outline" className="h-11 shrink-0" onClick={keepEditing}><Pencil aria-hidden className="h-4 w-4" />Keep Editing</Button> : <SubmitButton compact={compact} showProgress={false} />)}
               {manual && (
                 <Button type="button" size="sm" data-save-changes variant={dirty ? "default" : "outline"} className={cn("shrink-0 gap-1.5", phone && "h-11")} aria-label="Save Changes" title="Save Changes" disabled={finishing || !dirty} onClick={() => void saveChanges()}>
                   <Save className="h-4 w-4" aria-hidden />{finishing ? "Saving…" : layout.labels && !compact ? "Save Changes" : "Save"}
                 </Button>
               )}
-              {phone && <PhoneMoreMenu showView={tab === "preview"} isAdmin={isAdmin} onPassword={() => setPwOpen(true)} onReview={openPhoneChat} onChat={() => { setPhonePane("main"); }} />}
+              {phone && <PhoneMoreMenu showView={tab === "preview"} isAdmin={isAdmin} onPassword={() => setPwOpen(true)} onReview={() => { if (walk.get().open || walk.get().checking) designChat.setReviewOpen(true); openPhoneChat(); }} onChat={() => { setPhonePane("main"); }} />}
             </div>
           </header>
           <WaitProgress progress={saveProgress} className="shrink-0 border-b bg-background px-3 py-2" />
           {!phone && !manual && <WaitProgress progress={designChat.waitProgress?.submit} className="shrink-0 border-b bg-background px-3 py-2" />}
-          {tab === "preview" && !reviewChecking && <PreviewToolbar onManualNavigate={pageNavigation.requestPath} manualDisabled={pageNavigation.disabled} />}
+          {tab === "preview" && <PreviewToolbar onManualNavigate={pageNavigation.requestPath} manualDisabled={pageNavigation.disabled} />}
 
           <ChangeMyPasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
 
@@ -519,9 +521,9 @@ function AdminShell() {
                   </Button>
                 </DropdownMenuTrigger></TooltipTrigger><TooltipContent>Tools</TooltipContent></Tooltip>
                 <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => navigate("/manage/capture")}>
+                  {!reviewActive && <DropdownMenuItem onClick={() => navigate("/manage/capture")}>
                     <Camera className="mr-2 h-4 w-4" aria-hidden />Capture
-                  </DropdownMenuItem>
+                  </DropdownMenuItem>}
                   <StatusMenuItem onExpand={() => setChatCollapsed(false)} />
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -546,7 +548,7 @@ function AdminShell() {
           {/* Which page you're on, just below the Chat / Manual Edit switch. */}
           {!phone && !reviewShown && (manual || !chatCollapsed) && <WorkingPageChip className="mx-2 my-2 shrink-0" />}
           <ContentSyncNote />
-          {reviewShown && (walkthrough.open ? <SubmitWalkthroughPanel onKeepEditing={() => designChat.setReviewOpen(false)} onCheckPhone={() => { designChat.setReviewOpen(false); phoneChat.close(); }}>
+          {reviewShown && (walkthrough.open ? <SubmitWalkthroughPanel onKeepEditing={keepEditing} onCheckPhone={() => { designChat.setReviewOpen(false); phoneChat.close(); }}>
             <ReviewChangesView embedded onShowPreview={() => { if (tab !== "preview") navigate("/manage/preview"); }} />
           </SubmitWalkthroughPanel> : <ReviewChangesView onShowPreview={() => { if (tab !== "preview") navigate("/manage/preview"); }} />)}
           {manual && workingPage && (
@@ -579,6 +581,7 @@ function AdminShell() {
           </nav>
         )}
       </div>
+      <ReviewStatusDialog />
       <ManualPageSwitcher navigation={pageNavigation} />
     </>
   );
@@ -587,7 +590,9 @@ function AdminShell() {
 /** Phone top-bar overflow: account, tools, review and preview size. */
 function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { showView: boolean; isAdmin: boolean; onPassword: () => void; onReview: () => void; onChat: () => void }) {
   const modeSwitch = useModeSwitchActions(onChat);
-  const { device, setDevice, state, editing, mode, objectOpen } = useDesignChat();
+  const { device, setDevice, state, editing, mode, objectOpen, setReviewOpen } = useDesignChat();
+  const review = useWalk();
+  const reviewActive = !editing && (review.open || !!review.checking);
   const { requestAdd } = useEditorSlot();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
@@ -606,7 +611,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
       </MoreMenuTrigger>
       <MoreMenuContent align="end">
         <MoreMenuLabel>Menu</MoreMenuLabel>
-        <ModeSwitchMenuItem actions={modeSwitch} />
+        {!reviewActive && <ModeSwitchMenuItem actions={modeSwitch} />}
         <MoreMenuSeparator />
         {mode === "manual" && <>
           <MoreMenuLabel>Libraries</MoreMenuLabel>
@@ -629,7 +634,7 @@ function PhoneMoreMenu({ showView, isAdmin, onPassword, onReview, onChat }: { sh
         {/^\/manage\/(objects|images|videos|pages)$/.test(window.location.pathname) && new URLSearchParams(window.location.search).get("tab") !== "audit" && <MoreMenuItem onSelect={() => { const path = window.location.pathname; const scope = path.includes('/objects') ? 'objects' : path.includes('/images') ? 'images' : path.includes('/videos') ? 'videos' : path.includes('/pages') ? (new URLSearchParams(window.location.search).get('tab') === 'landing' ? 'landing' : new URLSearchParams(window.location.search).get('tab') === 'audit' ? 'links' : 'static') : null; if (scope) window.dispatchEvent(new CustomEvent('nova:manage-library-labels', { detail: scope })); }}>Manage Labels</MoreMenuItem>}
         <MoreMenuItem onClick={() => navigate("/manage/pages")}><FileText className="mr-2 h-4 w-4" />Pages</MoreMenuItem>
         <HeaderActions menuItems onExpand={onReview} />
-        {!editing && <div className="px-2 py-1"><SubmitButton onRequestSubmit={() => { setMenuOpen(false); setSubmitConfirm(true); }} /></div>}
+        {reviewActive ? <MoreMenuItem className="min-h-11" onSelect={() => { walk.keepEditing(); setReviewOpen(false); }}><Pencil className="mr-2 h-4 w-4" />Keep Editing</MoreMenuItem> : !editing && <div className="px-2 py-1"><SubmitButton onRequestSubmit={() => { setMenuOpen(false); setSubmitConfirm(true); }} /></div>}
         <MoreMenuSeparator />
         {showView && (
           <>

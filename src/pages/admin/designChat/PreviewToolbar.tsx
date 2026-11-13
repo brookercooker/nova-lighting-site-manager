@@ -9,11 +9,14 @@ import { loadManualPages } from "./pageSelection";
 import type { WorkingPage } from "./DesignChatContext";
 import { MANIFEST_CHANGED } from "../siteManifest";
 import { CONTENT_SAVED } from "./contentSync";
+import { useWalk } from "./submitWalkthroughStore";
 import { publicPreviewPage } from "./publicPreviewUrl";
 
 /** Presentation-only controls over the retained preview and the existing guarded editor. */
 export default function PreviewToolbar({ onManualNavigate, manualDisabled = false }: { onManualNavigate: (path: string) => void; manualDisabled?: boolean }) {
   const chat = useDesignChat();
+  const review = useWalk();
+  const reviewActive = review.open || !!review.checking;
   const { phone } = useManagerLayout();
   const [pages, setPages] = useState<WorkingPage[]>([]);
   const [failed, setFailed] = useState(false);
@@ -48,31 +51,31 @@ export default function PreviewToolbar({ onManualNavigate, manualDisabled = fals
   } catch { /* No usable public address yet. */ }
   const fullLabel = chat.inFull ? "Exit Full Screen" : "Full Screen";
   const FullIcon = chat.inFull ? Minimize2 : Maximize2;
-  return <div role="toolbar" aria-label="Preview Toolbar" className="grid h-10 min-w-0 shrink-0 grid-cols-[4.25rem_minmax(0,1fr)_4.25rem] items-center gap-1 border-b bg-background px-2">
+  return <div role="toolbar" aria-label="Preview Toolbar" className={reviewActive ? "grid h-12 min-w-0 shrink-0 grid-cols-[5.5rem_minmax(0,1fr)_2.75rem] items-center gap-1 border-b bg-background px-1" : "grid h-10 min-w-0 shrink-0 grid-cols-[4.25rem_minmax(0,1fr)_4.25rem] items-center gap-1 border-b bg-background px-2"}>
     <div className="flex shrink-0 gap-0.5">
       {chat.editing ? <div data-preview-nav className="flex shrink-0 gap-0.5">
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back" title="Back" disabled={manualDisabled || !backPage} onClick={() => { if (backPage) onManualNavigate(backPage.path); }}><ChevronLeft className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Forward" title="Forward" disabled={manualDisabled || !forwardPage} onClick={() => { if (forwardPage) onManualNavigate(forwardPage.path); }}><ChevronRight className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11" : "h-8 w-8"} aria-label="Back" title="Back" disabled={manualDisabled || !backPage} onClick={() => { if (backPage) onManualNavigate(backPage.path); }}><ChevronLeft className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11" : "h-8 w-8"} aria-label="Forward" title="Forward" disabled={manualDisabled || !forwardPage} onClick={() => { if (forwardPage) onManualNavigate(forwardPage.path); }}><ChevronRight className="h-4 w-4" /></Button>
       </div> : chat.previewNav && <div data-preview-nav className="flex shrink-0 gap-0.5">
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Back" title="Back" onClick={chat.previewNav.back} disabled={!chat.previewNav.canBack}><ChevronLeft className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Forward" title="Forward" onClick={chat.previewNav.forward} disabled={!chat.previewNav.canForward}><ChevronRight className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11" : "h-8 w-8"} aria-label="Back" title="Back" onClick={chat.previewNav.back} disabled={!chat.previewNav.canBack}><ChevronLeft className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11" : "h-8 w-8"} aria-label="Forward" title="Forward" onClick={chat.previewNav.forward} disabled={!chat.previewNav.canForward}><ChevronRight className="h-4 w-4" /></Button>
       </div>}
     </div>
-    <div className={phone ? "flex min-w-0 justify-center" : "grid min-w-0 grid-cols-[2rem_minmax(0,16rem)_2rem] justify-center"}>
-      {!phone && <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Reload Preview" title="Reload Preview" onClick={reload}><RotateCw className="h-4 w-4" /></Button>}
+    <div className={phone || reviewActive ? "flex min-w-0 justify-center" : "grid min-w-0 grid-cols-[2rem_minmax(0,16rem)_2rem] justify-center"}>
+      {!phone && !reviewActive && <Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11 shrink-0" : "h-8 w-8 shrink-0"} aria-label="Reload Preview" title="Reload Preview" onClick={reload}><RotateCw className="h-4 w-4" /></Button>}
     <Select value={current?.path ?? path} onValueChange={choose}>
-      <SelectTrigger aria-label="Preview Page" disabled={chat.editing && manualDisabled} className="h-8 w-64 min-w-0 max-w-full gap-2 border-0 bg-transparent text-xs shadow-none"><SelectValue>{name}</SelectValue></SelectTrigger>
+      <SelectTrigger aria-label="Preview Page" disabled={chat.editing && manualDisabled} className={`${reviewActive ? "h-11" : "h-8"} w-64 min-w-0 max-w-full gap-2 border-0 bg-transparent text-xs shadow-none`}><SelectValue>{name}</SelectValue></SelectTrigger>
       <SelectContent>{!current && <SelectItem value={path}>{name}</SelectItem>}{pages.map(page => <SelectItem key={page.path} value={page.path}>{page.name} <span className="text-muted-foreground">{page.path}</span></SelectItem>)}{failed && <p role="alert" className="px-2 py-1 text-xs text-destructive">Couldn't load pages. Reopen the preview to try again.</p>}</SelectContent>
     </Select>
     </div>
     <div className="flex shrink-0 items-center justify-end gap-0.5">
-    {phone ? <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Preview Options" title="Preview Options"><SlidersHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
-      <DropdownMenuItem onSelect={reload}><RotateCw className="mr-2 h-4 w-4" />Reload Preview</DropdownMenuItem>
+    {phone || reviewActive ? <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11 shrink-0" : "h-8 w-8 shrink-0"} aria-label="Preview Options" title="Preview Options"><SlidersHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
+      {!reviewActive && <DropdownMenuItem onSelect={reload}><RotateCw className="mr-2 h-4 w-4" />Reload Preview</DropdownMenuItem>}
       <DropdownMenuItem onSelect={chat.toggleFull}><FullIcon className="mr-2 h-4 w-4" />{fullLabel}</DropdownMenuItem>
       {href && <DropdownMenuItem asChild><a href={href} target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Open Page in New Tab</a></DropdownMenuItem>}
     </DropdownMenuContent></DropdownMenu> : <>
-      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={fullLabel} title={fullLabel} onClick={chat.toggleFull}><FullIcon className="h-4 w-4" /></Button>
-      {href && <Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open Page in New Tab" title="Open Page in New Tab"><ExternalLink className="h-4 w-4" /></a></Button>}
+      <Button variant="ghost" size="icon" className={reviewActive ? "h-11 w-11 shrink-0" : "h-8 w-8 shrink-0"} aria-label={fullLabel} title={fullLabel} onClick={chat.toggleFull}><FullIcon className="h-4 w-4" /></Button>
+      {href && <Button asChild variant="ghost" size="icon" className={reviewActive ? "h-11 w-11 shrink-0" : "h-8 w-8 shrink-0"}><a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open Page in New Tab" title="Open Page in New Tab"><ExternalLink className="h-4 w-4" /></a></Button>}
     </>}
     </div>
   </div>;

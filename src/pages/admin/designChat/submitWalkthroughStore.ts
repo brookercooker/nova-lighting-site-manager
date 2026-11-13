@@ -64,7 +64,7 @@ export const walk = {
   update(fn: (s: WalkState) => WalkState) { const legacy = fn(state) as WalkState & { linkWrong?: unknown }; const { linkWrong: _ignored, ...next } = legacy; state = next.checking && next.autoOpen ? { ...next, autoOpen: false } : next; emit(); },
   subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; },
   mount(id: string, fallback: boolean) { hosts.set(id, fallback); return () => { hosts.delete(id); }; },
-  open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null, autoOpen: true })); },
+  open(id: string) { walk.update((s) => ({ ...s, open: true, host: id, checking: null, autoOpen: true, checks: [] })); },
   close() { walk.update((s) => ({ ...s, open: false })); },
   keepEditing() { walk.update(s => ({ ...s, openingLink: null, open: false, checking: null, step: "pages", selectedLink: null, linkNote: null, fix: null, reviewEdit: null })); },
   editLink(edit: NonNullable<WalkState["reviewEdit"]>) { walk.update(s => ({ ...s, reviewEdit: edit, selectedLink: null, linkNote: null, step: "links" })); },

@@ -17,6 +17,7 @@ import { usePreviewEdits, previewContentLoaded } from "./previewEdits";
 import { usePreviewScroll } from "./frameScroll";
 import ContentSyncNote from "./ContentSyncNote";
 import { ReviewLinkOpening } from "./ReviewLinkOpening";
+import { DesignCheckShield } from "./DesignCheckShield";
 
 const WIDTH: Record<Device, string> = { mobile: "390px", tablet: "768px", desktop: "100%" };
 
@@ -25,7 +26,7 @@ const WIDTH: Record<Device, string> = { mobile: "390px", tablet: "768px", deskto
  * screen, submit) are in the top bar, see PreviewTools.tsx.
  */
 export default function PreviewPanel() {
-  const { preview, device, boxRef, inFull, coverFull, toggleFull, drawing, editing, waitProgress, previewNavigating } = useDesignChat();
+  const { preview, device, boxRef, inFull, coverFull, toggleFull, drawing, editing, waitProgress, previewNavigating, previewLocation } = useDesignChat();
   const { phone } = useManagerLayout();
   const ribbon = !editing && waitProgress?.request?.ribbon ? waitProgress.request : null;
   const location = useLocation();
@@ -57,6 +58,8 @@ export default function PreviewPanel() {
   // Link checking (outlines and click interception) runs only on the Verify Links step.
   const walkState = useWalk();
   const linkChecking = linkCheckActive(walkState, visible, editing);
+  const designChecking = visible && walkState.step === "pages" && walkState.checking?.kind === "page";
+  const designPath = previewLocation?.path ?? new URL(preview.frames.find(f => f.id === preview.shownId)?.url ?? window.location.href).pathname;
 
   useEffect(() => {
     drawing.setAvailable(visible && !pending);
@@ -81,6 +84,8 @@ export default function PreviewPanel() {
             <iframe
               key={f.id}
               data-site-preview="true"
+              tabIndex={designChecking ? -1 : undefined}
+              ref={el => { if (designChecking) el?.setAttribute("inert", ""); else el?.removeAttribute("inert"); }}
               src={f.url}
               title={f.id === preview.shownId || preview.shownId === 0 ? "Design Preview" : "Design Preview (Loading)"}
               referrerPolicy="origin"
@@ -95,6 +100,7 @@ export default function PreviewPanel() {
             />
           ))}
           </ScaledViewport>
+          {designChecking && <DesignCheckShield path={designPath} />}
           {!pending && drawing.on && preview.loaded && <DrawLayer />}
         </div>
 

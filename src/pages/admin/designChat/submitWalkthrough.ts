@@ -170,22 +170,18 @@ export function pageNames(rows: ChangedRow[]): string {
 }
 
 export type ChecklistItem = { id: string; todo: string; done: string; locked: boolean };
-/** Imperative instruction until ticked, then first-person past tense for the same action. At most five items. */
+/** Four explicit reviewer attestations, independent of page/link approvals. */
 export function checklistItems(rows: ChangedRow[], hasLinks: boolean, pagesDone: boolean, linksDone: boolean): ChecklistItem[] {
-  const names = pageNames(rows);
-  const list = names ? ` (${names})` : "";
-  const items: ChecklistItem[] = rows.some((r) => r.page)
-    ? [{ id: "pages", todo: `Check the changed pages${list}.`, done: `I checked the changed pages${list}.`, locked: pagesDone }] : [];
-  if (hasLinks) items.push({ id: "links", todo: "Check the links that changed.", done: "I checked the links that changed.", locked: linksDone });
-  items.push(
-    { id: "phone", todo: "Check how it looks on a phone.", done: "I checked how it looks on a phone.", locked: false },
-    { id: "unintended", todo: "Make sure nothing was changed by accident.", done: "I made sure nothing was changed by accident.", locked: false },
-  );
-  return items;
+  return [
+    { id: "pages", todo: "Check the design of changed pages", done: "Checked the design of changed pages", locked: false },
+    { id: "links", todo: "Verify destinations of changed links", done: "Verified destinations of changed links", locked: false },
+    { id: "phone", todo: "Check site appearance on different device types", done: "Checked site appearance on different device types", locked: false },
+    { id: "unintended", todo: "Confirm that all pages are ready to be published", done: "Confirmed that all pages are ready to be published", locked: false },
+  ];
 }
 
-/** Whether an item counts as ticked: locked items follow the walkthrough, never a manual tick. */
-export const itemTicked = (item: ChecklistItem, manual: string[]) => (item.id === "pages" || item.id === "links") ? item.locked : manual.includes(item.id);
+/** Only a deliberate reviewer tick counts as a final attestation. */
+export const itemTicked = (item: ChecklistItem, manual: string[]) => manual.includes(item.id);
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 /** What is still left before Submit for Review is allowed, or null when nothing is. */

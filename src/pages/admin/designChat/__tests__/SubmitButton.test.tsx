@@ -25,10 +25,10 @@ function PanelHost({ open = true, onOpenChange = () => {} }: { open?: boolean; o
 }
 const dialog = () => screen.getByRole("region", { name: "Submit for Review Walkthrough" });
 const viewAndTick = (name = "About") => {
-  fireEvent.click(within(dialog()).getAllByRole("button", { name: "About" })[0]);
+  fireEvent.click(within(dialog()).getAllByRole("button", { name: /^About / })[0]);
   // Open Page closes the walkthrough; the preview bar's Back to Review reopens it.
   act(() => walk.reopen("pages"));
-  fireEvent.click(within(screen.getByRole("button", { name }).closest("li")!).getByRole("button", { name: "Approve" }));
+  fireEvent.click(within(screen.getByRole("button", { name: new RegExp(`^${name} `) }).closest("li")!).getByRole("checkbox", { name: /^Approve / }));
 };
 /** Approves each inline link row after opening web destinations. */
 const confirmLinks = () => {
@@ -41,7 +41,7 @@ const confirmLinks = () => {
   }
 };
 const tickManual = () => {
-  for (const t of ["Check how it looks on a phone.", "Make sure nothing was changed by accident."])
+  for (const t of ["Check the design of changed pages", "Verify destinations of changed links", "Check site appearance on different device types", "Confirm that all pages are ready to be published"])
     fireEvent.click(within(dialog()).getByRole("checkbox", { name: t }));
 };
 
@@ -60,12 +60,12 @@ describe("Submit for Review walkthrough", () => {
     const host = render(<PanelHost open onOpenChange={vi.fn()} />);
     viewAndTick();
     act(() => walk.update(s => ({ ...s, step })));
-    fireEvent.click(within(dialog()).getByRole("button", { name: "Keep Editing" }));
+    act(() => walk.keepEditing());
     expect(screen.queryByRole("region", { name: "Submit for Review Walkthrough" })).toBeNull();
     expect(walk.get().ticked).toEqual(["page:/a"]);
     host.unmount();
     render(<PanelHost open />);
-    expect(within(dialog()).getByRole("button", { name: "Approved" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog()).getByRole("checkbox", { name: /^Approve / })).toBeChecked();
   });
   it("removes and flags approval on changed page data and requires reopening", () => {
     m.data.rows[0].fingerprint = "revision-1";
@@ -74,7 +74,7 @@ describe("Submit for Review walkthrough", () => {
     m.data = { ...m.data, rows: [{ ...m.data.rows[0], fingerprint: "revision-2" }] };
     host.rerender(<PanelHost open />);
     expect(dialog()).toHaveTextContent("Changed since you approved it");
-    expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(within(dialog()).getByRole("checkbox", { name: /^Approve / })).toBeDisabled();
     expect(walk.get().viewed).toEqual([]);
     expect(walk.get().ticked).toEqual([]);
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
@@ -85,7 +85,7 @@ describe("Submit for Review walkthrough", () => {
     expect(link.textContent).toBe("");
     expect(link.querySelector("svg")).not.toBeNull();
     expect(link.closest("li")).not.toBeNull();
-    expect(link.parentElement).toContainElement(within(dialog()).getByRole("button", { name: "About" }));
+    expect(link.parentElement).toContainElement(within(dialog()).getByRole("button", { name: /^About / }));
   });
   it("invalidates a link approval when its own destination changes and unticks the derived checklist", () => {
     m.data.pages = [{ name: "Team", path: "/team", build_status: "ready" }];
@@ -98,10 +98,10 @@ describe("Submit for Review walkthrough", () => {
     confirmLinks();
     expect(within(dialog()).getByRole("button", { name: /About · done/ })).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    expect(within(dialog()).getByRole("checkbox", { name: "I checked the links that changed." })).toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
     m.data = { ...m.data, links: { ...m.data.links, groups: [{ ...m.data.links.groups[0], links: [{ ...link, href: "/changed" }] }] } };
     host.rerender(<PanelHost open />);
-    expect(within(dialog()).getByRole("checkbox", { name: /^Check the links that changed\./ })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Back" }));
     expect(dialog()).toHaveTextContent("Changed since you approved it");
     expect(within(dialog()).getByRole("button", { name: /^Confirmed:/ })).toHaveAttribute("aria-pressed", "false");
@@ -124,15 +124,14 @@ describe("Submit for Review walkthrough", () => {
   });
   it("needs View Page before the page can be ticked", () => {
     render(<PanelHost open onOpenChange={vi.fn()} />);
-    const box = within(dialog()).getByRole("button", { name: "Approve" });
+    const box = within(dialog()).getByRole("checkbox", { name: /^Approve / });
     expect(box).toBeDisabled();
-    expect(dialog()).toHaveTextContent("Open the page first");
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
-    fireEvent.click(within(dialog()).getByRole("button", { name: "About" }));
+    fireEvent.click(within(dialog()).getByRole("button", { name: /^About / }));
     expect(m.show).toHaveBeenCalledWith("/a");
     expect(dialog()).toBeInTheDocument();
     // No changed links: opening the page is enough.
-    expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(within(dialog()).getByRole("checkbox", { name: /^Approve / })).toBeEnabled();
     expect(within(dialog()).queryByText(/Links to Check/)).toBeNull();
   });
   it("shows one gated Other site changes row that opens the home page", () => {
@@ -140,7 +139,7 @@ describe("Submit for Review walkthrough", () => {
     render(<PanelHost open onOpenChange={vi.fn()} />);
     expect(dialog()).toHaveTextContent("Other site changes");
     expect(dialog()).toHaveTextContent("0 of 1 page approved");
-    expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(within(dialog()).getByRole("checkbox", { name: /^Approve / })).toBeDisabled();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Open Site" }));
     expect(m.show).toHaveBeenCalledWith("/");
   });
@@ -150,7 +149,7 @@ describe("Submit for Review walkthrough", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(link.getAttribute("href")).toMatch(/\/a$/);
     fireEvent.click(link);
-    expect(within(dialog()).getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(within(dialog()).getByRole("checkbox", { name: /^Approve / })).toBeEnabled();
   });
   it("never shows 0 of 0 and lets Next through when no pages changed", () => {
     m.data.rows = [];
@@ -166,7 +165,7 @@ describe("Submit for Review walkthrough", () => {
     viewAndTick();
     expect(dialog()).toHaveTextContent("1 of 2 pages approved");
   });
-  it("keeps Submit disabled until pages, links and the checklist are done, then submits once", async () => {
+  it("keeps Submit disabled until pages, links and four manual checks are done without submitting", async () => {
     m.data.links = { status: "ok", unread: 0, partial: false, truncated: false, groups: [{ page: { name: "About", path: "/a" }, label: "About", links: [{ key: "/a|mailto:x@y.z", href: "mailto:x@y.z", kind: "mail", label: null, requestIds: [], status: null }] }] };
     render(<PanelHost open onOpenChange={vi.fn()} />);
     expect(dialog()).toHaveTextContent("Step 1 of 3");
@@ -180,22 +179,20 @@ describe("Submit for Review walkthrough", () => {
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
     const submit = within(dialog()).getByRole("button", { name: "Submit for Review" });
     expect(submit).toBeDisabled();
-    expect(dialog()).toHaveTextContent("2 checklist items left to tick");
-    expect(within(dialog()).getByRole("checkbox", { name: "I checked the changed pages (About)." })).toBeChecked();
-    expect(within(dialog()).getByRole("checkbox", { name: "I checked the links that changed." })).toBeChecked();
+    expect(walk.get().checks).toEqual([]);
+    expect(within(dialog()).getByRole("checkbox", { name: "Check the design of changed pages" })).not.toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "Verify destinations of changed links" })).not.toBeChecked();
     tickManual();
-    fireEvent.click(submit); fireEvent.click(submit);
-    await vi.waitFor(() => expect(m.refresh).toHaveBeenCalledTimes(1));
-    expect(m.post).toHaveBeenCalledExactlyOnceWith("/publish");
-    expect(walk.get().ticked).toEqual([]);
+    expect(submit).toBeEnabled();
+    expect(m.post).not.toHaveBeenCalled();
   });
   it("flips checklist sentences from first person to past tense", () => {
     m.data.rows = [];
     render(<PanelHost open onOpenChange={vi.fn()} />);
     fireEvent.click(within(dialog()).getByRole("button", { name: "Next" }));
-    const box = within(dialog()).getByRole("checkbox", { name: "Check how it looks on a phone." });
+    const box = within(dialog()).getByRole("checkbox", { name: "Check site appearance on different device types" });
     fireEvent.click(box);
-    expect(within(dialog()).getByRole("checkbox", { name: "I checked how it looks on a phone." })).toBeChecked();
+    expect(within(dialog()).getByRole("checkbox", { name: "Checked site appearance on different device types" })).toBeChecked();
     expect(dialog()).not.toHaveTextContent("wording and pictures");
   });
   it("skips the links step when no links changed and hides that checklist item", () => {
@@ -221,7 +218,7 @@ describe("Submit for Review walkthrough", () => {
     viewAndTick();
     unmount();
     render(<PanelHost open onOpenChange={vi.fn()} />);
-    expect(within(dialog()).getByRole("button", { name: "Approved" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog()).getByRole("checkbox", { name: /^Approve / })).toBeChecked();
   });
   it("lets a host keep the dialog when onRequestSubmit is passed", () => {
     const request = vi.fn();

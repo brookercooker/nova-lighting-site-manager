@@ -40,7 +40,7 @@ it("Design Check keeps shared facts without source authors or duplicate approval
   walk.update(s=>({...s,step:"pages",viewed:["page:/about"],ticked:["page:/about"],approvals:{"page:/about":"v1"}}));
   render(<SubmitWalkthroughPanel onKeepEditing={()=>{}} />);
   expect(screen.getByText("Shared piece: Footer")).toBeInTheDocument();
-  expect(screen.getAllByText("Approved")).toHaveLength(1);
+  expect(screen.getByRole("checkbox", { name: "Approve About" })).toBeChecked();
   expect(screen.queryByText(/Edited by hand|Changed by the builder|by staff/)).toBeNull();
 });
 it("does not auto-collapse a completed group the reviewer opened by hand", () => {
