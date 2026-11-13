@@ -109,9 +109,9 @@ describe("walkthrough auto-open and link lines", () => {
   });
   it("shortens card labels and treats an address-only label as unnamed", () => {
     expect(linkText({ href: "/gallery", kind: "internal", label: "/gallery" }, m.data.pages)).toBe("Link to Inspiration Gallery");
-    expect(linkText({ href: "/contact", kind: "internal", label: "Lighting Design Services Work one-on-one with our expert designers to create a custom lighting plan tailored to your home — complimentary with any project. BOOK A CONSULTATION" })).toBe("Book a Consultation");
-    expect(linkText({ href: "/contact", kind: "internal", label: "Long card wording that contains several sentences without a short call to action at the end." }).length).toBeLessThanOrEqual(51);
-    expect(linkText({ href: "/contact", kind: "internal", label: "Lots of card wording", ariaLabel: "Book a Consultation" })).toBe("Book a Consultation");
+    expect(linkText({ href: "/contact", kind: "internal", visibleText: "Lighting Design Services", label: "Lighting Design Services Work one-on-one with our expert designers to create a custom lighting plan tailored to your home — complimentary with any project. BOOK A CONSULTATION" })).toBe("Lighting Design Services");
+    expect(linkText({ href: "/contact", kind: "internal", label: "Long card wording that contains several sentences without a short call to action at the end." }).length).toBeLessThanOrEqual(40);
+    expect(linkText({ href: "/contact", kind: "internal", label: "Lots of card wording", ariaLabel: "Book a Consultation" })).toBe("Lots of card wording");
   });
   it("shows the suggestions as plain bullets on the step and in the bar", () => {
     render(<Host />);

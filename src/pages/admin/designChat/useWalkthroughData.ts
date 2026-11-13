@@ -119,7 +119,7 @@ export function useWalkthroughData(state: RelayState | null, enabled: boolean): 
   } });
   const labelled = merged ? { ...merged, groups: merged.groups.map(group => ({ ...group, links: group.links.map(link => {
     const item = sharedLabels.data?.find(item => item.scope === link.scope && item.key === link.elementKey);
-    return item ? { ...link, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel } : link;
+    return item ? { ...link, label: item.label || link.label, ariaLabel: item.ariaLabel || link.ariaLabel, visibleText: item.visibleText || link.visibleText, image: item.image || link.image } : link;
   }) })) } : null;
   const inventoryPending = !!live && changedPaths.length > 0 && enabled && inventory.isFetching;
   const linkResult: LinksResult = links.isError || objects.isError ? { status: "failed" } : labelled && !links.isFetching && !pages.isFetching && !objects.isFetching && !inventoryPending ? { status: "ok", ...labelled } : { status: "loading" };

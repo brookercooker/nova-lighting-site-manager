@@ -16,11 +16,12 @@ import { useWalkthroughData, type WalkthroughData } from "./useWalkthroughData";
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 import { changeFingerprint, normPath, OTHER_KEY, checklistItems, itemTicked, linkChip, remaining, type Chip, type ManagerPage, type ChangedRow, type LinkGroup, type ReviewLink } from "./submitWalkthrough";
 import { add, toggle, useWalk, walk, type WalkState, type WalkStep } from "./submitWalkthroughStore";
-import { LINK_BADGE, LINK_HINT, PAGE_SUGGESTIONS, linkState, linkCheckList, linkAddress, linkText } from "./linkCheck";
+import { LINK_HINT, PAGE_SUGGESTIONS, linkState, linkCheckList, linkAddress, linkText } from "./linkCheck";
 import { shownPreviewFrame } from "./previewNavigate";
 import { ReviewLinkEditor } from "./ReviewLinkEditor";
 import { publicLinkAddress } from "../linkDisplay";
 import { SharedPageUsage } from "./SharedPageUsage";
+import { ReviewLinkTitle } from "./ReviewLinkTitle";
 
 const missingInternalLink = (link: ReviewLink, pages: ManagerPage[]) =>
   linkChip(link, pages)?.tone === "bad";
@@ -326,7 +327,7 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                   onClick={e => { if (e.target instanceof Element && e.target.closest("button,a,input,[role='switch'],[data-review-editor]")) return; onShow(l, g); }}
                   onKeyDown={e => { if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return; e.preventDefault(); onShow(l, g); }}
                   className={cn("space-y-2 min-w-0 rounded-md border p-3 cursor-pointer transition-colors hover:bg-accent active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", st === "done" && "bg-foreground/5 text-muted-foreground hover:bg-foreground/10 active:bg-foreground/10", (s.selectedLink?.key === l.key || s.checking?.key === l.key) && "border-primary bg-primary/5 ring-2 ring-ring ring-offset-2")}>
-                  <div className="flex items-start gap-1"><p className="min-w-0 flex-1 break-words text-sm font-medium">{publicLinkAddress(friendlyName)}</p><Badge variant="secondary" className="shrink-0 text-[10px]" aria-live="polite">{LINK_BADGE[st]}</Badge></div>
+                  <ReviewLinkTitle key={`${l.key}|${l.image?.src ?? ""}`} link={name === linkAddress(l) ? { ...l, label: friendlyName } : l} pages={data.pages} />
                   {st === "todo" && s.changed.includes(l.key) && <p role="status" className="text-xs text-muted-foreground">Changed since you approved it</p>}
                   <p className="break-all font-mono text-xs text-muted-foreground">{address}</p>
                   {g.shared && <SharedPageUsage prefix="Also changes on" pages={g.shared.pages.filter(p => normPath(p.path) !== normPath(g.page?.path ?? "/"))} />}
@@ -334,10 +335,10 @@ function LinksStep({ data, onShow, onChange }: { data: WalkthroughData; onShow: 
                   {chip?.tone === "bad" && !missing && <p className="text-xs text-destructive">{missingInternalLink(l, data.pages) ? "This page doesn't exist. Edit the link destination to fix it." : "This address couldn't be reached. Check the destination."}</p>}
                   {part && <p className="text-xs text-muted-foreground">Opens the part of the page called “{part}”.</p>}
                   {st !== "replaced" && <>
-                    {tabUrl && !manual && <Button asChild className="h-11 w-full min-w-0 px-2 text-sm"><a data-verify-link href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden />Open Link to Verify</a></Button>}
-                    <div className="flex items-start justify-between gap-2">
-                      <Button type="button" variant={st === "done" ? "secondary" : "outline"} className="h-11 min-w-0 px-2 text-sm" aria-label={`Confirmed: ${publicLinkAddress(friendlyName)}`} aria-pressed={st === "done"} disabled={!enabled} aria-describedby={hintId} onClick={e => { e.stopPropagation(); if (enabled) walk.confirmLink(l.key, own, st !== "done"); }}><Check aria-hidden className={cn("h-4 w-4", st === "done" && "rounded-full bg-foreground text-background p-0.5")} />Confirmed</Button>
-                      <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant="outline" className="h-11 min-w-0 px-2 text-sm" disabled={opening} aria-label={`Correct link: ${publicLinkAddress(friendlyName)}`} onClick={e => { e.stopPropagation(); onChange(l, g); }}><Pencil aria-hidden />Correct</Button>
+                    {tabUrl && !manual && <Button asChild variant="ghost" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm text-muted-foreground"><a data-verify-link href={tabUrl} target="_blank" rel="noopener noreferrer" onClick={e => { e.stopPropagation(); walk.openedVerification(l.key, own); }}><ExternalLink aria-hidden />Open Link to Verify</a></Button>}
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button type="button" variant={st === "done" ? "secondary" : "default"} className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" aria-label={`Confirmed: ${publicLinkAddress(friendlyName)}`} aria-pressed={st === "done"} disabled={!enabled} aria-describedby={hintId} onClick={e => { e.stopPropagation(); if (enabled) walk.confirmLink(l.key, own, st !== "done"); }}><Check aria-hidden className={cn("h-4 w-4", st === "done" && "rounded-full bg-foreground text-background p-0.5")} />Confirmed</Button>
+                      <Button type="button" data-verify-link={manual || !tabUrl ? true : undefined} variant="default" className="h-11 w-full min-w-0 whitespace-nowrap px-2 text-sm" disabled={opening} aria-label={`Correct link: ${publicLinkAddress(friendlyName)}`} onClick={e => { e.stopPropagation(); onChange(l, g); }}><Pencil aria-hidden />Correct</Button>
                     </div>
                     <p id={hintId} className="text-xs text-muted-foreground">{missing ? "This page doesn't exist. Edit the link destination to fix it." : opening ? `Opening ${s.openingLink?.name}…` : st === "done" ? "Approved" : manual ? "Check that this address is correct, then tap Confirmed." : !opened ? "Open the link first, then tap Confirmed." : "Check that this is the right destination."}</p>
                   </>}

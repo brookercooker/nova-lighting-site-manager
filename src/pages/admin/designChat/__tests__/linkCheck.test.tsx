@@ -187,12 +187,12 @@ describe("links needing checks", () => {
     expect(linksNeedChecking([team, header] as any, ["|/shop"], {})).toBe("1 of 2 links need checking");
     expect(linksNeedChecking([team, header] as any, ["|/shop", "/a|/team"], {})).toBe("All links confirmed");
   });
-  it("shows badges and Show on Page sends focus; the Links step says Needs Checking", () => {
+  it("omits redundant badges while preserving card focus and confirmation", () => {
     const f = frameWith();
     const post = vi.spyOn(f.contentWindow!, "postMessage");
     walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], checking: { key: "/a|/team", kind: "link", name: "Team" } }));
     render(<SubmitWalkthroughPanel onKeepEditing={() => {}} />);
-    expect(screen.getAllByText("Needs Checking").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Needs Checking")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show Team on the page" }));
     expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ type: "link-check-focus" }), ORIGIN);
     expect(walk.get().openingLink?.path).toBe("/a");
@@ -201,7 +201,7 @@ describe("links needing checks", () => {
     act(() => walk.update(s => ({ ...s, step: "links", ticked: ["page:/a"], linkTicked: [] })));
     fireEvent.click(screen.getByRole("button", { name: /About · 0 of 1/ }));
     const link = document.querySelector("[data-walk-link='/a|/team']") as HTMLElement;
-    expect(within(link).getByText("Needs Checking")).toBeInTheDocument();
+    expect(within(link).queryByText("Needs Checking")).toBeNull();
     expect(within(link).queryByText("Not Reviewed")).toBeNull();
     f.remove();
   });

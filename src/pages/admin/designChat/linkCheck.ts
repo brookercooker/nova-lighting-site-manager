@@ -83,15 +83,18 @@ export function matchChangedLink(groups: LinkGroup[], path: string | null | unde
   return pageLinks(groups, path ?? undefined).find(l => l.href === raw) ?? null;
 }
 
-/** Link text for display: the label, else "Link to <page name>" for an internal link to a known page, else the address. */
-export function linkText(l: { href: string; kind: LinkKind; label?: string | null; ariaLabel?: string | null }, pages: Pick<ManagerPage, "name" | "path">[] = []): string {
-  const label = (l.ariaLabel || l.label || "").replace(/\s+/g, " ").trim();
+/** Only reported visible content supplies excerpts; destination names are the final fallback. */
+export function linkText(l: { href: string; kind: LinkKind; label?: string | null; ariaLabel?: string | null; visibleText?: string; image?: { alt: string; src?: string } }, pages: Pick<ManagerPage, "name" | "path">[] = []): string {
+  const excerpt = (value: string) => value.length <= 40 ? value : `${value.slice(0, 39).trimEnd()}…`;
+  if (l.image) {
+    const alt = l.image.alt.replace(/\s+/g, " ").trim();
+    let filename = "";
+    try { filename = decodeURIComponent(new URL(l.image.src ?? "").pathname.split("/").at(-1) ?? ""); } catch { /* no reported usable filename */ }
+    return excerpt(`Image${alt || filename ? `: ${alt || filename}` : ""}`);
+  }
+  const label = (l.visibleText || l.label || l.ariaLabel || "").replace(/\s+/g, " ").trim();
   if (label && label !== l.href && label !== linkAddress(l)) {
-    if (label.length <= 50) return label;
-    // Whole-card text often ends with an uppercase call to action; use only that short wording.
-    const action = label.match(/(?:^|[.!?—–]\s*|\s)([A-Z][A-Z\s'’&-]{3,49})$/)?.[1]?.trim();
-    if (action) return action.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/\b(A|An|The|Of|In|On|To|For|And|Or)\b/g, (word, _group, offset: number) => offset === 0 ? word : word.toLowerCase());
-    return `${label.slice(0, 50).trimEnd()}…`;
+    return excerpt(label);
   }
   if (l.kind === "internal" && !l.href.startsWith("#")) {
     const path = normPath(l.href.split(/[?#]/)[0] || "/");

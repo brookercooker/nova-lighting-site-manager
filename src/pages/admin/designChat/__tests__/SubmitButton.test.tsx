@@ -103,7 +103,7 @@ describe("Submit for Review walkthrough", () => {
     expect(within(dialog()).getByRole("checkbox", { name: /^Check the links that changed\./ })).not.toBeChecked();
     fireEvent.click(within(dialog()).getByRole("button", { name: "Back" }));
     expect(dialog()).toHaveTextContent("Changed since you approved it");
-    expect(within(dialog()).getByText("Needs Checking")).toBeInTheDocument();
+    expect(within(dialog()).getByRole("button", { name: /^Confirmed:/ })).toHaveAttribute("aria-pressed", "false");
     expect(within(dialog()).getByRole("button", { name: "Next" })).toBeDisabled();
   });
   it.each(["loading", "failed"])("does not allow advancing or submitting while the authoritative page list is %s", (status) => {

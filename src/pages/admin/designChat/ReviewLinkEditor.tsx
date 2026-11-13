@@ -40,6 +40,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
   const [removed, setRemoved] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const page = fixPage(edit.group, edit.rows);
+  const title = publicLinkAddress(linkText(edit.link, pages));
   const embed = preview?.frames.find(f => f.id === preview.shownId)?.url;
   const destination = publicLinkAddress(address);
   const valid = validTextLink(destination);
@@ -61,7 +62,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
     try {
       const lines = await saveReviewLink(resolved, destination, blank);
       const kind = /^mailto:/i.test(destination) ? "mail" : /^tel:/i.test(destination) ? "phone" : destination.startsWith("/") ? "internal" : "external";
-      walk.savedLink(page.path, { target: blank ? "_blank" : null, key: edit.group.shared ? `${resolved.element.scope}|${resolved.element.key}|${destination}` : `${edit.group.page?.path ?? ""}|${destination}`, href: destination, kind, elementKey: resolved.element.key, scope: resolved.element.scope, label: resolved.element.label || edit.link.label, ariaLabel: resolved.element.ariaLabel || edit.link.ariaLabel, requestIds: [], status: null });
+      walk.savedLink(page.path, { target: blank ? "_blank" : null, key: edit.group.shared ? `${resolved.element.scope}|${resolved.element.key}|${destination}` : `${edit.group.page?.path ?? ""}|${destination}`, href: destination, kind, elementKey: resolved.element.key, scope: resolved.element.scope, label: resolved.element.label || edit.link.label, ariaLabel: resolved.element.ariaLabel || edit.link.ariaLabel, visibleText: resolved.element.visibleText || edit.link.visibleText, image: resolved.element.image || edit.link.image, requestIds: [], status: null });
       const { notifyContentEdited } = await import("./contentSync");
       notifyContentEdited(lines);
     } catch (e) { setError(e instanceof Error ? e.message : "Your new link couldn't be saved. Please try again."); }
@@ -76,7 +77,7 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
       const lines = await resetReviewLink(resolved, action);
       const href = action === "restore" ? original ?? edit.link.href : edit.link.href;
       const kind = /^mailto:/i.test(href) ? "mail" : /^tel:/i.test(href) ? "phone" : href.startsWith("#") ? "anchor" : href.startsWith("/") ? "internal" : "external";
-      if (action === "restore") walk.savedLink(page.path, { ...edit.link, label: resolved.element.label || edit.link.label, key: edit.group.shared ? `${resolved.element.scope}|${resolved.element.key}|${href}` : `${edit.group.page?.path ?? ""}|${href}`, href, kind, target: undefined });
+      if (action === "restore") walk.savedLink(page.path, { ...edit.link, label: resolved.element.label || edit.link.label, visibleText: resolved.element.visibleText || edit.link.visibleText, image: resolved.element.image || edit.link.image, key: edit.group.shared ? `${resolved.element.scope}|${resolved.element.key}|${href}` : `${edit.group.page?.path ?? ""}|${href}`, href, kind, target: undefined });
       const { notifyContentEdited } = await import("./contentSync");
       notifyContentEdited(lines);
       if (action === "remove") {
@@ -113,6 +114,6 @@ function ReviewLinkForm({ edit, pages }: { edit: NonNullable<ReturnType<typeof u
     <div className="grid grid-cols-1 gap-2">{(finding || resolved) && <Button type="button" className="h-11 w-full whitespace-nowrap px-2 text-sm" disabled={!resolved || saving || !valid} onClick={() => void save()}><Save className="h-4 w-4" aria-hidden />{saving ? "Saving…" : "Save New Link"}</Button>}<Button type="button" variant="outline" className="h-11 w-full whitespace-nowrap px-2 text-sm" disabled={saving} onClick={cancel}><X className="h-4 w-4" aria-hidden />Cancel</Button></div>
     <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove Link</AlertDialogTitle><AlertDialogDescription>Remove this link: “{publicLinkAddress(linkText(edit.link, pages))}”? The text stays on the page but it will no longer be clickable. You can restore the original link later.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="h-11">Cancel</AlertDialogCancel><AlertDialogAction className="h-11" onClick={() => void reset("remove")}>Remove Link</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </div>;
-  return phone ? <Sheet open onOpenChange={o => { if (!o) cancel(); }}><SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto overflow-x-hidden"><SheetHeader className="mb-2"><SheetTitle>Edit Link Destination</SheetTitle><SheetDescription>{page.name}</SheetDescription></SheetHeader>{content}</SheetContent></Sheet>
-    : <div className="mt-2 border-t pt-2">{content}</div>;
+  return phone ? <Sheet open onOpenChange={o => { if (!o) cancel(); }}><SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto overflow-x-hidden"><SheetHeader className="mb-2"><SheetTitle className="break-words">Edit Link Destination: {title}</SheetTitle><SheetDescription>{page.name}</SheetDescription></SheetHeader>{content}</SheetContent></Sheet>
+    : <div className="mt-2 border-t pt-2"><h4 className="mb-2 break-words text-sm font-medium">Edit Link Destination: {title}</h4>{content}</div>;
 }

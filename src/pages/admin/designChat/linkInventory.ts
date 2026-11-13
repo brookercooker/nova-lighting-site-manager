@@ -2,7 +2,7 @@ import { normPath, type LinkGroup, type LinkKind, type ManagerPage, type ReviewL
 import { publicPreviewBase, publicPreviewPage } from "./publicPreviewUrl";
 
 /** Link inventory (Public companion, v1): the links a rendered page really has, used for a true draft-vs-live Links step. */
-export type InventoryLink = { key: string; scope: string; href: string; label: string | null; ariaLabel?: string; target?: "_blank" | null; originalHref?: string; fingerprint?: string };
+export type InventoryLink = { key: string; scope: string; href: string; label: string | null; ariaLabel?: string; visibleText?: string; image?: { alt: string; src?: string }; target?: "_blank" | null; originalHref?: string; fingerprint?: string };
 export type Inventory = { path: string; links: InventoryLink[] };
 export const MAX_INVENTORY = 500;
 export const INVENTORY_TIMEOUT_MS = 3000;
@@ -37,6 +37,8 @@ export function parseInventory(d: any): Inventory | null {
     if (!l || typeof l.key !== "string" || l.key.length > 300 || !ok(l.scope, 300) || !ok(l.href, 2048)) continue;
     links.push({ key: l.key, scope: l.scope, href: l.href, label: typeof l.label === "string" && l.label.trim() ? l.label.trim().slice(0, 300) : null,
       ...(typeof l.ariaLabel === "string" && l.ariaLabel.trim() ? { ariaLabel: l.ariaLabel.trim().slice(0, 300) } : {}),
+      ...(ok(l.visibleText, 300) ? { visibleText: l.visibleText } : {}),
+      ...(l.image && typeof l.image === "object" && typeof l.image.alt === "string" && l.image.alt.length <= 300 ? { image: { alt: l.image.alt, ...(ok(l.image.src, 2048) && /^https:\/\//i.test(l.image.src) ? { src: l.image.src } : {}) } } : {}),
       ...(l.target === null || l.target === "_blank" ? { target: l.target } : {}),
       ...(ok(l.originalHref, 2048) ? { originalHref: l.originalHref } : {}),
       ...(typeof l.fingerprint === "string" && l.fingerprint.length <= 2048 ? { fingerprint: l.fingerprint } : {}) });
@@ -101,7 +103,7 @@ function toLinks(path: string, list: InventoryLink[], prior: ReviewLink[]): Revi
     const key = `${path}|${l.href}`;
     if (out.some(x => x.key === key)) continue;
     const was = prior.find(x => x.key === key);
-    out.push({ ...(was ?? { key, href: l.href, kind: kindOf(l.href), requestIds: [], status: null }), elementKey: l.key, scope: l.scope, target: l.target ?? null, label: l.label, ...(l.ariaLabel ? { ariaLabel: l.ariaLabel } : {}) });
+    out.push({ ...(was ?? { key, href: l.href, kind: kindOf(l.href), requestIds: [], status: null }), elementKey: l.key, scope: l.scope, target: l.target ?? null, label: l.label, ...(l.ariaLabel ? { ariaLabel: l.ariaLabel } : {}), ...(l.visibleText ? { visibleText: l.visibleText } : {}), ...(l.image ? { image: l.image } : {}) });
   }
   return out;
 }

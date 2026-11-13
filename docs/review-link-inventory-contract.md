@@ -21,6 +21,8 @@ Public replies after rendered links and draft overrides are ready:
 ```
 
 - Cap links at 500; normalize path to the rendered page path.
+- `label` should be the visible wording of the navigation owner, not its destination or a generated "Link to …" name. For wrappers use the first visible heading, else first visible text, never concatenated whole-card text. Manager displays a 40-character excerpt and uses it for row/accessibility/editor headings.
+- Optional additive display fields in the same v1 reply: `visibleText: string` (max 300, first visible heading/text for a wrapper) and `image: { alt: string, src?: string }` (alt max 300, src max 2048, absolute HTTPS public/signed image address). Supply `image` only for image-only links; a text-bearing card should report its heading instead. Manager never guesses image content or reads cross-origin DOM. Missing image metadata leaves the existing label fallback. Do not send raw private-bucket URLs or preview credentials in src. No new message or version is required; these fields do not authorize writes.
 - key is the original editable numeric dotted path of the element that actually navigates, including a card wrapper; scope is `page` or `object:<registry UUID>`, not a display label or component name.
 - href is the effective draft destination, preserving raw relative paths; target is explicitly null for same tab or `_blank` for new tab. Do not omit target.
 - originalHref is the original coded destination before replay.
